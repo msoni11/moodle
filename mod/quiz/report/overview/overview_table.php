@@ -55,13 +55,56 @@ class quiz_overview_table extends quiz_attempts_report_table {
                 $qmsubselect, $options, $groupstudents, $students, $questions, $reporturl);
     }
 
+    public function record_sort($records, $field, $reverse=false) {
+        $hash = array();
+
+        foreach($records as $key => $record) {
+            $hash[$record[$field].$key] = $record;
+        }
+
+        ($reverse)? krsort($hash) : ksort($hash);
+
+        $records = array();
+
+        foreach($hash as $record) {
+            $records []= $record;
+        }
+        return $records;
+    }
+    
+    public function get_rank() {
+        $index = 0;
+		foreach ($this->rawdata as $attempt){
+			if ($attempt->state == quiz_attempt::FINISHED) {
+				$this->rank[$index] = array();
+				$this->rank[$index]['userid'] = $attempt->userid;
+				$this->rank[$index]['sumgrade'] = quiz_rescale_grade($attempt->sumgrades, $this->quiz);
+				$this->rank[$index]['rank'] = 0;
+				$index++;
+			}
+		    
+            // sort sumgrade descending
+            $this->rank = $this->record_sort($this->rank, 'sumgrade', true);
+
+            // rank with same rank for same grade
+            $ranking = 0;
+            $currentSum = 500;
+            for ($n=0;$n<count($this->rank);$n++){
+                if ($this->rank[$n]['sumgrade']!= $currentSum) {
+                    $currentSum = $this->rank[$n]['sumgrade'];
+                    $ranking++;
+                }
+                $this->rank[$n]['rank'] = $ranking;
+            }
+        }
+    }
     public function build_table() {
         global $DB;
 
         if (!$this->rawdata) {
             return;
         }
-
+        $this->get_rank();
         $this->strtimeformat = str_replace(',', ' ', get_string('strftimedatetime'));
         parent::build_table();
 
@@ -214,7 +257,109 @@ class quiz_overview_table extends quiz_attempts_report_table {
                 array('attempt' => $attempt->attempt)), $grade,
                 array('title' => get_string('reviewattempt', 'quiz')));
     }
+    
+    /**
+     * Show total question as per client request
+     * @param object $attempt the table row being output.
+     */
+    public function col_totalquestions($attempt) {
+        if ($attempt->state != quiz_attempt::FINISHED)
+            return '-';
+        else
+            return count($this->questions);
+    }
 
+    /**
+     * Show total question attempted as per client request
+     * @param object $attempt the table row being output.
+     */
+    public function col_questionsattempted($attempt) {
+        $attempts = 0;
+    	if ($attempt->state != quiz_attempt::FINISHED) {
+            return '-';
+        }
+        
+        foreach ($this->questions as $question) {
+            if (isset($this->regradedqs[$attempt->usageid][$question->slot])){
+                if ($this->regradedqs[$attempt->usageid][$question->slot]->newfraction!=0) {
+                    $attempts++;
+                }
+            } else {
+                if ($this->lateststeps[$attempt->usageid][$question->slot]->fraction != 0) {
+                    $attempts++;
+                }
+            }
+        }
+        return $attempts;
+    }
+
+    /**
+     * Show total correct answer as per client request
+     * @param object $attempt the table row being output. 
+     */
+    public function col_questionscorrect($attempt) {
+    	if ($attempt->state != quiz_attempt::FINISHED) {
+            return '-';
+        }
+
+        foreach ($this->questions as $question) {
+            if (isset($this->regradedqs[$attempt->usageid][$question->slot])){
+                if ($this->regradedqs[$attempt->usageid][$question->slot]->newfraction > 0) {
+                    $attempts++;
+                }
+            } else {
+                if ($this->lateststeps[$attempt->usageid][$question->slot]->fraction > 0) {
+                    $attempts++;
+                }
+            }
+        }
+        return $attempts;
+    }
+
+    /**
+     * Show total incorrect answer as per client request
+     * @param object $attempt the table row being output. 
+     */
+    public function col_questionsincorrect($attempt) {
+    	if ($attempt->state != quiz_attempt::FINISHED) {
+            return '-';
+        }
+
+        foreach ($this->questions as $question) {
+            if (isset($this->regradedqs[$attempt->usageid][$question->slot])){
+                if ($this->regradedqs[$attempt->usageid][$question->slot]->newfraction < 0) {
+                    $attempts++;
+                }
+            } else {
+                if ($this->lateststeps[$attempt->usageid][$question->slot]->fraction < 0) {
+                    $attempts++;
+                }
+            }
+        }
+        return $attempts;
+    }
+
+    /**
+     * Show rank as per client request
+     * @param object $attempt the table row being output.
+     */
+    public function col_rank($attempt) {
+    	if ($attempt->state != quiz_attempt::FINISHED) {
+            return '-';
+        }
+
+        $test = "";
+        for ($n=0;$n<count($this->rank);$n++) {
+            $test +=$this->rank[$n]['userid'].' - '.$attempt->userid.' : '.$this->rank[$n]['sumgrade'].' - '.quiz_rescale_grade($attempt->sumgrades, $this->quiz).'<br />';
+            if ($this->rank[$n]['userid']== $attempt->userid && $this->rank[$n]['sumgrade']==quiz_rescale_grade($attempt->sumgrades, $this->quiz)) {
+                break;
+            }
+        }
+        if ($n<count($this->rank)) {
+            return $this->rank[$n]['rank'];
+        }
+    }
+    
     /**
      * @param string $colname the name of the column.
      * @param object $attempt the row of data - see the SQL in display() in

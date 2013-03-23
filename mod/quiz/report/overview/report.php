@@ -206,6 +206,7 @@ class quiz_overview_report extends quiz_attempts_report {
             $this->add_user_columns($table, $columns, $headers);
             $this->add_state_column($columns, $headers);
             $this->add_time_columns($columns, $headers);
+            $this->add_extrarequested_column($columns, $headers);
 
             $this->add_grade_columns($quiz, $options->usercanseegrades, $columns, $headers, false);
 

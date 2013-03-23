@@ -163,6 +163,8 @@ abstract class quiz_attempts_report extends quiz_default_report {
             $headers[] = get_string('firstname');
         }
 
+        $columns[] = 'ID';
+        $headers[] = format_string('Registration Number');
         // When downloading, some extra fields are always displayed (because
         // there's no space constraint) so do not include in extra-field list.
         $extrafields = get_extra_user_fields($this->context,
@@ -171,7 +173,7 @@ abstract class quiz_attempts_report extends quiz_default_report {
             $columns[] = $field;
             $headers[] = get_user_field_name($field);
         }
-
+        
         if ($table->is_downloading()) {
             $columns[] = 'institution';
             $headers[] = get_string('institution');
@@ -208,7 +210,25 @@ abstract class quiz_attempts_report extends quiz_default_report {
         $columns[] = 'state';
         $headers[] = get_string('attemptstate', 'quiz');
     }
-
+    
+    /**
+     * Add colums requested by client
+     * @param array $columns the list of columns. Added to.
+     * @param array $headers the columns headings. Added to.
+     */
+    protected function add_extrarequested_column(&$columns, &$headers) {
+        $columns[] = 'totalquestions';
+        $headers[] = format_string('Total Questions');
+        $columns[] = 'questionsattempted';
+        $headers[] = format_string('Questions Attempted');
+        $columns[] = 'questionscorrect';
+        $headers[] = format_string('Questions Correct');
+        $columns[] = 'questionsincorrect';
+        $headers[] = format_string('Questions Incorrect');
+        $columns[] = 'rank';
+        $headers[] = format_string('Rank');
+    }
+    
     /**
      * Add all the time-related columns to the $columns and $headers arrays.
      * @param array $columns the list of columns. Added to.
@@ -267,6 +287,12 @@ abstract class quiz_attempts_report extends quiz_default_report {
         $this->configure_user_columns($table);
 
         $table->no_sorting('feedbacktext');
+        $table->no_sorting('totalquestions');
+        $table->no_sorting('questionsattempted');
+        $table->no_sorting('questionscorrect');
+        $table->no_sorting('questionsincorrect');
+        $table->no_sorting('rank');
+        $table->no_sorting('ID');
         $table->column_class('sumgrades', 'bold');
 
         $table->set_attribute('id', 'attempts');

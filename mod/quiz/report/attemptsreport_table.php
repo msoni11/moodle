@@ -72,6 +72,9 @@ abstract class quiz_attempts_report_table extends table_sql {
 
     /** @var bool whether to include the column with checkboxes to select each attempt. */
     protected $includecheckboxes;
+    
+    /** @var array to include the rank of a user */
+    protected $rank = array();
 
     /**
      * Constructor
@@ -146,6 +149,14 @@ abstract class quiz_attempts_report_table extends table_sql {
                 get_string('reviewattempt', 'quiz'), array('class' => 'reviewlink'));
     }
 
+    /**
+     * Show registration number as per client request
+     * @param object $attempt the table row being output.
+     */
+    public function  col_ID($attempt) {
+        return date('mdy', $attempt->firstaccess).$attempt->userid;
+    }
+    
     /**
      * Generate the display of the attempt state column.
      * @param object $attempt the table row being output.
