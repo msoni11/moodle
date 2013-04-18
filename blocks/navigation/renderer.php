@@ -116,7 +116,12 @@ class block_navigation_renderer extends plugin_renderer_base {
                 $content = $this->output->render($link);
                 $linkrendered = true;
             } else if ($item->action instanceof moodle_url) {
-                $content = html_writer::link($item->action, $content, $attributes);
+                global $CFG; //ugly hack
+                if ($item->action == $CFG->wwwroot."/course/index.php") {
+                    $content = html_writer::tag($item->action, $content, $attributes);
+                } else {
+                    $content = html_writer::link($item->action, $content, $attributes);
+                }
             }
 
             // this applies to the li item which contains all child lists too
