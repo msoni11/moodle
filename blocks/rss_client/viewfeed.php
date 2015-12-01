@@ -1,5 +1,4 @@
 <?php
-
 // This file is part of Moodle - http://moodle.org/
 //
 // Moodle is free software: you can redistribute it and/or modify
@@ -18,7 +17,7 @@
 /**
  * Script to let a user edit the properties of a particular RSS feed.
  *
- * @package   moodlecore
+ * @package   block_rss_client
  * @copyright 2009 Tim Hunt
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -84,15 +83,16 @@ if (!empty($rssrecord->preferredtitle)) {
     $feedtitle =  $rss->get_title();
 }
 echo '<table align="center" width="50%" cellspacing="1">'."\n";
-echo '<tr><td colspan="2"><strong>'. $feedtitle .'</strong></td></tr>'."\n";
+echo '<tr><td colspan="2"><strong>'. s($feedtitle) .'</strong></td></tr>'."\n";
 foreach ($rss->get_items() as $item) {
     echo '<tr><td valign="middle">'."\n";
-    echo '<a href="'. $item->get_link() .'" target="_blank"><strong>'. $item->get_title();
+    echo '<a href="'.$item->get_link().'" target="_blank"><strong>';
+    echo s($item->get_title());
     echo '</strong></a>'."\n";
     echo '</td>'."\n";
     echo '</tr>'."\n";
     echo '<tr><td colspan="2"><small>';
-    echo $item->get_description() .'</small></td></tr>'."\n";
+    echo format_text($item->get_description(), FORMAT_HTML) .'</small></td></tr>'."\n";
 }
 echo '</table>'."\n";
 

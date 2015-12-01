@@ -18,8 +18,7 @@
 /**
  * Label module upgrade
  *
- * @package    mod
- * @subpackage label
+ * @package mod_label
  * @copyright  2006 onwards Eloy Lafuente (stronk7) {@link http://stronk7.com}
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -70,14 +69,32 @@ function xmldb_label_upgrade($oldversion) {
             $courses = $DB->get_fieldset_sql('SELECT DISTINCT course '.
                 'FROM {course_modules} WHERE module=?', array($modid));
             foreach ($courses as $courseid) {
-                $DB->execute('UPDATE {course} set modinfo = ?, sectioncache = ? '.
-                        'WHERE id = ?', array(null, null, $courseid));
+                rebuild_course_cache($courseid, true);
             }
         }
 
         // label savepoint reached
         upgrade_mod_savepoint(true, 2013021400, 'label');
     }
+
+    // Moodle v2.5.0 release upgrade line.
+    // Put any upgrade step following this.
+
+
+    // Moodle v2.6.0 release upgrade line.
+    // Put any upgrade step following this.
+
+    // Moodle v2.7.0 release upgrade line.
+    // Put any upgrade step following this.
+
+    // Moodle v2.8.0 release upgrade line.
+    // Put any upgrade step following this.
+
+    // Moodle v2.9.0 release upgrade line.
+    // Put any upgrade step following this.
+
+    // Moodle v3.0.0 release upgrade line.
+    // Put any upgrade step following this.
 
     return true;
 }

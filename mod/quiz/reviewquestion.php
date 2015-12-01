@@ -18,10 +18,9 @@
  * This page prints a review of a particular question attempt.
  * This page is expected to only be used in a popup window.
  *
- * @package    mod
- * @subpackage quiz
- * @copyright  1999 onwards Martin Dougiamas  {@link http://moodle.com}
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @package   mod_quiz
+ * @copyright 1999 onwards Martin Dougiamas  {@link http://moodle.com}
+ * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
 
@@ -35,7 +34,7 @@ $seq = optional_param('step', null, PARAM_INT);
 $baseurl = new moodle_url('/mod/quiz/reviewquestion.php',
         array('attempt' => $attemptid, 'slot' => $slot));
 $currenturl = new moodle_url($baseurl);
-if ($seq !== 0) {
+if (!is_null($seq)) {
     $currenturl->param('step', $seq);
 }
 $PAGE->set_url($currenturl);
@@ -50,9 +49,11 @@ $accessmanager = $attemptobj->get_access_manager(time());
 $options = $attemptobj->get_display_options(true);
 
 $PAGE->set_pagelayout('popup');
+$PAGE->set_heading($attemptobj->get_course()->fullname);
 $output = $PAGE->get_renderer('mod_quiz');
 
-// Check permissions.
+// Check permissions - warning there is similar code in review.php and
+// quiz_attempt::check_file_access. If you change on, change them all.
 if ($attemptobj->is_own_attempt()) {
     if (!$attemptobj->is_finished()) {
         echo $output->review_question_not_allowed(get_string('cannotreviewopen', 'quiz'));

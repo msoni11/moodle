@@ -32,7 +32,7 @@ defined('MOODLE_INTERNAL') || die();
  *
  * The most important attributes of a step are the state, which is one of the
  * {@link question_state} constants, the fraction, which may be null, or a
- * number bewteen the attempt's minfraction and 1.0, and the array of submitted
+ * number bewteen the attempt's minfraction and maxfraction, and the array of submitted
  * data, about which more later.
  *
  * A step also tracks the time it was created, and the user responsible for
@@ -76,7 +76,10 @@ class question_attempt_step {
      */
     private $state;
 
-    /** @var null|number the fraction (grade on a scale of minfraction .. 1.0) or null. */
+    /**
+     * @var null|number the fraction (grade on a scale of
+     * minfraction .. maxfraction, normally 0..1) or null.
+     */
     private $fraction = null;
 
     /** @var integer the timestamp when this step was created. */
@@ -106,7 +109,7 @@ class question_attempt_step {
         global $USER;
 
         if (!is_array($data)) {
-            echo format_backtrace(debug_backtrace());
+            throw new coding_exception('$data must be an array when constructing a question_attempt_step.');
         }
         $this->state = question_state::$unprocessed;
         $this->data = $data;
@@ -148,7 +151,8 @@ class question_attempt_step {
     }
 
     /**
-     * @return null|number the fraction (grade on a scale of minfraction .. 1.0)
+     * @return null|number the fraction (grade on a scale of
+     * minfraction .. maxfraction, normally 0..1),
      * or null if this step has not been marked.
      */
     public function get_fraction() {
@@ -291,7 +295,7 @@ class question_attempt_step {
     }
 
     /**
-     * @param string $name the name of an behaviour variable to look for in the submitted data.
+     * @param string $name the name of a behaviour variable to look for in the submitted data.
      * @return bool whether a variable with this name exists in the question type data.
      */
     public function has_behaviour_var($name) {
@@ -299,7 +303,7 @@ class question_attempt_step {
     }
 
     /**
-     * @param string $name the name of an behaviour variable to look for in the submitted data.
+     * @param string $name the name of a behaviour variable to look for in the submitted data.
      * @return string the requested variable, or null if the variable is not set.
      */
     public function get_behaviour_var($name) {
@@ -358,7 +362,7 @@ class question_attempt_step {
      * Get all the data. behaviour variables have the - at the start of
      * their name. This is only intended for internal use, for example by
      * {@link question_engine_data_mapper::insert_question_attempt_step()},
-     * however, it can ocasionally be useful in test code. It should not be
+     * however, it can occasionally be useful in test code. It should not be
      * considered part of the public API of this class.
      * @param array name => value pairs.
      */
@@ -367,12 +371,56 @@ class question_attempt_step {
     }
 
     /**
+     * Set a metadata variable.
+     *
+     * Do not call this method directly from  your code. It is for internal
+     * use only. You should call {@link question_usage::set_question_attempt_metadata()}.
+     *
+     * @param string $name the name of the variable to set. [a-z][a-z0-9]*.
+     * @param string $value the value to set.
+     */
+    public function set_metadata_var($name, $value) {
+        $this->data[':_' . $name] = $value;
+    }
+
+    /**
+     * Whether this step has a metadata variable.
+     *
+     * Do not call this method directly from  your code. It is for internal
+     * use only. You should call {@link question_usage::get_question_attempt_metadata()}.
+     *
+     * @param string $name the name of the variable to set. [a-z][a-z0-9]*.
+     * @return bool the value to set previously, or null if this variable was never set.
+     */
+    public function has_metadata_var($name) {
+        return isset($this->data[':_' . $name]);
+    }
+
+    /**
+     * Get a metadata variable.
+     *
+     * Do not call this method directly from  your code. It is for internal
+     * use only. You should call {@link question_usage::get_question_attempt_metadata()}.
+     *
+     * @param string $name the name of the variable to set. [a-z][a-z0-9]*.
+     * @return string the value to set previously, or null if this variable was never set.
+     */
+    public function get_metadata_var($name) {
+        if (!$this->has_metadata_var($name)) {
+            return null;
+        }
+        return $this->data[':_' . $name];
+    }
+
+    /**
      * Create a question_attempt_step from records loaded from the database.
      * @param Iterator $records Raw records loaded from the database.
      * @param int $stepid The id of the records to extract.
+     * @param string $qtype The question type of which this is an attempt.
+     *      If not given, each record must include a qtype field.
      * @return question_attempt_step The newly constructed question_attempt_step.
      */
-    public static function load_from_records($records, $attemptstepid) {
+    public static function load_from_records($records, $attemptstepid, $qtype = null) {
         $currentrec = $records->current();
         while ($currentrec->attemptstepid != $attemptstepid) {
             $records->next();
@@ -384,6 +432,7 @@ class question_attempt_step {
         }
 
         $record = $currentrec;
+        $contextid = null;
         $data = array();
         while ($currentrec && $currentrec->attemptstepid == $attemptstepid) {
             if (!is_null($currentrec->name)) {
@@ -403,20 +452,44 @@ class question_attempt_step {
         if (!is_null($record->fraction)) {
             $step->fraction = $record->fraction + 0;
         }
+
+        // This next chunk of code requires getting $contextid and $qtype here.
+        // Somehow, we need to get that information to this point by modifying
+        // all the paths by which this method can be called.
+        // Can we only return files when it's possible? Should there be some kind of warning?
+        if (is_null($qtype)) {
+            $qtype = $record->qtype;
+        }
+        foreach (question_bank::get_qtype($qtype)->response_file_areas() as $area) {
+            if (empty($step->data[$area])) {
+                continue;
+            }
+
+            $step->data[$area] = new question_file_loader($step, $area, $step->data[$area], $record->contextid);
+        }
+
         return $step;
     }
 }
 
 
 /**
- * A subclass with a bit of additional funcitonality, for pending steps.
+ * A subclass of {@link question_attempt_step} used when processing a new submission.
+ *
+ * When we are processing some new submitted data, which may or may not lead to
+ * a new step being added to the {@link question_usage_by_activity} we create an
+ * instance of this class. which is then passed to the question behaviour and question
+ * type for processing. At the end of processing we then may, or may not, keep it.
  *
  * @copyright  2010 The Open University
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class question_attempt_pending_step extends question_attempt_step {
-    /** @var string . */
+    /** @var string the new response summary, if there is one. */
     protected $newresponsesummary = null;
+
+    /** @var int the new variant number, if there is one. */
+    protected $newvariant = null;
 
     /**
      * If as a result of processing this step, the response summary for the
@@ -428,14 +501,47 @@ class question_attempt_pending_step extends question_attempt_step {
         $this->newresponsesummary = $responsesummary;
     }
 
-    /** @return string the new response summary, if any. */
+    /**
+     * Get the new response summary, if there is one.
+     * @return string the new response summary, or null if it has not changed.
+     */
     public function get_new_response_summary() {
         return $this->newresponsesummary;
     }
 
-    /** @return string whether this step changes the response summary. */
+    /**
+     * Whether this processing this step has changed the response summary.
+     * @return bool true if there is a new response summary.
+     */
     public function response_summary_changed() {
         return !is_null($this->newresponsesummary);
+    }
+
+    /**
+     * If as a result of processing this step, you identify that this variant of the
+     * question is acutally identical to the another one, you may change the
+     * variant number recorded, in order to give better statistics. For an example
+     * see qbehaviour_opaque.
+     * @param int $variant the new variant number.
+     */
+    public function set_new_variant_number($variant) {
+        $this->newvariant = $variant;
+    }
+
+    /**
+     * Get the new variant number, if there is one.
+     * @return int the new variant number, or null if it has not changed.
+     */
+    public function get_new_variant_number() {
+        return $this->newvariant;
+    }
+
+    /**
+     * Whether this processing this step has changed the variant number.
+     * @return bool true if there is a new variant number.
+     */
+    public function variant_number_changed() {
+        return !is_null($this->newvariant);
     }
 }
 

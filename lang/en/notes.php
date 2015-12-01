@@ -1,5 +1,4 @@
 <?php
-
 // This file is part of Moodle - http://moodle.org/
 //
 // Moodle is free software: you can redistribute it and/or modify
@@ -18,15 +17,15 @@
 /**
  * Strings for component 'notes', language 'en', branch 'MOODLE_20_STABLE'
  *
- * @package   notes
- * @copyright 1999 onwards Martin Dougiamas  {@link http://moodle.com}
- * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @package    core_notes
+ * @subpackage notes
+ * @copyright  1999 onwards Martin Dougiamas  {@link http://moodle.com}
+ * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
 $string['addnewnote'] = 'Add a new note';
 $string['addnewnoteselect'] = 'Select users to write notes about';
 $string['bynameondate'] = 'by {$a->name} - {$a->date}';
-$string['cannotdeletepost'] = 'Error occurred while deleting post';
 $string['configenablenotes'] = 'Enable storing of notes about individual users.';
 $string['content'] = 'Content';
 $string['course'] = 'course';
@@ -36,9 +35,14 @@ $string['deleteconfirm'] = 'Delete this note?';
 $string['deletenotes'] = 'Delete all notes';
 $string['editnote'] = 'Edit note';
 $string['enablenotes'] = 'Enable notes';
+$string['eventnotecreated'] = 'Note created';
+$string['eventnoteupdated'] = 'Note updated';
+$string['eventnotedeleted'] = 'Note deleted';
+$string['eventnotesviewed'] = 'Notes viewed';
 $string['groupaddnewnote'] = 'Add a common note';
 $string['invalidid'] = 'Invalid note ID specified';
 $string['invaliduserid'] = 'Invalid user id: {$a}';
+$string['myprofileownnotes'] = 'My notes';
 $string['nocontent'] = 'Note content can not be empty';
 $string['nonotes'] = 'There are no notes of this type yet';
 $string['nopermissiontodelete'] = 'You may not delete this note';
@@ -61,3 +65,6 @@ $string['selectnotestate'] = "Select note state";
 $string['site'] = 'site';
 $string['sitenotes'] = 'Site notes';
 $string['unknown'] = 'unknown';
+
+// Deprecated since Moodle 3.0.
+$string['cannotdeletepost'] = 'Error occurred while deleting post';

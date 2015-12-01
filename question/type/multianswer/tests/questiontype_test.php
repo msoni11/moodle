@@ -29,6 +29,8 @@ defined('MOODLE_INTERNAL') || die();
 global $CFG;
 require_once($CFG->dirroot . '/question/engine/tests/helpers.php');
 require_once($CFG->dirroot . '/question/type/multianswer/questiontype.php');
+require_once($CFG->dirroot . '/question/type/edit_question_form.php');
+require_once($CFG->dirroot . '/question/type/multianswer/edit_multianswer_form.php');
 
 
 /**
@@ -111,5 +113,121 @@ class qtype_multianswer_test extends advanced_testcase {
     public function test_get_random_guess_score() {
         $q = test_question_maker::get_question_data('multianswer', 'twosubq');
         $this->assertEquals(0.1666667, $this->qtype->get_random_guess_score($q), '', 0.0000001);
+    }
+
+    public function test_question_saving_twosubq() {
+        $this->resetAfterTest(true);
+        $this->setAdminUser();
+
+        $questiondata = test_question_maker::get_question_data('multianswer');
+        $formdata = test_question_maker::get_question_form_data('multianswer');
+
+        $generator = $this->getDataGenerator()->get_plugin_generator('core_question');
+        $cat = $generator->create_question_category(array());
+
+        $formdata->category = "{$cat->id},{$cat->contextid}";
+        qtype_multianswer_edit_form::mock_submit((array)$formdata);
+
+        $form = qtype_multianswer_test_helper::get_question_editing_form($cat, $questiondata);
+
+        $this->assertTrue($form->is_validated());
+
+        $fromform = $form->get_data();
+
+        $returnedfromsave = $this->qtype->save_question($questiondata, $fromform);
+        $actualquestionsdata = question_load_questions(array($returnedfromsave->id));
+        $actualquestiondata = end($actualquestionsdata);
+
+        foreach ($questiondata as $property => $value) {
+            if (!in_array($property, array('id', 'version', 'timemodified', 'timecreated', 'options', 'hints', 'stamp'))) {
+                $this->assertAttributeEquals($value, $property, $actualquestiondata);
+            }
+        }
+
+        foreach ($questiondata->options as $optionname => $value) {
+            if ($optionname != 'questions') {
+                $this->assertAttributeEquals($value, $optionname, $actualquestiondata->options);
+            }
+        }
+
+        foreach ($questiondata->hints as $hint) {
+            $actualhint = array_shift($actualquestiondata->hints);
+            foreach ($hint as $property => $value) {
+                if (!in_array($property, array('id', 'questionid', 'options'))) {
+                    $this->assertAttributeEquals($value, $property, $actualhint);
+                }
+            }
+        }
+
+        $this->assertObjectHasAttribute('questions', $actualquestiondata->options);
+
+        $subqpropstoignore =
+            array('id', 'category', 'parent', 'contextid', 'question', 'options', 'stamp', 'version', 'timemodified',
+                'timecreated');
+        foreach ($questiondata->options->questions as $subqno => $subq) {
+            $actualsubq = $actualquestiondata->options->questions[$subqno];
+            foreach ($subq as $subqproperty => $subqvalue) {
+                if (!in_array($subqproperty, $subqpropstoignore)) {
+                    $this->assertAttributeEquals($subqvalue, $subqproperty, $actualsubq);
+                }
+            }
+            foreach ($subq->options as $optionname => $value) {
+                if (!in_array($optionname, array('answers'))) {
+                    $this->assertAttributeEquals($value, $optionname, $actualsubq->options);
+                }
+            }
+            foreach ($subq->options->answers as $answer) {
+                $actualanswer = array_shift($actualsubq->options->answers);
+                foreach ($answer as $ansproperty => $ansvalue) {
+                    // These questions do not use 'answerformat', will ignore it.
+                    if (!in_array($ansproperty, array('id', 'question', 'answerformat'))) {
+                        $this->assertAttributeEquals($ansvalue, $ansproperty, $actualanswer);
+                    }
+                }
+            }
+        }
+    }
+    /**
+     *  Verify that the multiplechoice variants parameters are correctly interpreted from
+     *  the question text
+     *
+     *
+     */
+    public function test_questiontext_extraction_of_multiplechoice_subquestions_variants() {
+        $questiontext = array();
+        $questiontext['format'] = FORMAT_HTML;
+        $questiontext['itemid'] = '';
+        $questiontext['text'] = '<p>Match the following cities with the correct state:</p>
+            <ul>
+            <li>1 San Francisco:{1:MULTICHOICE:=California#OK~Arizona#Wrong}</li>
+            <li>2 Tucson:{1:MC:%0%California#Wrong~=Arizona#OK}</li>
+            <li>3 Los Angeles:{1:MULTICHOICE_S:=California#OK~Arizona#Wrong}</li>
+            <li>4 Phoenix:{1:MCS:%0%California#Wrong~=Arizona#OK}</li>
+            <li>5 San Francisco:{1:MULTICHOICE_H:=California#OK~Arizona#Wrong}</li>
+            <li>6 Tucson:{1:MCH:%0%California#Wrong~=Arizona#OK}</li>
+            <li>7 Los Angeles:{1:MULTICHOICE_HS:=California#OK~Arizona#Wrong}</li>
+            <li>8 Phoenix:{1:MCHS:%0%California#Wrong~=Arizona#OK}</li>
+            <li>9 San Francisco:{1:MULTICHOICE_V:=California#OK~Arizona#Wrong}</li>
+            <li>10 Tucson:{1:MCV:%0%California#Wrong~=Arizona#OK}</li>
+            <li>11 Los Angeles:{1:MULTICHOICE_VS:=California#OK~Arizona#Wrong}</li>
+            <li>12 Phoenix:{1:MCVS:%0%California#Wrong~=Arizona#OK}</li>
+            </ul>';
+
+        $q = qtype_multianswer_extract_question($questiontext);
+        foreach ($q->options->questions as $key => $sub) {
+            $this->assertSame($sub->qtype, 'multichoice');
+            if ($key == 1 || $key == 2 || $key == 5 || $key == 6 || $key == 9 || $key == 10) {
+                $this->assertSame($sub->shuffleanswers, 0);
+            } else {
+                $this->assertSame($sub->shuffleanswers, 1);
+            }
+            if ($key == 1 || $key == 2 || $key == 3 || $key == 4) {
+                $this->assertSame($sub->layout, qtype_multichoice_base::LAYOUT_DROPDOWN);
+            } else if ($key == 5 || $key == 6 || $key == 7 || $key == 8) {
+                $this->assertSame($sub->layout, qtype_multichoice_base::LAYOUT_HORIZONTAL);
+            } else if ($key == 9 || $key == 10 || $key == 11 || $key == 12) {
+                $this->assertSame($sub->layout, qtype_multichoice_base::LAYOUT_VERTICAL);
+            }
+        }
     }
 }

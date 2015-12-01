@@ -66,6 +66,15 @@ class backup_filename_setting extends backup_generic_setting {
 class backup_users_setting extends backup_generic_setting {}
 
 /**
+ * root setting to control if backup will include group information depends on @backup_users_setting
+ *
+ * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @copyright 2014 Matt Sammarco
+ */
+class backup_groups_setting extends backup_generic_setting {
+}
+
+/**
  * root setting to control if backup will include activities or no.
  * A lot of other settings (_included at activity levels)
  * are dependent of this setting
@@ -100,6 +109,12 @@ class backup_logs_setting extends backup_anonymize_setting {}
  * exactly in the same way than @backup_anonymize_setting so we extend from it
  */
 class backup_comments_setting extends backup_anonymize_setting {}
+
+/**
+ * root setting to control if backup will include badges or not,
+ * depends on @backup_activities_setting
+ */
+class backup_badges_setting extends backup_generic_setting {}
 
 /**
  * root setting to control if backup will include

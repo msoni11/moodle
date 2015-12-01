@@ -14,12 +14,11 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-
 /**
  *
  * Hub related strings
  *
- * @package   hub
+ * @package   core_hub
  * @copyright 1999 onwards Martin Dougiamas  {@link http://moodle.com}
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -41,6 +40,7 @@ $string['audienceeducators'] = 'Educators';
 $string['audiencestudents'] = 'Students';
 $string['audienceadmins'] = 'Moodle administrators';
 $string['badurlformat'] = 'Bad URL format';
+$string['badgesnumber'] = 'Number of badges ({$a})';
 $string['community'] = 'Community';
 $string['communityremoved'] = 'That course link has been removed from your list';
 $string['confirmregistration'] = 'Confirm registration';
@@ -95,7 +95,7 @@ $string['errorcoursepublish'] = 'An error occurred during the course publication
 $string['errorcoursewronglypublished'] = 'A publication error has been returned by the hub. Please try again later.';
 $string['errorcron'] = 'An error occurred during registration update on "{$a->hubname}" ({$a->errormessage})';
 $string['errorcronnoxmlrpc'] = 'XML-RPC must be enabled in order to update the registration.';
-$string['errorhublisting'] = 'An error occurred when retrieving the hub listing from Moodle.org, please try again later. ({$a})';
+$string['errorhublisting'] = 'An error occurred when retrieving the hub listing from Moodle. Please try again later. ({$a})';
 $string['errorlangnotrecognized'] = 'The provided language code is unknown by Moodle. Please contact {$a}';
 $string['errorregistration'] = 'An error occurred during registration, please try again later. ({$a})';
 $string['errorunpublishcourses']= 'Due to an unexpected error, the courses could not be deleted on the hub. Try again later (recommended) or contact the hub administrator.';
@@ -109,6 +109,7 @@ $string['hub'] = 'Hub';
 $string['imageurl'] = 'Image URL';
 $string['imageurl_help'] = 'This image will be displayed on the hub. This image must be available from the hub at any moment. The image should have a maximum size of {$a->width} X {$a->height}';
 $string['information'] = 'Information';
+$string['issuedbadgesnumber'] = 'Number of issued badges ({$a})';
 $string['language'] = 'Language';
 $string['language_help'] = 'The main language of this course.';
 $string['lasttimechecked'] = 'Last time checked';
@@ -117,7 +118,7 @@ $string['licence_help'] = 'Select the licence you want to distribute your course
 $string['licence_link'] = 'licenses';
 $string['logourl'] = 'Logo URL';
 $string['modulenumberaverage'] = 'Average number of course modules ({$a})';
-$string['moodleorg'] = 'Moodle.org';
+$string['moodleorg'] = 'Moodle';
 $string['mustselectsubject'] = 'You must select a subject';
 $string['name'] = 'Name';
 $string['name_help'] = 'This name will be showing in the course listing.';
@@ -152,19 +153,18 @@ $string['publisheremail_help'] = 'The publisher email address allows the hub adm
 $string['publishername'] = 'Publisher';
 $string['publishername_help'] = 'The publisher is the person or organisation that is the official publisher of the course.  Unless you are publishing it on behalf of someone else, it will usually be you.';
 $string['publishon'] = 'Publish on';
-$string['publishonmoodleorg'] = 'Publish on MOOCH';
 $string['publishonspecifichub'] = 'Publish on another Hub';
 $string['questionsnumber'] = 'Number of questions ({$a})';
 $string['registeredcourses'] = 'Registered courses';
 $string['registeredsites'] = 'Registered sites';
 $string['registrationinfo'] = 'Registration information';
-$string['registeredmoodleorg'] = 'Moodle.org ({$a})';
-$string['registeredon'] = 'Hubs with which you are registered';
-$string['registermoochtips'] = 'To be registered with Moodle.org Open Community Hub (MOOCH), your site must be registered with Moodle.org.';
+$string['registeredmoodleorg'] = 'Moodle ({$a})';
+$string['registeredon'] = 'Where your site is registered';
+$string['registermoochtips'] = 'Register your site with Moodle to get security alerts and access to Moodle.net, our course sharing platform.';
 $string['registersite'] = 'Register with {$a}';
 $string['registerwith'] = 'Register with a hub';
 $string['registrationconfirmed'] = 'Site registration confirmed';
-$string['registrationconfirmedon'] = 'You are now registered on the hub {$a}. You are now able to publish courses to this hub, using the "Publish" link in course administration menus.';
+$string['registrationconfirmedon'] = 'Thank you for registering your site. Registration information will be kept up to date by the \'Site registration\' scheduled task.';
 $string['registrationupdated'] = 'Registration has been updated.';
 $string['registrationupdatedfailed'] = 'Registration update failed.';
 $string['removefromhub'] = 'Remove from hub';
@@ -190,7 +190,6 @@ $string['share'] = 'Share this course for people to download';
 $string['shared'] = 'Shared';
 $string['shareon'] = 'Upload this course to {$a}';
 $string['shareonhub'] = 'Upload this course to a hub';
-$string['shareonmoodleorg'] = 'Upload this course to MOOCH';
 $string['sharepublication_help'] = 'Uploading this course to a community hub server will enable people to download it and install it on their own Moodle sites.';
 $string['siteadmin'] = 'Administrator';
 $string['siteadmin_help'] = 'The full name of the site administrator.';

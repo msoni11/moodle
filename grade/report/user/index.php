@@ -101,8 +101,12 @@ if (has_capability('moodle/grade:viewall', $context)) { //Teachers will see all 
         $user_selector = true;
     }
 
+    $defaultgradeshowactiveenrol = !empty($CFG->grade_report_showonlyactiveenrol);
+    $showonlyactiveenrol = get_user_preferences('grade_report_showonlyactiveenrol', $defaultgradeshowactiveenrol);
+    $showonlyactiveenrol = $showonlyactiveenrol || !has_capability('moodle/course:viewsuspendedusers', $context);
     if (empty($userid)) {
         $gui = new graded_users_iterator($course, null, $currentgroup);
+        $gui->require_active_enrolment($showonlyactiveenrol);
         $gui->init();
         // Add tabs
         print_grade_page_head($courseid, 'report', 'user');
@@ -130,7 +134,9 @@ if (has_capability('moodle/grade:viewall', $context)) { //Teachers will see all 
         $report = new grade_report_user($courseid, $gpr, $context, $userid);
 
         $studentnamelink = html_writer::link(new moodle_url('/user/view.php', array('id' => $report->user->id, 'course' => $courseid)), fullname($report->user));
-        print_grade_page_head($courseid, 'report', 'user', get_string('pluginname', 'gradereport_user') . ' - ' . $studentnamelink);
+        print_grade_page_head($courseid, 'report', 'user', get_string('pluginname', 'gradereport_user') . ' - ' . $studentnamelink,
+                false, false, true, null, null, $report->user);
+
         groups_print_course_menu($course, $gpr->get_return_url('index.php?id='.$courseid, array('userid'=>0)));
 
         if ($user_selector) {
@@ -158,6 +164,14 @@ if (has_capability('moodle/grade:viewall', $context)) { //Teachers will see all 
     if ($report->fill_table()) {
         echo '<br />'.$report->print_table(true);
     }
+}
+
+if (isset($report)) {
+    // Trigger report viewed event.
+    $report->viewed();
+} else {
+    echo html_writer::tag('div', '', array('class' => 'clearfix'));
+    echo $OUTPUT->notification(get_string('nostudentsyet'));
 }
 
 echo $OUTPUT->footer();

@@ -19,7 +19,7 @@
 /**
  * This file is used to browse repositories in non-javascript mode
  *
- * @since 2.0
+ * @since Moodle 2.0
  * @package    core
  * @subpackage repository
  * @copyright  2009 Dongsheng Cai <dongsheng@moodle.com>
@@ -30,7 +30,7 @@ require_once('../config.php');
 require_once($CFG->libdir.'/filelib.php');
 require_once('lib.php');
 /// Wait as long as it takes for this script to finish
-set_time_limit(0);
+core_php_time_limit::raise();
 
 require_sesskey();
 require_login();
@@ -272,6 +272,8 @@ case 'sign':
         echo '<form method="post">';
         echo '<input type="hidden" name="action" value="sign" />';
         echo '<input type="hidden" name="repo_id" value="'.s($repo_id).'" />';
+        // HACK to prevent browsers from automatically inserting the user's password into the wrong fields.
+        echo prevent_form_autofill_password();
         $repo->print_login();
         echo '</form>';
     }
@@ -293,7 +295,7 @@ case 'download':
     // note that in this case user may not have permission to access the source file directly
     // so no file_browser/file_info can be used below
     if ($repo->has_moodle_files()) {
-        $file = repository::get_moodle_file($fileurl);
+        $file = repository::get_moodle_file($reference);
         if ($file && $file->is_external_file()) {
             $sourcefield = $file->get_source(); // remember the original source
             $record->source = $repo::build_source_field($sourcefield);
@@ -377,7 +379,7 @@ case 'confirm':
 default:
 case 'plugins':
     $params = array();
-    $params['context'] = array($user_context, get_system_context());
+    $params['context'] = array($user_context, context_system::instance());
     $params['currentcontext'] = $PAGE->context;
     $params['return_types'] = FILE_INTERNAL;
 

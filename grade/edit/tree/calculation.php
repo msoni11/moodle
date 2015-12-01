@@ -30,7 +30,7 @@ require_once 'calculation_form.php';
 $courseid  = required_param('courseid', PARAM_INT);
 $id        = required_param('id', PARAM_INT);
 $section   = optional_param('section', 'calculation', PARAM_ALPHA);
-$idnumbers = optional_param('idnumbers', null, PARAM_RAW);
+$idnumbers = optional_param_array('idnumbers', null, PARAM_RAW);
 
 $url = new moodle_url('/grade/edit/tree/calculation.php', array('id'=>$id, 'courseid'=>$courseid));
 if ($section !== 'calculation') {
@@ -45,6 +45,10 @@ if (!$course = $DB->get_record('course', array('id' => $courseid))) {
 require_login($course);
 $context = context_course::instance($course->id);
 require_capability('moodle/grade:manage', $context);
+
+$PAGE->set_pagelayout('admin');
+navigation_node::override_active_url(new moodle_url('/grade/edit/tree/index.php',
+    array('id'=>$course->id)));
 
 // default return url
 $gpr = new grade_plugin_return();
@@ -109,10 +113,8 @@ $strgrades          = get_string('grades');
 $strgraderreport    = get_string('graderreport', 'grades');
 $strcalculationedit = get_string('editcalculation', 'grades');
 
-grade_build_nav(__FILE__, $strcalculationedit, array('courseid' => $courseid));
-$PAGE->set_title($strgrades . ': ' . $strgraderreport);
-$PAGE->set_heading($course->fullname);
-echo $OUTPUT->header();
+$PAGE->navbar->add($strcalculationedit);
+print_grade_page_head($courseid, 'settings', null, $strcalculationedit, false, false, false);
 
 $mform->display();
 // Now show the gradetree with the idnumbers add/edit form

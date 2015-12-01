@@ -1,5 +1,4 @@
 <?php
-
 // This file is part of Moodle - http://moodle.org/
 //
 // Moodle is free software: you can redistribute it and/or modify
@@ -18,7 +17,7 @@
 /**
  * Strings for component 'portfolio', language 'en', branch 'MOODLE_20_STABLE'
  *
- * @package   portfolio
+ * @package   core_portfolio
  * @copyright 1999 onwards Martin Dougiamas  {@link http://moodle.com}
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -52,7 +51,7 @@ $string['displayexpiry'] = 'Transfer expiry time';
 $string['displayinfo'] = 'Export info';
 $string['dontwait'] = 'Don\'t wait';
 $string['enabled'] = 'Enable portfolios';
-$string['enableddesc'] = 'This will allow administrators to configure remote systems for users to export content to';
+$string['enableddesc'] = 'If enabled, users can export content, such as forum posts and assignment submissions, to external portfolios or HTML pages.';
 $string['err_uniquename'] = 'Portfolio name must be unique (per plugin)';
 $string['exportalreadyfinished'] = 'Portfolio export complete!';
 $string['exportalreadyfinisheddesc'] = 'Portfolio export complete!';
@@ -83,7 +82,6 @@ $string['format_richhtml'] = 'HTML with attachments';
 $string['format_spreadsheet'] = 'Spreadsheet';
 $string['format_text'] = 'Plain text';
 $string['format_video'] = 'Video';
-$string['hidden'] = 'Hidden';
 $string['highdbsizethreshold'] = 'High transfer dbsize';
 $string['highdbsizethresholddesc'] = 'Number of db records over which will be considered to take a high amount of time to transfer';
 $string['highfilesizethreshold'] = 'High transfer filesize';
@@ -109,6 +107,8 @@ $string['instanceismisconfigured'] = 'Portfolio instance is misconfigured, skipp
 $string['instancenotdelete'] = 'Failed to delete portfolio';
 $string['instancenotsaved'] = 'Failed to save portfolio';
 $string['instancesaved'] = 'Portfolio saved successfully';
+$string['intro'] = 'Content which you have created, such as assignment submissions, forum posts and blog entries, can be exported to a portfolio or downloaded.<br>
+Any portfolio that you do not wish to use may be hidden so that it is not listed as an option to export content to.';
 $string['invalidaddformat'] = 'Invalid add format passed to portfolio_add_button. ({$a}) Must be one of PORTFOLIO_ADD_XXX';
 $string['invalidbuttonproperty'] = 'Could not find that property ({$a}) of portfolio_button';
 $string['invalidconfigproperty'] = 'Could not find that config property ({$a->property} of {$a->class})';
@@ -172,6 +172,7 @@ $string['save'] = 'Save';
 $string['selectedformat'] = 'Selected export format';
 $string['selectedwait'] = 'Selected to wait?';
 $string['selectplugin'] = 'Select destination';
+$string['showhide'] = 'Show / hide';
 $string['singleinstancenomultiallowed'] = 'Only a single portfolio plugin instance is available, it doesn\'t support multiple exports per session, and there\'s already an active export in the session using this plugin!';
 $string['somepluginsdisabled'] = 'Some entire portfolio plugins have been disabled because they are either misconfigured or rely on something else that is:';
 $string['sure'] = 'Are you sure you want to delete \'{$a}\'? This cannot be undone.';
@@ -181,3 +182,4 @@ $string['unknownplugin'] = 'Unknown (may have since been removed by an administr
 $string['wait'] = 'Wait';
 $string['wanttowait_high'] = 'It is not recommended that you wait for this transfer to complete, but you can if you\'re sure and know what you\'re doing';
 $string['wanttowait_moderate'] = 'Do you want to wait for this transfer? It might take a few minutes';
+

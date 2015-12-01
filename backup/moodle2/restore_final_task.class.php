@@ -58,25 +58,36 @@ class restore_final_task extends restore_task {
         // Gradebook. Don't restore the gradebook unless activities are being restored.
         if ($this->get_setting_value('activities')) {
             $this->add_step(new restore_gradebook_structure_step('gradebook_step','gradebook.xml'));
+            $this->add_step(new restore_grade_history_structure_step('grade_history', 'grade_history.xml'));
         }
 
-        // Course completion, executed conditionally if restoring to new course
-        if ($this->get_target() !== backup::TARGET_CURRENT_ADDING &&
-            $this->get_target() !== backup::TARGET_EXISTING_ADDING) {
-            $this->add_step(new restore_course_completion_structure_step('course_completion', 'completion.xml'));
+        // Course completion.
+        $this->add_step(new restore_course_completion_structure_step('course_completion', 'completion.xml'));
+
+        // Conditionally restore course badges.
+        if ($this->get_setting_value('badges')) {
+            $this->add_step(new restore_badges_structure_step('course_badges', 'badges.xml'));
         }
 
-        // Review all the module_availability records in backup_ids in order
-        // to match them with existing modules / grade items.
+        // Review all the legacy module_availability records in backup_ids in
+        // order to match them with existing modules / grade items and convert
+        // into the new system.
         $this->add_step(new restore_process_course_modules_availability('process_modules_availability'));
+
+        // Update restored availability data to account for changes in IDs
+        // during backup/restore.
+        $this->add_step(new restore_update_availability('update_availability'));
 
         // Decode all the interlinks
         $this->add_step(new restore_decode_interlinks('decode_interlinks'));
 
         // Restore course logs (conditionally). They are restored here because we need all
-        // the activities to be already restored
+        // the activities to be already restored.
         if ($this->get_setting_value('logs')) {
+            // Legacy logs.
             $this->add_step(new restore_course_logs_structure_step('course_logs', 'course/logs.xml'));
+            // New log stores.
+            $this->add_step(new restore_course_logstores_structure_step('course_logstores', 'course/logstores.xml'));
         }
 
         // Review all the executed tasks having one after_restore method
@@ -143,6 +154,9 @@ class restore_final_task extends restore_task {
         $rules[] = new restore_log_rule('course', 'report stats', 'report/stats/index.php?id={course}', '{course}');
         $rules[] = new restore_log_rule('course', 'view section', 'view.php?id={course}&sectionid={course_section}', '{course_section}');
 
+        // module 'grade' rules
+        $rules[] = new restore_log_rule('grade', 'update', 'report/grader/index.php?id={course}', null);
+
         // module 'user' rules
         $rules[] = new restore_log_rule('user', 'view', 'view.php?id={user}&course={course}', '{user}');
         $rules[] = new restore_log_rule('user', 'change password', 'view.php?id={user}&course={course}', '{user}');
@@ -154,7 +168,12 @@ class restore_final_task extends restore_task {
         // rules from other tasks (activities) not belonging to one module instance (cmid = 0), so are restored here
         $rules = array_merge($rules, restore_logs_processor::register_log_rules_for_course());
 
-        // TODO: Other logs like 'calendar', 'upload'... will go here
+        // Calendar rules.
+        $rules[] = new restore_log_rule('calendar', 'add', 'event.php?action=edit&id={event}', '[name]');
+        $rules[] = new restore_log_rule('calendar', 'edit', 'event.php?action=edit&id={event}', '[name]');
+        $rules[] = new restore_log_rule('calendar', 'edit all', 'event.php?action=edit&id={event}', '[name]');
+
+        // TODO: Other logs like 'upload'... will go here
 
         return $rules;
     }

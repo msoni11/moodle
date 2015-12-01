@@ -28,6 +28,7 @@ require_once('edit_form.php');
 
 $tag_id = optional_param('id', 0, PARAM_INT);
 $tag_name = optional_param('tag', '', PARAM_TAG);
+$returnurl = optional_param('returnurl', '', PARAM_LOCALURL);
 
 require_login();
 
@@ -53,22 +54,20 @@ $PAGE->set_url('/tag/index.php', array('id' => $tag->id));
 $PAGE->set_subpage($tag->id);
 $PAGE->set_context($systemcontext);
 $PAGE->set_blocks_editing_capability('moodle/tag:editblocks');
-$PAGE->set_pagelayout('base');
+$PAGE->set_pagelayout('standard');
 
 $tagname = tag_display_name($tag);
 
 // set the relatedtags field of the $tag object that will be passed to the form
-$tag->relatedtags = tag_get_related_tags_csv(tag_get_related_tags($tag->id, TAG_RELATED_MANUAL), TAG_RETURN_TEXT);
+$tag->relatedtags = tag_get_tags_array('tag', $tag->id);
 
-if (can_use_html_editor()) {
-    $options = new stdClass();
-    $options->smiley = false;
-    $options->filter = false;
+$options = new stdClass();
+$options->smiley = false;
+$options->filter = false;
 
-    // convert and remove any XSS
-    $tag->description       = format_text($tag->description, $tag->descriptionformat, $options);
-    $tag->descriptionformat = FORMAT_HTML;
-}
+// convert and remove any XSS
+$tag->description       = format_text($tag->description, $tag->descriptionformat, $options);
+$tag->descriptionformat = FORMAT_HTML;
 
 $errorstring = '';
 
@@ -76,7 +75,8 @@ $editoroptions = array(
     'maxfiles'  => EDITOR_UNLIMITED_FILES,
     'maxbytes'  => $CFG->maxbytes,
     'trusttext' => false,
-    'context'   => $systemcontext
+    'context'   => $systemcontext,
+    'subdirs'   => file_area_contains_subdirs($systemcontext, 'tag', 'description', $tag->id),
 );
 $tag = file_prepare_standard_editor($tag, 'description', $editoroptions, $systemcontext, 'tag', 'description', $tag->id);
 
@@ -87,10 +87,14 @@ if ( $tag->tagtype == 'official' ) {
     $tag->tagtype = '0';
 }
 
+$tag->returnurl = $returnurl;
 $tagform->set_data($tag);
 
 // If new data has been sent, update the tag record
-if ($tagnew = $tagform->get_data()) {
+if ($tagform->is_cancelled()) {
+    redirect($returnurl ? new moodle_url($returnurl) :
+        new moodle_url('/tag/index.php', array('tag' => $tag->name)));
+} else if ($tagnew = $tagform->get_data()) {
 
     if (has_capability('moodle/tag:manage', $systemcontext)) {
         if (($tag->tagtype != 'default') && (!isset($tagnew->tagtype) || ($tagnew->tagtype != '1'))) {
@@ -101,7 +105,7 @@ if ($tagnew = $tagform->get_data()) {
         }
     }
 
-    if (!has_capability('moodle/tag:manage', $systemcontext) && !has_capability('moodle/tag:edit', $systemcontext)) {
+    if (!has_capability('moodle/tag:manage', $systemcontext)) {
         unset($tagnew->name);
         unset($tagnew->rawname);
 
@@ -109,8 +113,8 @@ if ($tagnew = $tagform->get_data()) {
         $norm = tag_normalize($tagnew->rawname, TAG_CASE_LOWER);
         $tagnew->name = array_shift($norm);
 
-        if ($tag->name != $tagnew->name) {  // The name has changed, let's make sure it's not another existing tag
-            if (tag_get_id($tagnew->name)) {   // Something exists already, so flag an error
+        if ($tag->rawname !== $tagnew->rawname) {  // The name has changed, let's make sure it's not another existing tag
+            if (($id = tag_get_id($tagnew->name)) && $id != $tag->id) { // Something exists already, so flag an error.
                 $errorstring = s($tagnew->rawname).': '.get_string('namesalreadybeeingused', 'tag');
             }
         }
@@ -120,36 +124,33 @@ if ($tagnew = $tagform->get_data()) {
 
         $tagnew = file_postupdate_standard_editor($tagnew, 'description', $editoroptions, $systemcontext, 'tag', 'description', $tag->id);
 
-        tag_description_set($tag_id, $tagnew->description, $tagnew->descriptionformat);
+        if ($tag->description != $tagnew->description) {
+            tag_description_set($tag_id, $tagnew->description, $tagnew->descriptionformat);
+        }
 
         $tagnew->timemodified = time();
 
         if (has_capability('moodle/tag:manage', $systemcontext)) {
-            // rename tag
-            if(!tag_rename($tag->id, $tagnew->rawname)) {
-                print_error('errorupdatingrecord', 'tag');
+            // Check if we need to rename the tag.
+            if (isset($tagnew->name) && ($tag->rawname != $tagnew->rawname)) {
+                // Rename the tag.
+                if (!tag_rename($tag->id, $tagnew->rawname)) {
+                    print_error('errorupdatingrecord', 'tag');
+                }
             }
         }
 
-        //log tag changes activity
-        //if tag name exist from form, renaming is allow.  record log action as rename
-        //otherwise, record log action as update
-        if (isset($tagnew->name) && ($tag->name != $tagnew->name)){
-            add_to_log($COURSE->id, 'tag', 'update', 'index.php?id='. $tag->id, $tag->name . '->'. $tagnew->name);
-
-        } elseif ($tag->description != $tagnew->description) {
-            add_to_log($COURSE->id, 'tag', 'update', 'index.php?id='. $tag->id, $tag->name);
-        }
-
         //updated related tags
-        tag_set('tag', $tagnew->id, explode(',', trim($tagnew->relatedtags)));
+        tag_set('tag', $tagnew->id, $tagnew->relatedtags, 'core', $systemcontext->id);
         //print_object($tagnew); die();
 
-        redirect($CFG->wwwroot.'/tag/index.php?tag='.rawurlencode($tag->name)); // must use $tag here, as the name isn't in the edit form
+        $tagname = isset($tagnew->rawname) ? $tagnew->rawname : $tag->rawname;
+        redirect($returnurl ? new moodle_url($returnurl) :
+            new moodle_url('/tag/index.php', array('tag' => $tagname)));
     }
 }
 
-$PAGE->navbar->add(get_string('tags', 'tag'), new moodle_url('/tag/search.php'));
+navigation_node::override_active_url(new moodle_url('/tag/search.php'));
 $PAGE->navbar->add($tagname);
 $PAGE->navbar->add(get_string('edit'));
 $PAGE->set_title(get_string('tag', 'tag') . ' - '. $tagname);
@@ -163,8 +164,4 @@ if (!empty($errorstring)) {
 
 $tagform->display();
 
-if (ajaxenabled()) {
-    $PAGE->requires->js('/tag/tag.js');
-    $PAGE->requires->js_function_call('init_tag_autocomplete', null, true);
-}
 echo $OUTPUT->footer();

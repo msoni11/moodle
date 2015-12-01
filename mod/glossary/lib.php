@@ -19,7 +19,7 @@
  * Library of functions and constants for module glossary
  * (replace glossary with the name of your module and delete this line)
  *
- * @package   mod-glossary
+ * @package   mod_glossary
  * @copyright 1999 onwards Martin Dougiamas  {@link http://moodle.com}
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -37,6 +37,17 @@ define("GLOSSARY_ADDENTRY_VIEW", 4);
 define("GLOSSARY_IMPORT_VIEW", 5);
 define("GLOSSARY_EXPORT_VIEW", 6);
 define("GLOSSARY_APPROVAL_VIEW", 7);
+
+// Glossary tabs.
+define('GLOSSARY_STANDARD', 'standard');
+define('GLOSSARY_AUTHOR', 'author');
+define('GLOSSARY_CATEGORY', 'category');
+define('GLOSSARY_DATE', 'date');
+
+// Glossary displayformats.
+define('GLOSSARY_CONTINUOUS', 'continuous');
+define('GLOSSARY_DICTIONARY', 'dictionary');
+define('GLOSSARY_FULLWITHOUTAUTHOR', 'fullwithoutauthor');
 
 /// STANDARD FUNCTIONS ///////////////////////////////////////////////////////////
 /**
@@ -201,7 +212,12 @@ function glossary_delete_instance($id) {
 
     glossary_grade_item_delete($glossary);
 
-    return $DB->delete_records('glossary', array('id'=>$id));
+    $DB->delete_records('glossary', array('id'=>$id));
+
+    // Reset caches.
+    \mod_glossary\local\concept_cache::reset_glossary($glossary);
+
+    return true;
 }
 
 /**
@@ -335,13 +351,16 @@ function glossary_get_recent_mod_activity(&$activities, &$index, $timestart, $co
     $cm = $modinfo->cms[$cmid];
     $context = context_module::instance($cm->id);
 
-    if (!has_capability('mod/glossary:view', $context)) {
+    if (!$cm->uservisible) {
         return;
     }
 
     $viewfullnames = has_capability('moodle/site:viewfullnames', $context);
+    // Groups are not yet supported for glossary. See MDL-10728 .
+    /*
     $accessallgroups = has_capability('moodle/site:accessallgroups', $context);
     $groupmode = groups_get_activity_groupmode($cm, $course);
+     */
 
     $params['timestart'] = $timestart;
 
@@ -361,17 +380,24 @@ function glossary_get_recent_mod_activity(&$activities, &$index, $timestart, $co
         $groupjoin   = '';
     }
 
+    $approvedselect = "";
+    if (!has_capability('mod/glossary:approve', $context)) {
+        $approvedselect = " AND ge.approved = 1 ";
+    }
+
     $params['timestart'] = $timestart;
     $params['glossaryid'] = $cm->instance;
 
-    $ufields = user_picture::fields('u', array('lastaccess', 'firstname', 'lastname', 'email', 'picture', 'imagealt'));
+    $ufields = user_picture::fields('u', null, 'userid');
     $entries = $DB->get_records_sql("
-              SELECT ge.id AS entryid, ge.*, $ufields
+              SELECT ge.id AS entryid, ge.glossaryid, ge.concept, ge.definition, ge.approved,
+                     ge.timemodified, $ufields
                 FROM {glossary_entries} ge
                 JOIN {user} u ON u.id = ge.userid
                      $groupjoin
                WHERE ge.timemodified > :timestart
                  AND ge.glossaryid = :glossaryid
+                     $approvedselect
                      $userselect
                      $groupselect
             ORDER BY ge.timemodified ASC", $params);
@@ -381,6 +407,8 @@ function glossary_get_recent_mod_activity(&$activities, &$index, $timestart, $co
     }
 
     foreach ($entries as $entry) {
+        // Groups are not yet supported for glossary. See MDL-10728 .
+        /*
         $usersgroups = null;
         if ($entry->userid != $USER->id) {
             if ($groupmode == SEPARATEGROUPS and !$accessallgroups) {
@@ -392,13 +420,16 @@ function glossary_get_recent_mod_activity(&$activities, &$index, $timestart, $co
                         $usersgroups = array();
                     }
                 }
-                if (!array_intersect($usersgroups, $modinfo->get_groups($cm->id))) {
+                if (!array_intersect($usersgroups, $modinfo->get_groups($cm->groupingid))) {
                     continue;
                 }
             }
         }
+         */
 
         $tmpactivity                       = new stdClass();
+        $tmpactivity->user                 = user_picture::unalias($entry, null, 'userid');
+        $tmpactivity->user->fullname       = fullname($tmpactivity->user, $viewfullnames);
         $tmpactivity->type                 = 'glossary';
         $tmpactivity->cmid                 = $cm->id;
         $tmpactivity->glossaryid           = $entry->glossaryid;
@@ -409,14 +440,7 @@ function glossary_get_recent_mod_activity(&$activities, &$index, $timestart, $co
         $tmpactivity->content->entryid     = $entry->entryid;
         $tmpactivity->content->concept     = $entry->concept;
         $tmpactivity->content->definition  = $entry->definition;
-        $tmpactivity->user                 = new stdClass();
-        $tmpactivity->user->id             = $entry->userid;
-        $tmpactivity->user->firstname      = $entry->firstname;
-        $tmpactivity->user->lastname       = $entry->lastname;
-        $tmpactivity->user->fullname       = fullname($entry, $viewfullnames);
-        $tmpactivity->user->picture        = $entry->picture;
-        $tmpactivity->user->imagealt       = $entry->imagealt;
-        $tmpactivity->user->email          = $entry->email;
+        $tmpactivity->content->approved    = $entry->approved;
 
         $activities[$index++] = $tmpactivity;
     }
@@ -446,14 +470,20 @@ function glossary_print_recent_mod_activity($activity, $courseid, $detail, $modn
     echo html_writer::start_tag('div', array('class'=>'glossary-activity-content'));
     echo html_writer::start_tag('div', array('class'=>'glossary-activity-entry'));
 
-    $urlparams = array('g' => $activity->glossaryid, 'mode' => 'entry', 'hook' => $activity->content->entryid);
-    echo html_writer::tag('a', strip_tags($activity->content->concept),
-        array('href' => new moodle_url('/mod/glossary/view.php', $urlparams)));
+    if (isset($activity->content->approved) && !$activity->content->approved) {
+        $urlparams = array('g' => $activity->glossaryid, 'mode' => 'approval', 'hook' => $activity->content->concept);
+        $class = array('class' => 'dimmed_text');
+    } else {
+        $urlparams = array('g' => $activity->glossaryid, 'mode' => 'entry', 'hook' => $activity->content->entryid);
+        $class = array();
+    }
+    echo html_writer::link(new moodle_url('/mod/glossary/view.php', $urlparams),
+            strip_tags($activity->content->concept), $class);
     echo html_writer::end_tag('div');
 
     $url = new moodle_url('/user/view.php', array('course'=>$courseid, 'id'=>$activity->user->id));
     $name = $activity->user->fullname;
-    $link = html_writer::link($url, $name);
+    $link = html_writer::link($url, $name, $class);
 
     echo html_writer::start_tag('div', array('class'=>'user'));
     echo $link .' - '. userdate($activity->timestamp);
@@ -717,11 +747,6 @@ function glossary_rating_validate($params) {
         throw new rating_exception('invalidnum');
     }
 
-    if (!$info->approved) {
-        //item isnt approved
-        throw new rating_exception('nopermissiontorate');
-    }
-
     //check the item we're rating was created in the assessable time window
     if (!empty($info->assesstimestart) && !empty($info->assesstimefinish)) {
         if ($info->timecreated < $info->assesstimestart || $info->timecreated > $info->assesstimefinish) {
@@ -767,36 +792,6 @@ function glossary_update_grades($glossary=null, $userid=0, $nullifnone=true) {
     } else {
         glossary_grade_item_update($glossary);
     }
-}
-
-/**
- * Update all grades in gradebook.
- *
- * @global object
- */
-function glossary_upgrade_grades() {
-    global $DB;
-
-    $sql = "SELECT COUNT('x')
-              FROM {glossary} g, {course_modules} cm, {modules} m
-             WHERE m.name='glossary' AND m.id=cm.module AND cm.instance=g.id";
-    $count = $DB->count_records_sql($sql);
-
-    $sql = "SELECT g.*, cm.idnumber AS cmidnumber, g.course AS courseid
-              FROM {glossary} g, {course_modules} cm, {modules} m
-             WHERE m.name='glossary' AND m.id=cm.module AND cm.instance=g.id";
-    $rs = $DB->get_recordset_sql($sql);
-    if ($rs->valid()) {
-        $pbar = new progress_bar('glossaryupgradegrades', 500, true);
-        $i=0;
-        foreach ($rs as $glossary) {
-            $i++;
-            upgrade_set_timeout(60*5); // set up timeout, may also abort execution
-            glossary_update_grades($glossary, 0, false);
-            $pbar->update($i, $count, "Updating Glossary grades ($i/$count).");
-        }
-    }
-    $rs->close();
 }
 
 /**
@@ -922,7 +917,12 @@ function glossary_get_available_formats() {
                     $gf->name = $format;
                     $gf->popupformatname = $format;
                     $gf->visible = 1;
-                    $DB->insert_record("glossary_formats",$gf);
+                    $id = $DB->insert_record('glossary_formats', $gf);
+                    $rec = $DB->get_record('glossary_formats', array('id' => $id));
+                }
+
+                if (empty($rec->showtabs)) {
+                    glossary_set_default_visible_tabs($rec);
                 }
             }
         }
@@ -1011,7 +1011,7 @@ function glossary_get_entries_search($concept, $courseid) {
         $bypassteacher = 0; //This means YES
     }
 
-    $conceptlower = textlib::strtolower(trim($concept));
+    $conceptlower = core_text::strtolower(trim($concept));
 
     $params = array('courseid1'=>$courseid, 'courseid2'=>$courseid, 'conceptlower'=>$conceptlower, 'concept'=>$concept);
 
@@ -1085,7 +1085,7 @@ function glossary_print_entry_default ($entry, $glossary, $cm) {
 
     require_once($CFG->libdir . '/filelib.php');
 
-    echo '<h3>'. strip_tags($entry->concept) . ': </h3>';
+    echo $OUTPUT->heading(strip_tags($entry->concept), 4);
 
     $definition = $entry->definition;
 
@@ -1105,13 +1105,13 @@ function glossary_print_entry_default ($entry, $glossary, $cm) {
 }
 
 /**
- * Print glossary concept/term as a heading &lt;h3>
+ * Print glossary concept/term as a heading &lt;h4>
  * @param object $entry
  */
 function  glossary_print_entry_concept($entry, $return=false) {
     global $OUTPUT;
 
-    $text = html_writer::tag('h3', format_string($entry->concept));
+    $text = $OUTPUT->heading(format_string($entry->concept), 4);
     if (!empty($entry->highlight)) {
         $text = highlight($entry->highlight, $text);
     }
@@ -1131,19 +1131,12 @@ function  glossary_print_entry_concept($entry, $return=false) {
  * @param object $cm
  */
 function glossary_print_entry_definition($entry, $glossary, $cm) {
-    global $DB, $GLOSSARY_EXCLUDECONCEPTS;
+    global $GLOSSARY_EXCLUDEENTRY;
 
     $definition = $entry->definition;
 
-    //Calculate all the strings to be no-linked
-    //First, the concept
-    $GLOSSARY_EXCLUDECONCEPTS = array($entry->concept);
-    //Now the aliases
-    if ( $aliases = $DB->get_records('glossary_alias', array('entryid'=>$entry->id))) {
-        foreach ($aliases as $alias) {
-            $GLOSSARY_EXCLUDECONCEPTS[]=trim($alias->alias);
-        }
-    }
+    // Do not link self.
+    $GLOSSARY_EXCLUDEENTRY = $entry->id;
 
     $context = context_module::instance($cm->id);
     $definition = file_rewrite_pluginfile_urls($definition, 'pluginfile.php', $context->id, 'mod_glossary', 'entry', $entry->id);
@@ -1157,7 +1150,7 @@ function glossary_print_entry_definition($entry, $glossary, $cm) {
     $text = format_text($definition, $entry->definitionformat, $options);
 
     // Stop excluding concepts from autolinking
-    unset($GLOSSARY_EXCLUDECONCEPTS);
+    unset($GLOSSARY_EXCLUDEENTRY);
 
     if (!empty($entry->highlight)) {
         $text = highlight($entry->highlight, $text);
@@ -1236,6 +1229,15 @@ function glossary_print_entry_icons($course, $cm, $glossary, $entry, $mode='',$h
         $output = true;
         $return .= html_writer::tag('span', get_string('entryishidden','glossary'),
             array('class' => 'glossary-hidden-note'));
+    }
+
+    if (has_capability('mod/glossary:approve', $context) && !$glossary->defaultapproval && $entry->approved) {
+        $output = true;
+        $return .= '<a class="action-icon" title="' . get_string('disapprove', 'glossary').
+                   '" href="approve.php?newstate=0&amp;eid='.$entry->id.'&amp;mode='.$mode.
+                   '&amp;hook='.urlencode($hook).'&amp;sesskey='.sesskey().
+                   '"><img src="'.$OUTPUT->pix_url('t/block').'" class="smallicon" alt="'.
+                   get_string('disapprove','glossary').$altsuffix.'" /></a>';
     }
 
     $iscurrentuser = ($entry->userid == $USER->id);
@@ -1361,20 +1363,27 @@ function  glossary_print_entry_lower_section($course, $cm, $glossary, $entry, $m
 }
 
 /**
- * @todo Document this function
+ * Print the list of attachments for this glossary entry
+ *
+ * @param object $entry
+ * @param object $cm The coursemodule
+ * @param string $format The format for this view (html, or text)
+ * @param string $unused1 This parameter is no longer used
+ * @param string $unused2 This parameter is no longer used
  */
-function glossary_print_entry_attachment($entry, $cm, $format=NULL, $align="right", $insidetable=true) {
-///   valid format values: html  : Return the HTML link for the attachment as an icon
-///                        text  : Return the HTML link for tha attachment as text
-///                        blank : Print the output to the screen
+function glossary_print_entry_attachment($entry, $cm, $format = null, $unused1 = null, $unused2 = null) {
+    // Valid format values: html: The HTML link for the attachment is an icon; and
+    //                      text: The HTML link for the attachment is text.
     if ($entry->attachment) {
-          if ($insidetable) {
-              echo "<table border=\"0\" width=\"100%\" align=\"$align\"><tr><td align=\"$align\" nowrap=\"nowrap\">\n";
-          }
-          echo glossary_print_attachments($entry, $cm, $format, $align);
-          if ($insidetable) {
-              echo "</td></tr></table>\n";
-          }
+        echo '<div class="attachments">';
+        echo glossary_print_attachments($entry, $cm, $format);
+        echo '</div>';
+    }
+    if ($unused1) {
+        debugging('The align parameter is deprecated, please use appropriate CSS instead', DEBUG_DEVELOPER);
+    }
+    if ($unused2 !== null) {
+        debugging('The insidetable parameter is deprecated, please use appropriate CSS instead', DEBUG_DEVELOPER);
     }
 }
 
@@ -1530,10 +1539,10 @@ function glossary_search_entries($searchterms, $glossary, $extended) {
  * @param object $entry
  * @param object $cm
  * @param string $type html, txt, empty
- * @param string $align left or right
+ * @param string $unused This parameter is no longer used
  * @return string image string or nothing depending on $type param
  */
-function glossary_print_attachments($entry, $cm, $type=NULL, $align="left") {
+function glossary_print_attachments($entry, $cm, $type=NULL, $unused = null) {
     global $CFG, $DB, $OUTPUT;
 
     if (!$context = context_module::instance($cm->id, IGNORE_MISSING)) {
@@ -2114,9 +2123,9 @@ function glossary_print_sorting_links($cm, $mode, $sortkey = '',$sortorder = '')
  */
 function glossary_sort_entries ( $entry0, $entry1 ) {
 
-    if ( textlib::strtolower(ltrim($entry0->concept)) < textlib::strtolower(ltrim($entry1->concept)) ) {
+    if ( core_text::strtolower(ltrim($entry0->concept)) < core_text::strtolower(ltrim($entry1->concept)) ) {
         return -1;
-    } elseif ( textlib::strtolower(ltrim($entry0->concept)) > textlib::strtolower(ltrim($entry1->concept)) ) {
+    } elseif ( core_text::strtolower(ltrim($entry0->concept)) > core_text::strtolower(ltrim($entry1->concept)) ) {
         return 1;
     } else {
         return 0;
@@ -2269,6 +2278,13 @@ function glossary_generate_export_csv($entries, $aliases, $categories) {
 function glossary_generate_export_file($glossary, $ignored = "", $hook = 0) {
     global $CFG, $DB;
 
+    // Large exports are likely to take their time and memory.
+    core_php_time_limit::raise();
+    raise_memory_limit(MEMORY_EXTRA);
+
+    $cm = get_coursemodule_from_instance('glossary', $glossary->id, $glossary->course);
+    $context = context_module::instance($cm->id);
+
     $co  = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
 
     $co .= glossary_start_tag("GLOSSARY",0,true);
@@ -2286,6 +2302,7 @@ function glossary_generate_export_file($glossary, $ignored = "", $hook = 0) {
         $co .= glossary_full_tag("DEFAULTAPPROVAL",2,false,$glossary->defaultapproval);
         $co .= glossary_full_tag("GLOBALGLOSSARY",2,false,$glossary->globalglossary);
         $co .= glossary_full_tag("ENTBYPAGE",2,false,$glossary->entbypage);
+        $co .= glossary_xml_export_files('INTROFILES', 2, $context->id, 'intro', 0);
 
         if ( $entries = $DB->get_records("glossary_entries", array("glossaryid"=>$glossary->id))) {
             $co .= glossary_start_tag("ENTRIES",2,true);
@@ -2344,6 +2361,12 @@ function glossary_generate_export_file($glossary, $ignored = "", $hook = 0) {
                         }
                         $co .= glossary_end_tag("CATEGORIES",4,true);
                     }
+
+                    // Export files embedded in entries.
+                    $co .= glossary_xml_export_files('ENTRYFILES', 4, $context->id, 'entry', $entry->id);
+
+                    // Export attachments.
+                    $co .= glossary_xml_export_files('ATTACHMENTFILES', 4, $context->id, 'attachment', $entry->id);
 
                     $co .= glossary_end_tag("ENTRY",3,true);
                 }
@@ -2425,6 +2448,66 @@ function glossary_full_tag($tag,$level=0,$endline=true,$content) {
         $co = preg_replace("/\r\n|\r/", "\n", s($content));
         $et = glossary_end_tag($tag,0,true);
         return $st.$co.$et;
+}
+
+/**
+ * Prepares file area to export as part of XML export
+ *
+ * @param string $tag XML tag to use for the group
+ * @param int $taglevel
+ * @param int $contextid
+ * @param string $filearea
+ * @param int $itemid
+ * @return string
+ */
+function glossary_xml_export_files($tag, $taglevel, $contextid, $filearea, $itemid) {
+    $co = '';
+    $fs = get_file_storage();
+    if ($files = $fs->get_area_files(
+        $contextid, 'mod_glossary', $filearea, $itemid, 'itemid,filepath,filename', false)) {
+        $co .= glossary_start_tag($tag, $taglevel, true);
+        foreach ($files as $file) {
+            $co .= glossary_start_tag('FILE', $taglevel + 1, true);
+            $co .= glossary_full_tag('FILENAME', $taglevel + 2, false, $file->get_filename());
+            $co .= glossary_full_tag('FILEPATH', $taglevel + 2, false, $file->get_filepath());
+            $co .= glossary_full_tag('CONTENTS', $taglevel + 2, false, base64_encode($file->get_content()));
+            $co .= glossary_end_tag('FILE', $taglevel + 1);
+        }
+        $co .= glossary_end_tag($tag, $taglevel);
+    }
+    return $co;
+}
+
+/**
+ * Parses files from XML import and inserts them into file system
+ *
+ * @param array $xmlparent parent element in parsed XML tree
+ * @param string $tag
+ * @param int $contextid
+ * @param string $filearea
+ * @param int $itemid
+ * @return int
+ */
+function glossary_xml_import_files($xmlparent, $tag, $contextid, $filearea, $itemid) {
+    $count = 0;
+    if (isset($xmlparent[$tag][0]['#']['FILE'])) {
+        $fs = get_file_storage();
+        $files = $xmlparent[$tag][0]['#']['FILE'];
+        foreach ($files as $file) {
+            $filerecord = array(
+                'contextid' => $contextid,
+                'component' => 'mod_glossary',
+                'filearea'  => $filearea,
+                'itemid'    => $itemid,
+                'filepath'  => $file['#']['FILEPATH'][0]['#'],
+                'filename'  => $file['#']['FILENAME'][0]['#'],
+            );
+            $content =  $file['#']['CONTENTS'][0]['#'];
+            $fs->create_file_from_string($filerecord, base64_decode($content));
+            $count++;
+        }
+    }
+    return $count;
 }
 
 /**
@@ -2623,13 +2706,29 @@ function glossary_get_paging_bar($totalcount, $page, $perpage, $baseurl, $maxpag
 
     return $code;
 }
+
 /**
+ * List the actions that correspond to a view of this module.
+ * This is used by the participation report.
+ *
+ * Note: This is not used by new logging system. Event with
+ *       crud = 'r' and edulevel = LEVEL_PARTICIPATING will
+ *       be considered as view action.
+ *
  * @return array
  */
 function glossary_get_view_actions() {
     return array('view','view all','view entry');
 }
+
 /**
+ * List the actions that correspond to a post of this module.
+ * This is used by the participation report.
+ *
+ * Note: This is not used by new logging system. Event with
+ *       crud = ('c' || 'u' || 'd') and edulevel = LEVEL_PARTICIPATING
+ *       will be considered as post action.
+ *
  * @return array
  */
 function glossary_get_post_actions() {
@@ -2911,7 +3010,6 @@ function glossary_supports($feature) {
     switch($feature) {
         case FEATURE_GROUPS:                  return false;
         case FEATURE_GROUPINGS:               return false;
-        case FEATURE_GROUPMEMBERSONLY:        return true;
         case FEATURE_MOD_INTRO:               return true;
         case FEATURE_COMPLETION_TRACKS_VIEWS: return true;
         case FEATURE_COMPLETION_HAS_RULES:    return true;
@@ -2962,11 +3060,33 @@ function glossary_get_completion_state($course,$cm,$userid,$type) {
 }
 
 function glossary_extend_navigation($navigation, $course, $module, $cm) {
-    global $CFG;
-    $navigation->add(get_string('standardview', 'glossary'), new moodle_url('/mod/glossary/view.php', array('id'=>$cm->id, 'mode'=>'letter')));
-    $navigation->add(get_string('categoryview', 'glossary'), new moodle_url('/mod/glossary/view.php', array('id'=>$cm->id, 'mode'=>'cat')));
-    $navigation->add(get_string('dateview', 'glossary'), new moodle_url('/mod/glossary/view.php', array('id'=>$cm->id, 'mode'=>'date')));
-    $navigation->add(get_string('authorview', 'glossary'), new moodle_url('/mod/glossary/view.php', array('id'=>$cm->id, 'mode'=>'author')));
+    global $CFG, $DB;
+
+    $displayformat = $DB->get_record('glossary_formats', array('name' => $module->displayformat));
+    // Get visible tabs for the format and check if the menu needs to be displayed.
+    $showtabs = glossary_get_visible_tabs($displayformat);
+
+    foreach ($showtabs as $showtabkey => $showtabvalue) {
+
+        switch($showtabvalue) {
+            case GLOSSARY_STANDARD :
+                $navigation->add(get_string('standardview', 'glossary'), new moodle_url('/mod/glossary/view.php',
+                        array('id' => $cm->id, 'mode' => 'letter')));
+                break;
+            case GLOSSARY_CATEGORY :
+                $navigation->add(get_string('categoryview', 'glossary'), new moodle_url('/mod/glossary/view.php',
+                        array('id' => $cm->id, 'mode' => 'cat')));
+                break;
+            case GLOSSARY_DATE :
+                $navigation->add(get_string('dateview', 'glossary'), new moodle_url('/mod/glossary/view.php',
+                        array('id' => $cm->id, 'mode' => 'date')));
+                break;
+            case GLOSSARY_AUTHOR :
+                $navigation->add(get_string('authorview', 'glossary'), new moodle_url('/mod/glossary/view.php',
+                        array('id' => $cm->id, 'mode' => 'author')));
+                break;
+        }
+    }
 }
 
 /**
@@ -3111,4 +3231,67 @@ function glossary_page_type_list($pagetype, $parentcontext, $currentcontext) {
         'mod-glossary-view'=>get_string('page-mod-glossary-view', 'glossary'),
         'mod-glossary-edit'=>get_string('page-mod-glossary-edit', 'glossary'));
     return $module_pagetype;
+}
+
+/**
+ * Return list of all glossary tabs.
+ * @throws coding_exception
+ * @return array
+ */
+function glossary_get_all_tabs() {
+
+    return array (
+        GLOSSARY_AUTHOR => get_string('authorview', 'glossary'),
+        GLOSSARY_CATEGORY => get_string('categoryview', 'glossary'),
+        GLOSSARY_DATE => get_string('dateview', 'glossary')
+    );
+}
+
+/**
+ * Set 'showtabs' value for glossary formats
+ * @param stdClass $glossaryformat record from 'glossary_formats' table
+ */
+function glossary_set_default_visible_tabs($glossaryformat) {
+    global $DB;
+
+    switch($glossaryformat->name) {
+        case GLOSSARY_CONTINUOUS:
+            $showtabs = 'standard,category,date';
+            break;
+        case GLOSSARY_DICTIONARY:
+            $showtabs = 'standard';
+            // Special code for upgraded instances that already had categories set up
+            // in this format - enable "category" tab.
+            // In new instances only 'standard' tab will be visible.
+            if ($DB->record_exists_sql("SELECT 1
+                    FROM {glossary} g, {glossary_categories} gc
+                    WHERE g.id = gc.glossaryid and g.displayformat = ?",
+                    array(GLOSSARY_DICTIONARY))) {
+                $showtabs .= ',category';
+            }
+            break;
+        case GLOSSARY_FULLWITHOUTAUTHOR:
+            $showtabs = 'standard,category,date';
+            break;
+        default:
+            $showtabs = 'standard,category,date,author';
+            break;
+    }
+
+    $DB->set_field('glossary_formats', 'showtabs', $showtabs, array('id' => $glossaryformat->id));
+    $glossaryformat->showtabs = $showtabs;
+}
+
+/**
+ * Convert 'showtabs' string to array
+ * @param stdClass $displayformat record from 'glossary_formats' table
+ * @return array
+ */
+function glossary_get_visible_tabs($displayformat) {
+    if (empty($displayformat->showtabs)) {
+        glossary_set_default_visible_tabs($displayformat);
+    }
+    $showtabs = preg_split('/,/', $displayformat->showtabs, -1, PREG_SPLIT_NO_EMPTY);
+
+    return $showtabs;
 }

@@ -87,9 +87,26 @@ if ($accessmanager->is_preflight_check_required($attemptobj->get_attemptid())) {
     redirect($attemptobj->start_attempt_url(null, $page));
 }
 
-add_to_log($attemptobj->get_courseid(), 'quiz', 'continue attempt',
-        'review.php?attempt=' . $attemptobj->get_attemptid(),
-        $attemptobj->get_quizid(), $attemptobj->get_cmid());
+// Set up auto-save if required.
+$autosaveperiod = get_config('quiz', 'autosaveperiod');
+if ($autosaveperiod) {
+    $PAGE->requires->yui_module('moodle-mod_quiz-autosave',
+            'M.mod_quiz.autosave.init', array($autosaveperiod));
+}
+
+// Log this page view.
+$params = array(
+    'objectid' => $attemptid,
+    'relateduserid' => $attemptobj->get_userid(),
+    'courseid' => $attemptobj->get_courseid(),
+    'context' => context_module::instance($attemptobj->get_cmid()),
+    'other' => array(
+        'quizid' => $attemptobj->get_quizid()
+    )
+);
+$event = \mod_quiz\event\attempt_viewed::create($params);
+$event->add_record_snapshot('quiz_attempts', $attemptobj->get_attempt());
+$event->trigger();
 
 // Get the list of questions needed by this page.
 $slots = $attemptobj->get_slots($page);
@@ -119,7 +136,7 @@ $PAGE->blocks->add_fake_block($navbc, reset($regions));
 
 $title = get_string('attempt', 'quiz', $attemptobj->get_attempt_number());
 $headtags = $attemptobj->get_html_head_contributions($page);
-$PAGE->set_title(format_string($attemptobj->get_quiz_name()));
+$PAGE->set_title($attemptobj->get_quiz_name());
 $PAGE->set_heading($attemptobj->get_course()->fullname);
 
 if ($attemptobj->is_last_page($page)) {

@@ -1,19 +1,6 @@
 
-.path-mod-book .book_chapter_title {
-    font-family: Tahoma, Verdana, Arial, Helvetica, sans-serif;
-    text-align: left;
-    font-size: large;
-    font-weight: bold;
-
-    margin-left: 0;
-    margin-bottom: 20px;
-}
-.dir-rtl.path-mod-book .book_chapter_title {
-    text-align: right;
-}
-
 .path-mod-book .navtop img.icon,
-.path-mod-book .navbotton img.icon {
+.path-mod-book .navbottom img.icon {
   margin-right: 4px;
   margin-left: 4px;
   border: 0;
@@ -31,6 +18,9 @@
 }
 .path-mod-book .navtop {
     margin-bottom: 0.5em;
+}
+.path-mod-book .navbottom {
+    margin-top: 0.5em;
 }
 
 /* == Fake toc block == */
@@ -56,24 +46,13 @@
 }
 
 /* toc style NONE */
-.path-mod-book .book_toc_none {
-  font-size: 0.8em;
-}
 .path-mod-book .book_toc_none ul ul,
 .dir-rtl.path-mod-book .book_toc_none ul ul {
     margin-left: 0;
     margin-right: 0;
 }
 
-/* toc style NUMBERED */
-.path-mod-book .book_toc_numbered {
-  font-size: 0.8em;
-}
-
 /*toc style BULLETS */
-.path-mod-book .book_toc_bullets {
-  font-size: 0.8em;
-}
 .path-mod-book .book_toc_bullets ul ul {
     margin-left: 20px;
 }
@@ -85,10 +64,11 @@
     list-style: circle;
 }
 
-/* toc style INDENTED*/
-.path-mod-book .book_toc_indented {
-  font-size: 0.8em;
+.path-mod-book .book_toc_bullets li li:before {
+    display: none;
 }
+
+/* toc style INDENTED*/
 .path-mod-book .book_toc_indented ul {
     margin-left: 5px;
 }
@@ -105,4 +85,46 @@
 }
 .path-mod-book .book_toc_indented li li {
     list-style: none;
+}
+
+/* Text style links */
+.navtop.navtext .chaptername,
+.navbottom.navtext .chaptername {
+    font-weight: bolder;
+}
+.navtop.navtext a,
+.navbottom.navtext a {
+    display: inline-block;
+    max-width: 45%;
+}
+.navtop.navtext a.bookprev,
+.navbottom.navtext a.bookprev {
+    float: left;
+    text-align: left;
+}
+.dir-rtl .navtop.navtext a.bookprev,
+.dir-rtl .navbottom.navtext a.bookprev {
+    float: right;
+    text-align: right;
+}
+
+@media (max-width: 480px) {
+    .path-mod-book .navbottom,
+    .path-mod-book .navtop,
+    .dir-rtl.path-mod-book .navbottom,
+    .dir-rtl.path-mod-book .navtop {
+        text-align: center;
+    }
+    .navtop.navtext a,
+    .navbottom.navtext a {
+        display: block;
+        max-width: 100%;
+        margin: auto;
+    }
+    .navtop.navtext a.bookprev,
+    .navbottom.navtext a.bookprev,
+    .dir-rtl .navtop.navtext a.bookprev,
+    .dir-rtl .navbottom.navtext a.bookprev {
+        float: none;
+    }
 }

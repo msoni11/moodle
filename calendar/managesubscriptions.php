@@ -33,7 +33,7 @@ $courseid = optional_param('course', SITEID, PARAM_INT);
 // Used for processing subscription actions.
 $subscriptionid = optional_param('id', 0, PARAM_INT);
 $pollinterval  = optional_param('pollinterval', 0, PARAM_INT);
-$action = optional_param('action', '', PARAM_ALPHA);
+$action = optional_param('action', '', PARAM_INT);
 
 $url = new moodle_url('/calendar/managesubscriptions.php');
 if ($courseid != SITEID) {
@@ -41,7 +41,7 @@ if ($courseid != SITEID) {
 }
 navigation_node::override_active_url(new moodle_url('/calendar/view.php', array('view' => 'month')));
 $PAGE->set_url($url);
-$PAGE->set_pagelayout('standard');
+$PAGE->set_pagelayout('admin');
 $PAGE->navbar->add(get_string('managesubscriptions', 'calendar'));
 
 if ($courseid != SITEID && !empty($courseid)) {

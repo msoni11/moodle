@@ -26,7 +26,6 @@
 // NOTE: no MOODLE_INTERNAL test here, this file may be required by behat before including /config.php.
 
 require_once(__DIR__ . '/../../behat/behat_base.php');
-require_once(__DIR__ . '/../../testing/generator/lib.php');
 
 use Behat\Gherkin\Node\TableNode as TableNode;
 use Behat\Behat\Exception\PendingException as PendingException;
@@ -37,10 +36,11 @@ use Behat\Behat\Exception\PendingException as PendingException;
  * Acceptance tests are block-boxed, so this steps definitions should only
  * be used to set up the test environment as we are not replicating user steps.
  *
- * All data generators should be in lib/testing/generator/* and shared between phpunit
+ * All data generators should be in lib/testing/generator/*, shared between phpunit
  * and behat and they should be called from here, if possible using the standard
- * 'create_$elementname($options)' and if not possible (data generators arguments will not be
- * always the same) create an adapter 'adapt_$elementname($options)' that uses the data generator.
+ * 'create_$elementname($options)' and if it's not possible (data generators arguments will not be
+ * always the same) or the element is not suitable to be a data generator, create a
+ * 'process_$elementname($options)' method and use the data generator from there if possible.
  *
  * @todo      If the available elements list grows too much this class must be split into smaller pieces
  * @package   core
@@ -91,7 +91,26 @@ class behat_data_generators extends behat_base {
             'datagenerator' => 'enrol_user',
             'required' => array('user', 'course', 'role'),
             'switchids' => array('user' => 'userid', 'course' => 'courseid', 'role' => 'roleid')
-
+        ),
+        'permission overrides' => array(
+            'datagenerator' => 'permission_override',
+            'required' => array('capability', 'permission', 'role', 'contextlevel', 'reference'),
+            'switchids' => array('role' => 'roleid')
+        ),
+        'system role assigns' => array(
+            'datagenerator' => 'system_role_assign',
+            'required' => array('user', 'role'),
+            'switchids' => array('user' => 'userid', 'role' => 'roleid')
+        ),
+        'role assigns' => array(
+            'datagenerator' => 'role_assign',
+            'required' => array('user', 'role', 'contextlevel', 'reference'),
+            'switchids' => array('user' => 'userid', 'role' => 'roleid')
+        ),
+        'activities' => array(
+            'datagenerator' => 'activity',
+            'required' => array('activity', 'idnumber', 'course'),
+            'switchids' => array('course' => 'course', 'gradecategory' => 'gradecat')
         ),
         'group members' => array(
             'datagenerator' => 'group_member',
@@ -102,20 +121,71 @@ class behat_data_generators extends behat_base {
             'datagenerator' => 'grouping_group',
             'required' => array('grouping', 'group'),
             'switchids' => array('grouping' => 'groupingid', 'group' => 'groupid')
-        )
+        ),
+        'cohorts' => array(
+            'datagenerator' => 'cohort',
+            'required' => array('idnumber')
+        ),
+        'cohort members' => array(
+            'datagenerator' => 'cohort_member',
+            'required' => array('user', 'cohort'),
+            'switchids' => array('user' => 'userid', 'cohort' => 'cohortid')
+        ),
+        'roles' => array(
+            'datagenerator' => 'role',
+            'required' => array('shortname')
+        ),
+        'grade categories' => array(
+            'datagenerator' => 'grade_category',
+            'required' => array('fullname', 'course'),
+            'switchids' => array('course' => 'courseid', 'gradecategory' => 'parent')
+        ),
+        'grade items' => array(
+            'datagenerator' => 'grade_item',
+            'required' => array('course'),
+            'switchids' => array('scale' => 'scaleid', 'outcome' => 'outcomeid', 'course' => 'courseid',
+                                 'gradecategory' => 'categoryid')
+        ),
+        'grade outcomes' => array(
+            'datagenerator' => 'grade_outcome',
+            'required' => array('shortname', 'scale'),
+            'switchids' => array('course' => 'courseid', 'gradecategory' => 'categoryid', 'scale' => 'scaleid')
+        ),
+        'scales' => array(
+            'datagenerator' => 'scale',
+            'required' => array('name', 'scale'),
+            'switchids' => array('course' => 'courseid')
+        ),
+        'question categories' => array(
+            'datagenerator' => 'question_category',
+            'required' => array('name', 'contextlevel', 'reference'),
+            'switchids' => array('questioncategory' => 'category')
+        ),
+        'questions' => array(
+            'datagenerator' => 'question',
+            'required' => array('qtype', 'questioncategory', 'name'),
+            'switchids' => array('questioncategory' => 'category', 'user' => 'createdby')
+        ),
+        'tags' => array(
+            'datagenerator' => 'tag',
+            'required' => array('name')
+        ),
     );
 
     /**
      * Creates the specified element. More info about available elements in http://docs.moodle.org/dev/Acceptance_testing#Fixtures.
      *
-     * @Given /^the following "(?P<element_string>(?:[^"]|\\")*)" exists:$/
+     * @Given /^the following "(?P<element_string>(?:[^"]|\\")*)" exist:$/
      *
      * @throws Exception
      * @throws PendingException
      * @param string    $elementname The name of the entity to add
      * @param TableNode $data
      */
-    public function the_following_exists($elementname, TableNode $data) {
+    public function the_following_exist($elementname, TableNode $data) {
+
+        // Now that we need them require the data generators.
+        require_once(__DIR__ . '/../../testing/generator/lib.php');
 
         if (empty(self::$elements[$elementname])) {
             throw new PendingException($elementname . ' data generator is not implemented');
@@ -164,9 +234,9 @@ class behat_data_generators extends behat_base {
                 // Using data generators directly.
                 $this->datagenerator->{$methodname}($elementdata);
 
-            } else if (method_exists($this, 'adapt_' . $elementdatagenerator)) {
-                // Using an adaptor to use the data generator.
-                $this->{'adapt_' . $elementdatagenerator}($elementdata);
+            } else if (method_exists($this, 'process_' . $elementdatagenerator)) {
+                // Using an alternative to the direct data generator call.
+                $this->{'process_' . $elementdatagenerator}($elementdata);
             } else {
                 throw new PendingException($elementname . ' data generator is not implemented');
             }
@@ -186,14 +256,99 @@ class behat_data_generators extends behat_base {
         return $data;
     }
 
+    /**
+     * If contextlevel and reference are specified for cohort, transform them to the contextid.
+     *
+     * @param array $data
+     * @return array
+     */
+    protected function preprocess_cohort($data) {
+        if (isset($data['contextlevel'])) {
+            if (!isset($data['reference'])) {
+                throw new Exception('If field contextlevel is specified, field reference must also be present');
+            }
+            $context = $this->get_context($data['contextlevel'], $data['reference']);
+            unset($data['contextlevel']);
+            unset($data['reference']);
+            $data['contextid'] = $context->id;
+        }
+        return $data;
+    }
+
+    /**
+     * Preprocesses the creation of a grade item. Converts gradetype text to a number.
+     * @param array $data
+     * @return array
+     */
+    protected function preprocess_grade_item($data) {
+        global $CFG;
+        require_once("$CFG->libdir/grade/constants.php");
+
+        if (isset($data['gradetype'])) {
+            $data['gradetype'] = constant("GRADE_TYPE_" . strtoupper($data['gradetype']));
+        }
+
+        if (!empty($data['category']) && !empty($data['courseid'])) {
+            $cat = grade_category::fetch(array('fullname' => $data['category'], 'courseid' => $data['courseid']));
+            if (!$cat) {
+                throw new Exception('Could not resolve category with name "' . $data['category'] . '"');
+            }
+            unset($data['category']);
+            $data['categoryid'] = $cat->id;
+        }
+
+        return $data;
+    }
+
+    /**
+     * Adapter to modules generator
+     * @throws Exception Custom exception for test writers
+     * @param array $data
+     * @return void
+     */
+    protected function process_activity($data) {
+        global $DB, $CFG;
+
+        // The the_following_exists() method checks that the field exists.
+        $activityname = $data['activity'];
+        unset($data['activity']);
+
+        // Convert scale name into scale id (negative number indicates using scale).
+        if (isset($data['grade']) && strlen($data['grade']) && !is_number($data['grade'])) {
+            $data['grade'] = - $this->get_scale_id($data['grade']);
+            require_once("$CFG->libdir/grade/constants.php");
+
+            if (!isset($data['gradetype'])) {
+                $data['gradetype'] = GRADE_TYPE_SCALE;
+            }
+        }
+
+        // We split $data in the activity $record and the course module $options.
+        $cmoptions = array();
+        $cmcolumns = $DB->get_columns('course_modules');
+        foreach ($cmcolumns as $key => $value) {
+            if (isset($data[$key])) {
+                $cmoptions[$key] = $data[$key];
+            }
+        }
+
+        // Custom exception.
+        try {
+            $this->datagenerator->create_module($activityname, $data, $cmoptions);
+        } catch (coding_exception $e) {
+            throw new Exception('\'' . $activityname . '\' activity can not be added using this step,' .
+                ' use the step \'I add a "ACTIVITY_OR_RESOURCE_NAME_STRING" to section "SECTION_NUMBER"\' instead');
+        }
+    }
 
     /**
      * Adapter to enrol_user() data generator.
      * @throws Exception
-     * @param mixed $data
+     * @param array $data
      * @return void
      */
-    protected function adapt_enrol_user($data) {
+    protected function process_enrol_user($data) {
+        global $SITE;
 
         if (empty($data['roleid'])) {
             throw new Exception('\'course enrolments\' requires the field \'role\' to be specified');
@@ -211,7 +366,205 @@ class behat_data_generators extends behat_base {
             $data['enrol'] = 'manual';
         }
 
-        $this->datagenerator->enrol_user($data['userid'], $data['courseid'], $data['roleid'], $data['enrol']);
+        if (!isset($data['timestart'])) {
+            $data['timestart'] = 0;
+        }
+
+        if (!isset($data['timeend'])) {
+            $data['timeend'] = 0;
+        }
+
+        if (!isset($data['status'])) {
+            $data['status'] = null;
+        }
+
+        // If the provided course shortname is the site shortname we consider it a system role assign.
+        if ($data['courseid'] == $SITE->id) {
+            // Frontpage course assign.
+            $context = context_course::instance($data['courseid']);
+            role_assign($data['roleid'], $data['userid'], $context->id);
+
+        } else {
+            // Course assign.
+            $this->datagenerator->enrol_user($data['userid'], $data['courseid'], $data['roleid'], $data['enrol'],
+                    $data['timestart'], $data['timeend'], $data['status']);
+        }
+
+    }
+
+    /**
+     * Allows/denies a capability at the specified context
+     *
+     * @throws Exception
+     * @param array $data
+     * @return void
+     */
+    protected function process_permission_override($data) {
+
+        // Will throw an exception if it does not exist.
+        $context = $this->get_context($data['contextlevel'], $data['reference']);
+
+        switch ($data['permission']) {
+            case get_string('allow', 'role'):
+                $permission = CAP_ALLOW;
+                break;
+            case get_string('prevent', 'role'):
+                $permission = CAP_PREVENT;
+                break;
+            case get_string('prohibit', 'role'):
+                $permission = CAP_PROHIBIT;
+                break;
+            default:
+                throw new Exception('The \'' . $data['permission'] . '\' permission does not exist');
+                break;
+        }
+
+        if (is_null(get_capability_info($data['capability']))) {
+            throw new Exception('The \'' . $data['capability'] . '\' capability does not exist');
+        }
+
+        role_change_permission($data['roleid'], $context, $data['capability'], $permission);
+    }
+
+    /**
+     * Assigns a role to a user at system context
+     *
+     * Used by "system role assigns" can be deleted when
+     * system role assign will be deprecated in favour of
+     * "role assigns"
+     *
+     * @throws Exception
+     * @param array $data
+     * @return void
+     */
+    protected function process_system_role_assign($data) {
+
+        if (empty($data['roleid'])) {
+            throw new Exception('\'system role assigns\' requires the field \'role\' to be specified');
+        }
+
+        if (!isset($data['userid'])) {
+            throw new Exception('\'system role assigns\' requires the field \'user\' to be specified');
+        }
+
+        $context = context_system::instance();
+
+        $this->datagenerator->role_assign($data['roleid'], $data['userid'], $context->id);
+    }
+
+    /**
+     * Assigns a role to a user at the specified context
+     *
+     * @throws Exception
+     * @param array $data
+     * @return void
+     */
+    protected function process_role_assign($data) {
+
+        if (empty($data['roleid'])) {
+            throw new Exception('\'role assigns\' requires the field \'role\' to be specified');
+        }
+
+        if (!isset($data['userid'])) {
+            throw new Exception('\'role assigns\' requires the field \'user\' to be specified');
+        }
+
+        if (empty($data['contextlevel'])) {
+            throw new Exception('\'role assigns\' requires the field \'contextlevel\' to be specified');
+        }
+
+        if (!isset($data['reference'])) {
+            throw new Exception('\'role assigns\' requires the field \'reference\' to be specified');
+        }
+
+        // Getting the context id.
+        $context = $this->get_context($data['contextlevel'], $data['reference']);
+
+        $this->datagenerator->role_assign($data['roleid'], $data['userid'], $context->id);
+    }
+
+    /**
+     * Creates a role.
+     *
+     * @param array $data
+     * @return void
+     */
+    protected function process_role($data) {
+
+        // We require the user to fill the role shortname.
+        if (empty($data['shortname'])) {
+            throw new Exception('\'role\' requires the field \'shortname\' to be specified');
+        }
+
+        $this->datagenerator->create_role($data);
+    }
+
+    /**
+     * Adds members to cohorts
+     *
+     * @param array $data
+     * @return void
+     */
+    protected function process_cohort_member($data) {
+        cohort_add_member($data['cohortid'], $data['userid']);
+    }
+
+    /**
+     * Create a question category.
+     *
+     * @param array $data the row of data from the behat script.
+     */
+    protected function process_question_category($data) {
+        $context = $this->get_context($data['contextlevel'], $data['reference']);
+        $data['contextid'] = $context->id;
+        $this->datagenerator->get_plugin_generator('core_question')->create_question_category($data);
+    }
+
+    /**
+     * Create a question.
+     *
+     * Creating questions relies on the question/type/.../tests/helper.php mechanism.
+     * We start with test_question_maker::get_question_form_data($data['qtype'], $data['template'])
+     * and then overlay the values from any other fields of $data that are set.
+     *
+     * @param array $data the row of data from the behat script.
+     */
+    protected function process_question($data) {
+        if (array_key_exists('questiontext', $data)) {
+            $data['questiontext'] = array(
+                    'text'   => $data['questiontext'],
+                    'format' => FORMAT_HTML,
+                );
+        }
+
+        if (array_key_exists('generalfeedback', $data)) {
+            $data['generalfeedback'] = array(
+                    'text'   => $data['generalfeedback'],
+                    'format' => FORMAT_HTML,
+                );
+        }
+
+        $which = null;
+        if (!empty($data['template'])) {
+            $which = $data['template'];
+        }
+
+        $this->datagenerator->get_plugin_generator('core_question')->create_question($data['qtype'], $which, $data);
+    }
+
+    /**
+     * Gets the grade category id from the grade category fullname
+     * @throws Exception
+     * @param string $username
+     * @return int
+     */
+    protected function get_gradecategory_id($fullname) {
+        global $DB;
+
+        if (!$id = $DB->get_field('grade_categories', 'id', array('fullname' => $fullname))) {
+            throw new Exception('The specified grade category with fullname "' . $fullname . '" does not exist');
+        }
+        return $id;
     }
 
     /**
@@ -239,7 +592,7 @@ class behat_data_generators extends behat_base {
         global $DB;
 
         if (!$id = $DB->get_field('role', 'id', array('shortname' => $roleshortname))) {
-            throw new Exception('The specified role with shortname"' . $roleshortname . '" does not exist');
+            throw new Exception('The specified role with shortname "' . $roleshortname . '" does not exist');
         }
 
         return $id;
@@ -276,7 +629,7 @@ class behat_data_generators extends behat_base {
         global $DB;
 
         if (!$id = $DB->get_field('course', 'id', array('shortname' => $shortname))) {
-            throw new Exception('The specified course with shortname"' . $shortname . '" does not exist');
+            throw new Exception('The specified course with shortname "' . $shortname . '" does not exist');
         }
         return $id;
     }
@@ -310,4 +663,132 @@ class behat_data_generators extends behat_base {
         }
         return $id;
     }
+
+    /**
+     * Gets the cohort id from it's idnumber.
+     * @throws Exception
+     * @param string $idnumber
+     * @return int
+     */
+    protected function get_cohort_id($idnumber) {
+        global $DB;
+
+        if (!$id = $DB->get_field('cohort', 'id', array('idnumber' => $idnumber))) {
+            throw new Exception('The specified cohort with idnumber "' . $idnumber . '" does not exist');
+        }
+        return $id;
+    }
+
+    /**
+     * Gets the outcome item id from its shortname.
+     * @throws Exception
+     * @param string $shortname
+     * @return int
+     */
+    protected function get_outcome_id($shortname) {
+        global $DB;
+
+        if (!$id = $DB->get_field('grade_outcomes', 'id', array('shortname' => $shortname))) {
+            throw new Exception('The specified outcome with shortname "' . $shortname . '" does not exist');
+        }
+        return $id;
+    }
+
+    /**
+     * Get the id of a named scale.
+     * @param string $name the name of the scale.
+     * @return int the scale id.
+     */
+    protected function get_scale_id($name) {
+        global $DB;
+
+        if (!$id = $DB->get_field('scale', 'id', array('name' => $name))) {
+            throw new Exception('The specified scale with name "' . $name . '" does not exist');
+        }
+        return $id;
+    }
+
+    /**
+     * Get the id of a named question category (must be globally unique).
+     * Note that 'Top' is a special value, used when setting the parent of another
+     * category, meaning top-level.
+     *
+     * @param string $name the question category name.
+     * @return int the question category id.
+     */
+    protected function get_questioncategory_id($name) {
+        global $DB;
+
+        if ($name == 'Top') {
+            return 0;
+        }
+
+        if (!$id = $DB->get_field('question_categories', 'id', array('name' => $name))) {
+            throw new Exception('The specified question category with name "' . $name . '" does not exist');
+        }
+        return $id;
+    }
+
+    /**
+     * Gets the internal context id from the context reference.
+     *
+     * The context reference changes depending on the context
+     * level, it can be the system, a user, a category, a course or
+     * a module.
+     *
+     * @throws Exception
+     * @param string $levelname The context level string introduced by the test writer
+     * @param string $contextref The context reference introduced by the test writer
+     * @return context
+     */
+    protected function get_context($levelname, $contextref) {
+        global $DB;
+
+        // Getting context levels and names (we will be using the English ones as it is the test site language).
+        $contextlevels = context_helper::get_all_levels();
+        $contextnames = array();
+        foreach ($contextlevels as $level => $classname) {
+            $contextnames[context_helper::get_level_name($level)] = $level;
+        }
+
+        if (empty($contextnames[$levelname])) {
+            throw new Exception('The specified "' . $levelname . '" context level does not exist');
+        }
+        $contextlevel = $contextnames[$levelname];
+
+        // Return it, we don't need to look for other internal ids.
+        if ($contextlevel == CONTEXT_SYSTEM) {
+            return context_system::instance();
+        }
+
+        switch ($contextlevel) {
+
+            case CONTEXT_USER:
+                $instanceid = $DB->get_field('user', 'id', array('username' => $contextref));
+                break;
+
+            case CONTEXT_COURSECAT:
+                $instanceid = $DB->get_field('course_categories', 'id', array('idnumber' => $contextref));
+                break;
+
+            case CONTEXT_COURSE:
+                $instanceid = $DB->get_field('course', 'id', array('shortname' => $contextref));
+                break;
+
+            case CONTEXT_MODULE:
+                $instanceid = $DB->get_field('course_modules', 'id', array('idnumber' => $contextref));
+                break;
+
+            default:
+                break;
+        }
+
+        $contextclass = $contextlevels[$contextlevel];
+        if (!$context = $contextclass::instance($instanceid, IGNORE_MISSING)) {
+            throw new Exception('The specified "' . $contextref . '" context reference does not exist');
+        }
+
+        return $context;
+    }
+
 }

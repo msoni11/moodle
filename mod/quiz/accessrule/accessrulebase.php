@@ -17,10 +17,9 @@
 /**
  * Base class for rules that restrict the ability to attempt a quiz.
  *
- * @package    mod
- * @subpackage quiz
- * @copyright  2011 The Open University
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @package   mod_quiz
+ * @copyright 2011 The Open University
+ * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
 
@@ -38,8 +37,9 @@ require_once($CFG->dirroot . '/mod/quiz/locallib.php');
  * as true) if access should be blocked. Slighly unnatural, but acutally the easist
  * way to implement this.
  *
- * @copyright  2009 Tim Hunt
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @copyright 2009 Tim Hunt
+ * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @since     Moodle 2.2
  */
 abstract class quiz_access_rule_base {
     /** @var stdClass the quiz settings. */
@@ -257,6 +257,20 @@ abstract class quiz_access_rule_base {
     }
 
     /**
+     * Validate the data from any form fields added using {@link add_settings_form_fields()}.
+     * @param array $errors the errors found so far.
+     * @param array $data the submitted form data.
+     * @param array $files information about any uploaded files.
+     * @param mod_quiz_mod_form $quizform the quiz form object.
+     * @return array $errors the updated $errors array.
+     */
+    public static function validate_settings_form_fields(array $errors,
+            array $data, $files, mod_quiz_mod_form $quizform) {
+
+        return $errors;
+    }
+
+    /**
      * @return array key => lang string any choices to add to the quiz Browser
      *      security settings menu.
      */
@@ -268,9 +282,20 @@ abstract class quiz_access_rule_base {
      * Save any submitted settings when the quiz settings form is submitted. This
      * is called from {@link quiz_after_add_or_update()} in lib.php.
      * @param object $quiz the data from the quiz form, including $quiz->id
-     *      which is the is of the quiz being saved.
+     *      which is the id of the quiz being saved.
      */
     public static function save_settings($quiz) {
+        // By default do nothing.
+    }
+
+    /**
+     * Delete any rule-specific settings when the quiz is deleted. This is called
+     * from {@link quiz_delete_instance()} in lib.php.
+     * @param object $quiz the data from the database, including $quiz->id
+     *      which is the id of the quiz being deleted.
+     * @since Moodle 2.7.1, 2.6.4, 2.5.7
+     */
+    public static function delete_settings($quiz) {
         // By default do nothing.
     }
 

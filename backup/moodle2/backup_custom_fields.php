@@ -79,6 +79,25 @@ class mnethosturl_final_element extends backup_final_element {
 }
 
 /**
+ * Implementation of {@link backup_final_element} that provides base64 encoding.
+ *
+ * This final element transparently encodes with base64_encode() contents that
+ * normally are not safe for being stored in utf-8 xml files (binaries, serialized
+ * data...).
+ */
+class base64_encode_final_element extends backup_final_element {
+
+    /**
+     * Set the value for the final element, encoding it as utf-8/xml safe base64.
+     *
+     * @param string $value Original value coming from backup step source, usually db.
+     */
+    public function set_value($value) {
+        parent::set_value(base64_encode($value));
+    }
+}
+
+/**
  * Implementation of backup_nested_element that provides special handling of files
  *
  * This class overwrites the standard fill_values() method, so it gets intercepted
@@ -107,7 +126,19 @@ class file_nested_element extends backup_nested_element {
             backup_file_manager::copy_file_moodle2backup($this->backupid, $values);
         } catch (file_exception $e) {
             $this->add_result(array('missing_files_in_pool' => true));
-            $this->add_log('missing file in pool: ' . $e->debuginfo, backup::LOG_WARNING);
+
+            // Build helpful log message with all information necessary to identify
+            // file location.
+            $context = context::instance_by_id($values->contextid, IGNORE_MISSING);
+            $contextname = '';
+            if ($context) {
+                $contextname = ' \'' . $context->get_context_name() . '\'';
+            }
+            $message = 'Missing file in pool: ' . $values->filepath  . $values->filename .
+                    ' (context ' . $values->contextid . $contextname . ', component ' .
+                    $values->component . ', filearea ' . $values->filearea . ', itemid ' .
+                    $values->itemid . ') [' . $e->debuginfo . ']';
+            $this->add_log($message, backup::LOG_WARNING);
         }
     }
 }

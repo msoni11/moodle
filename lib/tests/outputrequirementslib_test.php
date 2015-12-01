@@ -29,21 +29,76 @@ global $CFG;
 require_once($CFG->libdir . '/outputrequirementslib.php');
 
 
-class outputrequirements_test extends advanced_testcase {
+class core_outputrequirementslib_testcase extends advanced_testcase {
     public function test_string_for_js() {
         $this->resetAfterTest();
 
         $page = new moodle_page();
         $page->requires->string_for_js('course', 'moodle', 1);
         $page->requires->string_for_js('course', 'moodle', 1);
-        try {
-            $page->requires->string_for_js('course', 'moodle', 2);
-            $this->fail('Exception expected when the same string with different $a requested');
-        } catch (Exception $e) {
-            $this->assertInstanceOf('coding_exception', $e);
-        }
+        $this->setExpectedException('coding_exception');
+        $page->requires->string_for_js('course', 'moodle', 2);
 
         // Note: we can not switch languages in phpunit yet,
         //       it would be nice to test that the strings are actually fetched in the footer.
+    }
+
+    public function test_one_time_output_normal_case() {
+        $page = new moodle_page();
+        $this->assertTrue($page->requires->should_create_one_time_item_now('test_item'));
+        $this->assertFalse($page->requires->should_create_one_time_item_now('test_item'));
+    }
+
+    public function test_one_time_output_repeat_output_throws() {
+        $page = new moodle_page();
+        $page->requires->set_one_time_item_created('test_item');
+        $this->setExpectedException('coding_exception');
+        $page->requires->set_one_time_item_created('test_item');
+    }
+
+    public function test_one_time_output_different_pages_independent() {
+        $firstpage = new moodle_page();
+        $secondpage = new moodle_page();
+        $this->assertTrue($firstpage->requires->should_create_one_time_item_now('test_item'));
+        $this->assertTrue($secondpage->requires->should_create_one_time_item_now('test_item'));
+    }
+
+    /**
+     * Test for the jquery_plugin method.
+     *
+     * Test to make sure that backslashes are not generated with either slasharguments set to on or off.
+     */
+    public function test_jquery_plugin() {
+        global $CFG;
+
+        $this->resetAfterTest();
+
+        // With slasharguments on.
+        $CFG->slasharguments = 1;
+
+        $page = new moodle_page();
+        $requirements = $page->requires;
+        // Assert successful method call.
+        $this->assertTrue($requirements->jquery_plugin('jquery'));
+        $this->assertTrue($requirements->jquery_plugin('ui'));
+
+        // Get the code containing the required jquery plugins.
+        $requirecode = $requirements->get_top_of_body_code();
+        // Make sure that the generated code does not contain backslashes.
+        $this->assertFalse(strpos($requirecode, '\\'), "Output contains backslashes: " . $requirecode);
+
+        // With slasharguments off.
+        $CFG->slasharguments = 0;
+
+        $page = new moodle_page();
+        $requirements = $page->requires;
+        // Assert successful method call.
+        $this->assertTrue($requirements->jquery_plugin('jquery'));
+        $this->assertTrue($requirements->jquery_plugin('ui'));
+
+        // Get the code containing the required jquery plugins.
+        $requirecode = $requirements->get_top_of_body_code();
+        // Make sure that the generated code does not contain backslashes.
+        $this->assertFalse(strpos($requirecode, '\\'), "Output contains backslashes: " . $requirecode);
     }
 }

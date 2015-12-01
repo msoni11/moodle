@@ -43,6 +43,11 @@ require_once(__DIR__ . '/../../filelib.php');
 class behat_util extends testing_util {
 
     /**
+     * The behat test site fullname and shortname.
+     */
+    const BEHATSITENAME = "Acceptance test site";
+
+    /**
      * @var array Files to skip when resetting dataroot folder
      */
     protected static $datarootskiponreset = array('.', '..', 'behat', 'behattestdir.txt');
@@ -58,10 +63,15 @@ class behat_util extends testing_util {
      * @return void
      */
     public static function install_site() {
-        global $DB;
-
+        global $DB, $CFG;
+        require_once($CFG->dirroot.'/user/lib.php');
         if (!defined('BEHAT_UTIL')) {
             throw new coding_exception('This method can be only used by Behat CLI tool');
+        }
+
+        $tables = $DB->get_tables(false);
+        if (!empty($tables)) {
+            behat_error(BEHAT_EXITCODE_INSTALLED);
         }
 
         // New dataroot.
@@ -70,23 +80,39 @@ class behat_util extends testing_util {
         $options = array();
         $options['adminuser'] = 'admin';
         $options['adminpass'] = 'admin';
-        $options['fullname'] = 'Acceptance test site';
-        $options['shortname'] = 'Acceptance test site';
+        $options['fullname'] = self::BEHATSITENAME;
+        $options['shortname'] = self::BEHATSITENAME;
 
         install_cli_database($options, false);
 
+        // We need to keep the installed dataroot filedir files.
+        // So each time we reset the dataroot before running a test, the default files are still installed.
+        self::save_original_data_files();
+
+        $frontpagesummary = new admin_setting_special_frontpagedesc();
+        $frontpagesummary->write_setting(self::BEHATSITENAME);
+
         // Update admin user info.
         $user = $DB->get_record('user', array('username' => 'admin'));
-        $user->email = 'moodle@moodlemoodle.com';
+        $user->email = 'moodle@example.com';
         $user->firstname = 'Admin';
         $user->lastname = 'User';
         $user->city = 'Perth';
         $user->country = 'AU';
-        $DB->update_record('user', $user);
+        user_update_user($user, false);
+
+        // Disable email message processor.
+        $DB->set_field('message_processors', 'enabled', '0', array('name' => 'email'));
 
         // Sets maximum debug level.
         set_config('debug', DEBUG_DEVELOPER);
-        set_config('debugdisplay', true);
+        set_config('debugdisplay', 1);
+
+        // Disable some settings that are not wanted on test sites.
+        set_config('noemailever', 1);
+
+        // Enable web cron.
+        set_config('cronclionly', 0);
 
         // Keeps the current version of database and dataroot.
         self::store_versions_hash();
@@ -165,7 +191,7 @@ class behat_util extends testing_util {
      * features and steps definitions.
      *
      * Stores a file in dataroot/behat to allow Moodle to switch
-     * to the test environment when using cli-server (or $CFG->behat_switchcompletely)
+     * to the test environment when using cli-server.
      * @throws coding_exception
      * @return void
      */
@@ -177,7 +203,7 @@ class behat_util extends testing_util {
         }
 
         // Checks the behat set up and the PHP version.
-        if ($errorcode = behat_command::behat_setup_problem(true)) {
+        if ($errorcode = behat_command::behat_setup_problem()) {
             exit($errorcode);
         }
 
@@ -211,7 +237,7 @@ class behat_util extends testing_util {
         }
 
         // Checks the behat set up and the PHP version, returning an error code if something went wrong.
-        if ($errorcode = behat_command::behat_setup_problem(true)) {
+        if ($errorcode = behat_command::behat_setup_problem()) {
             return $errorcode;
         }
 
@@ -247,27 +273,12 @@ class behat_util extends testing_util {
      * To check is the current script is running in the test
      * environment
      *
-     * @see tool_behat::is_using_test_environment()
      * @return bool
      */
     public static function is_test_mode_enabled() {
 
         $testenvfile = self::get_test_file_path();
         if (file_exists($testenvfile)) {
-            return true;
-        }
-
-        return false;
-    }
-
-    /**
-     * Returns true if Moodle is currently running with the test database and dataroot
-     * @return bool
-     */
-    public static function is_using_test_environment() {
-        global $CFG;
-
-        if (!empty($CFG->originaldataroot)) {
             return true;
         }
 
@@ -282,4 +293,31 @@ class behat_util extends testing_util {
         return behat_command::get_behat_dir() . '/test_environment_enabled.txt';
     }
 
+    /**
+     * Reset contents of all database tables to initial values, reset caches, etc.
+     */
+    public static function reset_all_data() {
+        // Reset database.
+        self::reset_database();
+
+        // Purge dataroot directory.
+        self::reset_dataroot();
+
+        // Reset all static caches.
+        accesslib_clear_all_caches(true);
+        // Reset the nasty strings list used during the last test.
+        nasty_strings::reset_used_strings();
+
+        filter_manager::reset_caches();
+
+        // Reset course and module caches.
+        if (class_exists('format_base')) {
+            // If file containing class is not loaded, there is no cache there anyway.
+            format_base::reset_course_cache(0);
+        }
+        get_fast_modinfo(0, 0, true);
+
+        // Inform data generator.
+        self::get_data_generator()->reset();
+    }
 }

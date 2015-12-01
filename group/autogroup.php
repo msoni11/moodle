@@ -50,6 +50,11 @@ $strgroups           = get_string('groups');
 $strparticipants     = get_string('participants');
 $strautocreategroups = get_string('autocreategroups', 'group');
 
+$PAGE->set_title($strgroups);
+$PAGE->set_heading($course->fullname. ': '.$strgroups);
+$PAGE->set_pagelayout('admin');
+navigation_node::override_active_url(new moodle_url('/group/index.php', array('id' => $courseid)));
+
 // Print the page and form
 $preview = '';
 $error = '';
@@ -80,7 +85,17 @@ if ($editform->is_cancelled()) {
         default:
             print_error('unknoworder');
     }
-    $users = groups_get_potential_members($data->courseid, $data->roleid, $data->cohortid, $orderby);
+    $source = array();
+    if ($data->cohortid) {
+        $source['cohortid'] = $data->cohortid;
+    }
+    if ($data->groupingid) {
+        $source['groupingid'] = $data->groupingid;
+    }
+    if ($data->groupid) {
+        $source['groupid'] = $data->groupid;
+    }
+    $users = groups_get_potential_members($data->courseid, $data->roleid, $source, $orderby, !empty($data->notingroup));
     $usercnt = count($users);
 
     if ($data->allocateby == 'random') {
@@ -233,9 +248,6 @@ $PAGE->navbar->add($strparticipants, new moodle_url('/user/index.php', array('id
 $PAGE->navbar->add($strgroups, new moodle_url('/group/index.php', array('id'=>$courseid)));
 $PAGE->navbar->add($strautocreategroups);
 
-/// Print header
-$PAGE->set_title($strgroups);
-$PAGE->set_heading($course->fullname. ': '.$strgroups);
 echo $OUTPUT->header();
 echo $OUTPUT->heading($strautocreategroups);
 

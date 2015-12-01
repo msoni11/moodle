@@ -34,35 +34,32 @@ require_capability('moodle/grade:export', $context);
 require_capability('gradeexport/xml:view', $context);
 
 print_grade_page_head($COURSE->id, 'export', 'xml', get_string('exportto', 'grades') . ' ' . get_string('pluginname', 'gradeexport_xml'));
+export_verify_grades($COURSE->id);
 
 if (!empty($CFG->gradepublishing)) {
     $CFG->gradepublishing = has_capability('gradeexport/xml:publish', $context);
 }
 
-//'idnumberrequired'=>true excludes grade items that dont have an ID to use during import
-$mform = new grade_export_form(null, array('idnumberrequired'=>true, 'publishing'=>true, 'updategradesonly'=>true));
+$actionurl = new moodle_url('/grade/export/xml/export.php');
+// The option 'idnumberrequired' excludes grade items that dont have an ID to use during import.
+$formoptions = array(
+    'idnumberrequired' => true,
+    'updategradesonly' => true,
+    'publishing' => true,
+    'simpleui' => true,
+    'multipledisplaytypes' => false
+);
 
-$groupmode    = groups_get_course_groupmode($course);   // Groups are being used
+$mform = new grade_export_form($actionurl, $formoptions);
+
+$groupmode    = groups_get_course_groupmode($course);   // Groups are being used.
 $currentgroup = groups_get_course_group($course, true);
-if ($groupmode == SEPARATEGROUPS and !$currentgroup and !has_capability('moodle/site:accessallgroups', $context)) {
+if (($groupmode == SEPARATEGROUPS) &&
+    (!$currentgroup) &&
+    (!has_capability('moodle/site:accessallgroups', $context))) {
     echo $OUTPUT->heading(get_string("notingroup"));
     echo $OUTPUT->footer();
     die;
-}
-
-// process post information
-if ($data = $mform->get_data()) {
-    $export = new grade_export_xml($course, $currentgroup, '', false, $data->updatedgradesonly, $data->display, $data->decimals, $data->export_onlyactive);
-
-    // print the grades on screen for feedbacks
-    $export->process_form($data);
-    $export->print_continue();
-
-    $export->display_preview(true); //true == skip users without idnumber as they cannot be identified when importing
-    echo $OUTPUT->container(get_string('useridnumberwarning','gradeexport_xml'), 'useridnumberwarning mdl-align');
-
-    echo $OUTPUT->footer();
-    exit;
 }
 
 groups_print_course_menu($course, 'index.php?id='.$id);

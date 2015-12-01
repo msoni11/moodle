@@ -18,8 +18,7 @@
 /**
  * Numerical
  *
- * @package    mod
- * @subpackage lesson
+ * @package mod_lesson
  * @copyright  2009 Sam Hemelryk
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  **/
@@ -58,6 +57,18 @@ class lesson_page_type_numerical extends lesson_page {
             $data->answer = s($attempt->useranswer);
         }
         $mform->set_data($data);
+
+        // Trigger an event question viewed.
+        $eventparams = array(
+            'context' => context_module::instance($PAGE->cm->id),
+            'objectid' => $this->properties->id,
+            'other' => array(
+                    'pagetype' => $this->get_typestring()
+                )
+            );
+
+        $event = \mod_lesson\event\question_viewed::create($eventparams);
+        $event->trigger();
         return $mform->display();
     }
     public function check_answer() {
@@ -119,6 +130,7 @@ class lesson_page_type_numerical extends lesson_page {
         $options->para = false;
         $i = 1;
         foreach ($answers as $answer) {
+            $answer = parent::rewrite_answers_urls($answer, false);
             $cells = array();
             if ($this->lesson->custom && $answer->score > 0) {
                 // if the score is > 0, then it is correct
@@ -210,7 +222,7 @@ class lesson_page_type_numerical extends lesson_page {
                 $answerdata->answers[] = array($data, $percent);
 
                 if ($answer->id == $useranswer->answerid) {
-                    if ($answer->response == NULL) {
+                    if ($answer->response == null) {
                         if ($useranswer->correct) {
                             $answerdata->response = get_string("thatsthecorrectanswer", "lesson");
                         } else {
@@ -245,13 +257,15 @@ class lesson_add_page_form_numerical extends lesson_add_page_form_base {
 
     public $qtype = 'numerical';
     public $qtypestring = 'numerical';
+    protected $answerformat = '';
+    protected $responseformat = LESSON_ANSWER_HTML;
 
     public function custom_definition() {
         for ($i = 0; $i < $this->_customdata['lesson']->maxanswers; $i++) {
             $this->_form->addElement('header', 'answertitle'.$i, get_string('answer').' '.($i+1));
-            $this->add_answer($i, NULL, ($i < 1));
+            $this->add_answer($i, null, ($i < 1));
             $this->add_response($i);
-            $this->add_jumpto($i, NULL, ($i == 0 ? LESSON_NEXTPAGE : LESSON_THISPAGE));
+            $this->add_jumpto($i, null, ($i == 0 ? LESSON_NEXTPAGE : LESSON_THISPAGE));
             $this->add_score($i, null, ($i===0)?1:0);
         }
     }
@@ -263,6 +277,9 @@ class lesson_display_answer_form_numerical extends moodleform {
         global $USER, $OUTPUT;
         $mform = $this->_form;
         $contents = $this->_customdata['contents'];
+
+        // Disable shortforms.
+        $mform->setDisableShortforms();
 
         $mform->addElement('header', 'pageheader');
 

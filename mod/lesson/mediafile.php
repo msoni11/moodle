@@ -21,8 +21,7 @@
  *  If there is a way to use the resource class instead of this code, please change to do so
  *
  *
- * @package    mod
- * @subpackage lesson
+ * @package mod_lesson
  * @copyright  1999 onwards Martin Dougiamas  {@link http://moodle.com}
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  **/
@@ -38,6 +37,10 @@ $course = $DB->get_record('course', array('id' => $cm->course), '*', MUST_EXIST)
 $lesson = new lesson($DB->get_record('lesson', array('id' => $cm->instance), '*', MUST_EXIST));
 
 require_login($course, false, $cm);
+
+
+// Apply overrides.
+$lesson->update_effective_access($USER->id);
 
 $context = context_module::instance($cm->id);
 $canmanage = has_capability('mod/lesson:manage', $context);
@@ -71,7 +74,6 @@ echo $lessonoutput->header($lesson, $cm);
 ///     Check lesson availability
 ///     Check for password
 ///     Check dependencies
-///     Check for high scores
 if (!$canmanage) {
     if (!$lesson->is_accessible()) {  // Deadline restrictions
         echo $lessonoutput->header($lesson, $cm);
@@ -85,13 +87,21 @@ if (!$canmanage) {
     } else if ($lesson->usepassword && empty($USER->lessonloggedin[$lesson->id])) { // Password protected lesson code
         $correctpass = false;
         if (!empty($userpassword) && (($lesson->password == md5(trim($userpassword))) || ($lesson->password == trim($userpassword)))) {
+            require_sesskey();
             // with or without md5 for backward compatibility (MDL-11090)
             $USER->lessonloggedin[$lesson->id] = true;
-            if ($lesson->highscores) {
-                // Logged in - redirect so we go through all of these checks before starting the lesson.
-                redirect("$CFG->wwwroot/mod/lesson/view.php?id=$cm->id");
+            $correctpass = true;
+        } else if (isset($lesson->extrapasswords)) {
+            // Group overrides may have additional passwords.
+            foreach ($lesson->extrapasswords as $password) {
+                if (strcmp($password, md5(trim($userpassword))) === 0 || strcmp($password, trim($userpassword)) === 0) {
+                    require_sesskey();
+                    $correctpass = true;
+                    $USER->lessonloggedin[$lesson->id] = true;
+                }
             }
-        } else {
+        }
+        if (!$correctpass) {
             echo $lessonoutput->header($lesson, $cm);
             echo $lessonoutput->login_prompt($lesson, $userpassword !== '');
             echo $lessonoutput->footer();

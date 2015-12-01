@@ -30,16 +30,16 @@ require_once('recent_form.php');
 $id = required_param('id', PARAM_INT);
 
 $PAGE->set_url('/course/recent.php', array('id'=>$id));
+$PAGE->set_pagelayout('report');
 
 if (!$course = $DB->get_record('course', array('id'=>$id))) {
     print_error("That's an invalid course id");
 }
 
 require_login($course);
-
-add_to_log($course->id, "course", "recent", "recent.php?id=$course->id", $course->id);
-
 $context = context_course::instance($course->id);
+
+\core\event\recent_activity_viewed::create(array('context' => $context))->trigger();
 
 $lastlogin = time() - COURSE_MAX_RECENT_PERIOD;
 if (!isguestuser() and !empty($USER->lastcourseaccess[$COURSE->id])) {
@@ -117,9 +117,6 @@ if ($param->modid === 'all') {
     $filter_modid = $param->modid;
     $sections = array($sectionnum => $sections[$sectionnum]);
 }
-
-
-$modinfo->get_groups(); // load all my groups and cache it in modinfo
 
 $activities = array();
 $index = 0;
@@ -215,7 +212,7 @@ if (!empty($activities)) {
                 echo $OUTPUT->spacer(array('height'=>30, 'br'=>true)); // should be done with CSS instead
             }
             echo $OUTPUT->box_start();
-            if (!empty($activity->name)) {
+            if (strval($activity->name) !== '') {
                 echo html_writer::tag('h2', $activity->name);
             }
             $inbox = true;
@@ -271,40 +268,4 @@ if (!empty($activities)) {
 }
 
 echo $OUTPUT->footer();
-
-function compare_activities_by_time_desc($a, $b) {
-    // make sure the activities actually have a timestamp property
-    if ((!array_key_exists('timestamp', $a)) && (!array_key_exists('timestamp', $b))) {
-        return 0;
-    }
-    // We treat instances without timestamp as if they have a timestamp of 0.
-    if ((!array_key_exists('timestamp', $a)) && (array_key_exists('timestamp', $b))) {
-        return 1;
-    }
-    if ((array_key_exists('timestamp', $a)) && (!array_key_exists('timestamp', $b))) {
-        return -1;
-    }
-    if ($a->timestamp == $b->timestamp) {
-        return 0;
-    }
-    return ($a->timestamp > $b->timestamp) ? -1 : 1;
-}
-
-function compare_activities_by_time_asc($a, $b) {
-    // make sure the activities actually have a timestamp property
-    if ((!array_key_exists('timestamp', $a)) && (!array_key_exists('timestamp', $b))) {
-      return 0;
-    }
-    // We treat instances without timestamp as if they have a timestamp of 0.
-    if ((!array_key_exists('timestamp', $a)) && (array_key_exists('timestamp', $b))) {
-        return -1;
-    }
-    if ((array_key_exists('timestamp', $a)) && (!array_key_exists('timestamp', $b))) {
-        return 1;
-    }
-    if ($a->timestamp == $b->timestamp) {
-        return 0;
-    }
-    return ($a->timestamp < $b->timestamp) ? -1 : 1;
-}
 

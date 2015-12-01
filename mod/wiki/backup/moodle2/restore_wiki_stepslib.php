@@ -16,7 +16,7 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * @package moodlecore
+ * @package    mod_wiki
  * @subpackage backup-moodle2
  * @copyright 2010 onwards Eloy Lafuente (stronk7) {@link http://stronk7.com}
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
@@ -70,20 +70,34 @@ class restore_wiki_activity_structure_step extends restore_activity_structure_st
     protected function process_wiki_subwiki($data) {
         global $DB;
 
-
-        $data = (object)$data;
+        $data = (object) $data;
         $oldid = $data->id;
         $data->wikiid = $this->get_new_parentid('wiki');
-        $data->groupid = $this->get_mappingid('group', $data->groupid);
-        $data->userid = $this->get_mappingid('user', $data->userid);
 
-        $newitemid = $DB->insert_record('wiki_subwikis', $data);
-        $this->set_mapping('wiki_subwiki', $oldid, $newitemid);
+        // If the groupid is not equal to zero, get the mapping for the group.
+        if ((int) $data->groupid !== 0) {
+            $data->groupid = $this->get_mappingid('group', $data->groupid);
+        }
+
+        // If the userid is not equal to zero, get the mapping for the user.
+        if ((int) $data->userid !== 0) {
+            $data->userid = $this->get_mappingid('user', $data->userid);
+        }
+
+        // If these values are not equal to false then a mapping was successfully made.
+        if ($data->groupid !== false && $data->userid !== false) {
+            $newitemid = $DB->insert_record('wiki_subwikis', $data);
+        } else {
+            $newitemid = false;
+        }
+
+        $this->set_mapping('wiki_subwiki', $oldid, $newitemid, true);
     }
+
     protected function process_wiki_page($data) {
         global $DB;
 
-        $data = (object)$data;
+        $data = (object) $data;
         $oldid = $data->id;
         $data->subwikiid = $this->get_new_parentid('wiki_subwiki');
         $data->userid = $this->get_mappingid('user', $data->userid);
@@ -91,9 +105,16 @@ class restore_wiki_activity_structure_step extends restore_activity_structure_st
         $data->timecreated = $this->apply_date_offset($data->timecreated);
         $data->timerendered = $this->apply_date_offset($data->timerendered);
 
-        $newitemid = $DB->insert_record('wiki_pages', $data);
-        $this->set_mapping('wiki_page', $oldid, $newitemid, true); // There are files related to this
+        // Check that we were able to get a parentid for this page.
+        if ($data->subwikiid !== false) {
+            $newitemid = $DB->insert_record('wiki_pages', $data);
+        } else {
+            $newitemid = false;
+        }
+
+        $this->set_mapping('wiki_page', $oldid, $newitemid, true);
     }
+
     protected function process_wiki_version($data) {
         global $DB;
 
@@ -144,12 +165,15 @@ class restore_wiki_activity_structure_step extends restore_activity_structure_st
 
         $tag = $data->rawname;
         $itemid = $this->get_new_parentid('wiki_page');
-        tag_set_add('wiki_pages', $itemid, $tag);
+        $wikiid = $this->get_new_parentid('wiki');
+
+        $cm = get_coursemodule_from_instance('wiki', $wikiid);
+        tag_set_add('wiki_pages', $itemid, $tag, 'mod_wiki', context_module::instance($cm->id)->id);
     }
 
     protected function after_execute() {
         // Add wiki related files, no need to match by itemname (just internally handled context)
         $this->add_related_files('mod_wiki', 'intro', null);
-        $this->add_related_files('mod_wiki', 'attachments', 'wiki_page');
+        $this->add_related_files('mod_wiki', 'attachments', 'wiki_subwiki');
     }
 }

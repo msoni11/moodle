@@ -73,7 +73,9 @@ abstract class backup_structure_step extends backup_step {
                                              // from xml_writer (blame serialized data!)
         }
         $xw = new xml_writer($xo, $xt);
-        $pr = new backup_structure_processor($xw);
+        $progress = $this->task->get_progress();
+        $progress->start_progress($this->get_name());
+        $pr = new backup_structure_processor($xw, $progress);
 
         // Set processor variables from settings
         foreach ($this->get_settings() as $setting) {
@@ -105,6 +107,7 @@ abstract class backup_structure_step extends backup_step {
 
         // Close everything
         $xw->stop();
+        $progress->end_progress();
 
         // Destroy the structure. It helps PHP 5.2 memory a lot!
         $structure->destroy();
@@ -125,7 +128,7 @@ abstract class backup_structure_step extends backup_step {
     /**
      * Add plugin structure to any element in the structure backup tree
      *
-     * @param string $plugintype type of plugin as defined by get_plugin_types()
+     * @param string $plugintype type of plugin as defined by core_component::get_plugin_types()
      * @param backup_nested_element $element element in the structure backup tree that
      *                                       we are going to add plugin information to
      * @param bool $multiple to define if multiple plugins can produce information
@@ -136,7 +139,7 @@ abstract class backup_structure_step extends backup_step {
         global $CFG;
 
         // Check the requested plugintype is a valid one
-        if (!array_key_exists($plugintype, get_plugin_types($plugintype))) {
+        if (!array_key_exists($plugintype, core_component::get_plugin_types($plugintype))) {
              throw new backup_step_exception('incorrect_plugin_type', $plugintype);
         }
 
@@ -146,7 +149,7 @@ abstract class backup_structure_step extends backup_step {
         $element->add_child($optigroup); // Add optigroup to stay connected since beginning
 
         // Get all the optigroup_elements, looking across all the plugin dirs
-        $pluginsdirs = get_plugin_list($plugintype);
+        $pluginsdirs = core_component::get_plugin_list($plugintype);
         foreach ($pluginsdirs as $name => $plugindir) {
             $classname = 'backup_' . $plugintype . '_' . $name . '_plugin';
             $backupfile = $plugindir . '/backup/moodle2/' . $classname . '.class.php';
@@ -155,6 +158,83 @@ abstract class backup_structure_step extends backup_step {
                 $backupplugin = new $classname($plugintype, $name, $optigroup, $this);
                 // Add plugin returned structure to optigroup
                 $backupplugin->define_plugin_structure($element->get_name());
+            }
+        }
+    }
+
+    /**
+     * Add subplugin structure for a given plugin to any element in the structure backup tree.
+     *
+     * This method allows the injection of subplugins (of a specified plugin) data to any
+     * element in any backup structure.
+     *
+     * NOTE: Initially subplugins were only available for activities (mod), so only the
+     * {@link backup_activity_structure_step} class had support for them, always
+     * looking for /mod/modulenanme subplugins. This new method is a generalization of the
+     * existing one for activities, supporting all subplugins injecting information everywhere.
+     *
+     * @param string $subplugintype type of subplugin as defined in plugin's db/subplugins.php.
+     * @param backup_nested_element $element element in the backup tree (anywhere) that
+     *                                       we are going to add subplugin information to.
+     * @param bool $multiple to define if multiple subplugins can produce information
+     *                       for each instance of $element (true) or no (false).
+     * @param string $plugintype type of the plugin.
+     * @param string $pluginname name of the plugin.
+     * @return void
+     */
+    protected function add_subplugin_structure($subplugintype, $element, $multiple, $plugintype = null, $pluginname = null) {
+
+        // Verify if this is a BC call for an activity backup. See NOTE above for this special case.
+        if ($plugintype === null and $pluginname === null) {
+            $plugintype = 'mod';
+            $pluginname = $this->task->get_modulename();
+            // TODO: Once all the calls have been changed to add both not null plugintype and pluginname, add a debugging here.
+        }
+
+        // Check the requested plugintype is a valid one.
+        if (!array_key_exists($plugintype, core_component::get_plugin_types())) {
+             throw new backup_step_exception('incorrect_plugin_type', $plugintype);
+        }
+
+        // Check the requested pluginname, for the specified plugintype, is a valid one.
+        if (!array_key_exists($pluginname, core_component::get_plugin_list($plugintype))) {
+             throw new backup_step_exception('incorrect_plugin_name', array($plugintype, $pluginname));
+        }
+
+        // Check the requested subplugintype is a valid one.
+        $subpluginsfile = core_component::get_component_directory($plugintype . '_' . $pluginname) . '/db/subplugins.php';
+        if (!file_exists($subpluginsfile)) {
+             throw new backup_step_exception('plugin_missing_subplugins_php_file', array($plugintype, $pluginname));
+        }
+        include($subpluginsfile);
+        if (!array_key_exists($subplugintype, $subplugins)) {
+             throw new backup_step_exception('incorrect_subplugin_type', $subplugintype);
+        }
+
+        // Arrived here, subplugin is correct, let's create the optigroup.
+        $optigroupname = $subplugintype . '_' . $element->get_name() . '_subplugin';
+        $optigroup = new backup_optigroup($optigroupname, null, $multiple);
+        $element->add_child($optigroup); // Add optigroup to stay connected since beginning.
+
+        // Every subplugin optionally can have a common/parent subplugin
+        // class for shared stuff.
+        $parentclass = 'backup_' . $plugintype . '_' . $pluginname . '_' . $subplugintype . '_subplugin';
+        $parentfile = core_component::get_component_directory($plugintype . '_' . $pluginname) .
+            '/backup/moodle2/' . $parentclass . '.class.php';
+        if (file_exists($parentfile)) {
+            require_once($parentfile);
+        }
+
+        // Get all the optigroup_elements, looking over all the subplugin dirs.
+        $subpluginsdirs = core_component::get_plugin_list($subplugintype);
+        foreach ($subpluginsdirs as $name => $subpluginsdir) {
+            $classname = 'backup_' . $subplugintype . '_' . $name . '_subplugin';
+            $backupfile = $subpluginsdir . '/backup/moodle2/' . $classname . '.class.php';
+            if (file_exists($backupfile)) {
+                require_once($backupfile);
+                $backupsubplugin = new $classname($subplugintype, $name, $optigroup, $this);
+                // Add subplugin returned structure to optigroup.
+                $backupsubplugin->define_subplugin_structure($element->get_name());
             }
         }
     }
@@ -172,8 +252,9 @@ abstract class backup_structure_step extends backup_step {
     }
 
     /**
-     * Function that will return the structure to be processed by this backup_step.
-     * Must return one backup_nested_element
+     * Define the structure to be processed by this backup step.
+     *
+     * @return backup_nested_element
      */
     abstract protected function define_structure();
 }

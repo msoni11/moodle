@@ -19,7 +19,7 @@
  * This file is responsible for saving the results of a users survey and displaying
  * the final message.
  *
- * @package   mod-survey
+ * @package   mod_survey
  * @copyright 1999 onwards Martin Dougiamas  {@link http://moodle.com}
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -54,65 +54,27 @@
         print_error('invalidsurveyid', 'survey');
     }
 
-    add_to_log($course->id, "survey", "submit", "view.php?id=$cm->id", "$survey->id", "$cm->id");
-
     $strsurveysaved = get_string('surveysaved', 'survey');
 
     $PAGE->set_title($strsurveysaved);
     $PAGE->set_heading($course->fullname);
     echo $OUTPUT->header();
+    echo $OUTPUT->heading($survey->name);
 
     if (survey_already_done($survey->id, $USER->id)) {
-        notice(get_string("alreadysubmitted", "survey"), $_SERVER["HTTP_REFERER"]);
+        notice(get_string("alreadysubmitted", "survey"), get_local_referer(false));
         exit;
     }
 
+    survey_save_answers($survey, $formdata, $course, $context);
 
-// Sort through the data and arrange it
-// This is necessary because some of the questions
-// may have two answers, eg Question 1 -> 1 and P1
-
-    $answers = array();
-
-    foreach ($formdata as $key => $val) {
-        if ($key <> "userid" && $key <> "id") {
-            if ( substr($key,0,1) == "q") {
-                $key = clean_param(substr($key,1), PARAM_ALPHANUM);   // keep everything but the 'q', number or Pnumber
-            }
-            if ( substr($key,0,1) == "P") {
-                $realkey = (int) substr($key,1);
-                $answers[$realkey][1] = $val;
-            } else {
-                $answers[$key][0] = $val;
-            }
-        }
-    }
-
-
-// Now store the data.
-
-    $timenow = time();
-    foreach ($answers as $key => $val) {
-        if ($key != 'sesskey') {
-            $newdata = new stdClass();
-            $newdata->time = $timenow;
-            $newdata->userid = $USER->id;
-            $newdata->survey = $survey->id;
-            $newdata->question = $key;
-            if (!empty($val[0])) {
-                $newdata->answer1 = $val[0];
-            } else {
-                $newdata->answer1 = "";
-            }
-            if (!empty($val[1])) {
-                $newdata->answer2 = $val[1];
-            } else {
-                $newdata->answer2 = "";
-            }
-
-            $DB->insert_record("survey_answers", $newdata);
-        }
-    }
+    $params = array(
+        'context' => $context,
+        'courseid' => $course->id,
+        'other' => array('surveyid' => $survey->id)
+    );
+    $event = \mod_survey\event\response_submitted::create($params);
+    $event->trigger();
 
 // Print the page and finish up.
 

@@ -50,16 +50,15 @@ class behat_permissions extends behat_base {
      */
     public function i_set_the_following_system_permissions_of_role($rolename, $table) {
 
+        $parentnodes = get_string('administrationsite') . ' > ' .
+            get_string('users', 'admin') . ' > ' .
+            get_string('permissions', 'role');
         return array(
             new Given('I am on homepage'),
-            new Given('I expand "Front page settings" node'),
-            new Given('I expand "Site administration" node'),
-            new Given('I expand "Users" node'),
-            new Given('I expand "Permissions" node'),
-            new Given('I follow "Define roles"'),
+            new Given('I navigate to "' . get_string('defineroles', 'role') . '" node in "' . $parentnodes . '"'),
             new Given('I follow "Edit ' . $this->escape($rolename) . ' role"'),
             new Given('I fill the capabilities form with the following permissions:', $table),
-            new Given('I press "Save changes"')
+            new Given('I press "' . get_string('savechanges') . '"')
         );
     }
 
@@ -73,13 +72,17 @@ class behat_permissions extends behat_base {
     public function i_override_the_system_permissions_of_role_with($rolename, $table) {
 
         // We don't know the number of overrides so we have to get it to match the option contents.
-        $roleoption = $this->find('xpath', '//select[@name="roleid"]/option[contains(text(),"' . $this->escape($rolename) . '")]');
+        $roleoption = $this->find('xpath', '//select[@name="roleid"]/option[contains(.,"' . $this->escape($rolename) . '")]');
 
-        return array(
-            new Given('I select "' . $this->escape($roleoption->getText()) . '" from "Advanced role override"'),
-            new Given('I fill the capabilities form with the following permissions:', $table),
-            new Given('I press "Save changes"')
-        );
+        $result = array(
+            new Given('I set the field "' . get_string('advancedoverride', 'role') .
+                '" to "' . $this->escape($roleoption->getText()) . '"'));
+        if (!$this->running_javascript()) {
+            $result[] = new Given('I press "' . get_string('go') . '"');
+        }
+        $result[] = new Given('I fill the capabilities form with the following permissions:', $table);
+        $result[] = new Given('I press "' . get_string('savechanges') . '"');
+        return $result;
     }
 
     /**
@@ -93,9 +96,12 @@ class behat_permissions extends behat_base {
         // Ensure we are using the advanced view.
         // Wrapped in a try/catch to capture the exception and continue execution, we don't know if advanced mode was already enabled.
         try {
-            $advancedtoggle = $this->find_button('Show advanced');
+            $advancedtoggle = $this->find_button(get_string('showadvanced', 'form'));
             if ($advancedtoggle) {
-                $this->getSession()->getPage()->pressButton('Show advanced');
+                $advancedtoggle->click();
+
+                // Wait for the page to load.
+                $this->getSession()->wait(self::TIMEOUT * 1000, self::PAGE_READY_JS);
             }
         } catch (Exception $e) {
             // We already are in advanced mode.
@@ -127,10 +133,108 @@ class behat_permissions extends behat_base {
             // Converting from permission to constant value.
             $permissionvalue = constant($permissionconstant);
 
-            // Here we wait for the element to appear and exception if it does not exists.
+            // Here we wait for the element to appear and exception if it does not exist.
             $radio = $this->find('xpath', '//input[@name="' . $capability . '" and @value="' . $permissionvalue . '"]');
-            $radio->click();
+            $field = behat_field_manager::get_field_instance('radio', $radio, $this->getSession());
+            $field->set_value(1);
         }
     }
 
+    /**
+     * Checks if the capability has the specified permission. Works in the role definition advanced page.
+     *
+     * @Then /^"(?P<capability_string>(?:[^"]|\\")*)" capability has "(?P<permission_string>Not set|Allow|Prevent|Prohibit)" permission$/
+     * @throws ExpectationException
+     * @param string $capabilityname
+     * @param string $permission
+     * @return void
+     */
+    public function capability_has_permission($capabilityname, $permission) {
+
+        // We already know the name, so we just need the value.
+        $radioxpath = "//table[@class='rolecap']/descendant::input[@type='radio']" .
+            "[@name='" . $capabilityname . "'][@checked]";
+
+        $checkedradio = $this->find('xpath', $radioxpath);
+
+        switch ($permission) {
+            case get_string('notset', 'role'):
+                $perm = CAP_INHERIT;
+                break;
+            case get_string('allow', 'role'):
+                $perm = CAP_ALLOW;
+                break;
+            case get_string('prevent', 'role'):
+                $perm = CAP_PREVENT;
+                break;
+            case get_string('prohibit', 'role'):
+                $perm = CAP_PROHIBIT;
+                break;
+            default:
+                throw new ExpectationException('"' . $permission . '" permission does not exist', $this->getSession());
+                break;
+        }
+
+        if ($checkedradio->getAttribute('value') != $perm) {
+            throw new ExpectationException('"' . $capabilityname . '" permission is not "' . $permission . '"', $this->getSession());
+        }
+    }
+
+    /**
+     * Set the allowed role assignments for the specified role.
+     *
+     * @Given /^I define the allowed role assignments for the "(?P<rolefullname_string>(?:[^"]|\\")*)" role as:$/
+     * @param string $rolename
+     * @param TableNode $table
+     * @return void Executes other steps
+     */
+    public function i_define_the_allowed_role_assignments_for_a_role_as($rolename, $table) {
+        $parentnodes = get_string('administrationsite') . ' > ' .
+            get_string('users', 'admin') . ' > ' .
+            get_string('permissions', 'role');
+        return array(
+            new Given('I am on homepage'),
+            new Given('I navigate to "' . get_string('defineroles', 'role') . '" node in "' . $parentnodes . '"'),
+            new Given('I follow "Allow role assignments"'),
+            new Given('I fill in the allowed role assignments form for the "' . $rolename . '" role with:', $table),
+            new Given('I press "' . get_string('savechanges') . '"')
+        );
+    }
+
+    /**
+     * Fill in the allowed role assignments form for the specied role.
+     *
+     * Takes a table with two columns. Each row should contain the target
+     * role, and either "Assignable" or "Not assignable".
+     *
+     * @Given /^I fill in the allowed role assignments form for the "(?P<rolefullname_string>(?:[^"]|\\")*)" role with:$/
+     * @param String $sourcerole
+     * @param TableNode $table
+     * @return void
+     */
+    public function i_fill_in_the_allowed_role_assignments_form_for_a_role_with($sourcerole, $table) {
+        foreach ($table->getRows() as $key => $row) {
+            list($targetrole, $allowed) = $row;
+
+            $node = $this->find('xpath', '//input[@title="Allow users with role ' .
+                $sourcerole .
+                ' to assign the role ' .
+                $targetrole . '"]');
+
+            if ($allowed == 'Assignable') {
+                if (!$node->isChecked()) {
+                    $node->click();
+                }
+            } else if ($allowed == 'Not assignable') {
+                if ($node->isChecked()) {
+                    $node->click();
+                }
+            } else {
+                throw new ExpectationException(
+                    'The provided permission value "' . $allowed . '" is not valid. Use Assignable, or Not assignable',
+                    $this->getSession()
+                );
+            }
+        }
+    }
 }

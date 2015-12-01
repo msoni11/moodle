@@ -17,8 +17,7 @@
 /**
  * This script lists all the instances of quiz in a particular course
  *
- * @package    mod
- * @subpackage quiz
+ * @package    mod_quiz
  * @copyright  1999 onwards Martin Dougiamas  {@link http://moodle.com}
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -36,7 +35,11 @@ $coursecontext = context_course::instance($id);
 require_login($course);
 $PAGE->set_pagelayout('incourse');
 
-add_to_log($course->id, "quiz", "view all", "index.php?id=$course->id", "");
+$params = array(
+    'context' => $coursecontext
+);
+$event = \mod_quiz\event\course_module_instance_list_viewed::create($params);
+$event->trigger();
 
 // Print the header.
 $strquizzes = get_string("modulenameplural", "quiz");
@@ -56,6 +59,7 @@ $PAGE->set_title($strquizzes);
 $PAGE->set_button($streditquestions);
 $PAGE->set_heading($course->fullname);
 echo $OUTPUT->header();
+echo $OUTPUT->heading($strquizzes, 2);
 
 // Get all the appropriate data.
 if (!$quizzes = get_all_instances_in_course("quiz", $course)) {
@@ -87,7 +91,11 @@ if ($showclosingheader) {
     array_push($align, 'left');
 }
 
-array_unshift($headings, get_string('sectionname', 'format_'.$course->format));
+if (course_format_uses_sections($course->format)) {
+    array_unshift($headings, get_string('sectionname', 'format_'.$course->format));
+} else {
+    array_unshift($headings, '');
+}
 array_unshift($align, 'center');
 
 $showing = '';

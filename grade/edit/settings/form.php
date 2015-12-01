@@ -65,6 +65,22 @@ class course_settings_form extends moodleform {
         $mform->addElement('select', 'aggregationposition', get_string('aggregationposition', 'grades'), $options);
         $mform->addHelpButton('aggregationposition', 'aggregationposition', 'grades');
 
+        if ($CFG->grade_minmaxtouse == GRADE_MIN_MAX_FROM_GRADE_ITEM) {
+            $default = get_string('gradeitemminmax', 'grades');
+        } else if ($CFG->grade_minmaxtouse == GRADE_MIN_MAX_FROM_GRADE_GRADE) {
+            $default = get_string('gradegrademinmax', 'grades');
+        } else {
+            throw new coding_exception('Invalid $CFG->grade_minmaxtouse value.');
+        }
+
+        $options = array(
+            -1 => get_string('defaultprev', 'grades', $default),
+            GRADE_MIN_MAX_FROM_GRADE_ITEM => get_string('gradeitemminmax', 'grades'),
+            GRADE_MIN_MAX_FROM_GRADE_GRADE => get_string('gradegrademinmax', 'grades')
+        );
+        $mform->addElement('select', 'minmaxtouse', get_string('minmaxtouse', 'grades'), $options);
+        $mform->addHelpButton('minmaxtouse', 'minmaxtouse', 'grades');
+
         // Grade item settings
         $mform->addElement('header', 'grade_item_settings', get_string('gradeitemsettings', 'grades'));
         $mform->setExpanded('grade_item_settings');
@@ -75,15 +91,14 @@ class course_settings_form extends moodleform {
 
         $options = array(-1                            => get_string('default', 'grades'),
                          GRADE_DISPLAY_TYPE_REAL       => get_string('real', 'grades'),
-                         GRADE_DISPLAY_TYPE_PERCENTAGE => get_string('percentage', 'grades'),
-                         GRADE_DISPLAY_TYPE_LETTER     => get_string('letter', 'grades'),
                          GRADE_DISPLAY_TYPE_REAL_PERCENTAGE => get_string('realpercentage', 'grades'),
                          GRADE_DISPLAY_TYPE_REAL_LETTER => get_string('realletter', 'grades'),
-                         GRADE_DISPLAY_TYPE_LETTER_REAL => get_string('letterreal', 'grades'),
-                         GRADE_DISPLAY_TYPE_LETTER_PERCENTAGE => get_string('letterpercentage', 'grades'),
+                         GRADE_DISPLAY_TYPE_PERCENTAGE => get_string('percentage', 'grades'),
+                         GRADE_DISPLAY_TYPE_PERCENTAGE_REAL => get_string('percentagereal', 'grades'),
                          GRADE_DISPLAY_TYPE_PERCENTAGE_LETTER => get_string('percentageletter', 'grades'),
-                         GRADE_DISPLAY_TYPE_PERCENTAGE_REAL => get_string('percentagereal', 'grades'));
-        asort($options);
+                         GRADE_DISPLAY_TYPE_LETTER     => get_string('letter', 'grades'),
+                         GRADE_DISPLAY_TYPE_LETTER_REAL => get_string('letterreal', 'grades'),
+                         GRADE_DISPLAY_TYPE_LETTER_PERCENTAGE => get_string('letterpercentage', 'grades'));
 
         $default_gradedisplaytype = $CFG->grade_displaytype;
         foreach ($options as $key=>$option) {
@@ -94,7 +109,7 @@ class course_settings_form extends moodleform {
         }
         $mform->addElement('select', 'displaytype', get_string('gradedisplaytype', 'grades'), $options);
         $mform->addHelpButton('displaytype', 'gradedisplaytype', 'grades');
-
+        $mform->setDefault('displaytype', -1);
 
         $options = array(-1=> get_string('defaultprev', 'grades', $CFG->grade_decimalpoints), 0=>0, 1=>1, 2=>2, 3=>3, 4=>4, 5=>5);
         $mform->addElement('select', 'decimalpoints', get_string('decimalpoints', 'grades'), $options);
@@ -104,7 +119,7 @@ class course_settings_form extends moodleform {
         $types = array('report', 'export', 'import');
 
         foreach($types as $type) {
-            foreach (get_plugin_list('grade'.$type) as $plugin => $plugindir) {
+            foreach (core_component::get_plugin_list('grade'.$type) as $plugin => $plugindir) {
              // Include all the settings commands for this plugin if there are any
                 if (file_exists($plugindir.'/lib.php')) {
                     require_once($plugindir.'/lib.php');

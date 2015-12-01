@@ -73,6 +73,9 @@ abstract class gradingform_controller {
     /** @var array graderange array of valid grades for this area. Use set_grade_range and get_grade_range to access this */
     private $graderange = null;
 
+    /** @var bool if decimal values are allowed as grades. */
+    private $allowgradedecimals = false;
+
     /** @var boolean|null cached result of function has_active_instances() */
     protected $hasactiveinstances = null;
 
@@ -88,7 +91,7 @@ abstract class gradingform_controller {
         global $DB;
 
         $this->context      = $context;
-        list($type, $name)  = normalize_component($component);
+        list($type, $name)  = core_component::normalize_component($component);
         $this->component    = $type.'_'.$name;
         $this->area         = $area;
         $this->areaid       = $areaid;
@@ -429,6 +432,27 @@ abstract class gradingform_controller {
     }
 
     /**
+     * Returns an array of all active instances for this definition.
+     * (intentionally does not return instances with status NEEDUPDATE)
+     *
+     * @param int since only return instances with timemodified >= since
+     * @return array of gradingform_instance objects
+     */
+    public function get_all_active_instances($since = 0) {
+        global $DB;
+        $conditions = array ($this->definition->id,
+                             gradingform_instance::INSTANCE_STATUS_ACTIVE,
+                             $since);
+        $where = "definitionid = ? AND status = ? AND timemodified >= ?";
+        $records = $DB->get_records_select('grading_instances', $where, $conditions);
+        $rv = array();
+        foreach ($records as $record) {
+            $rv[] = $this->get_instance($record);
+        }
+        return $rv;
+    }
+
+    /**
      * Returns true if there are already people who has been graded on this definition.
      * In this case plugins may restrict changes of the grading definition
      *
@@ -622,13 +646,23 @@ abstract class gradingform_controller {
 
     /**
      * Sets the range of grades used in this area. This is usually either range like 0-100
-     * or the scale where keys start from 1. Typical use:
-     * $controller->set_grade_range(make_grades_menu($gradingtype));
+     * or the scale where keys start from 1.
      *
-     * @param array $graderange
+     * Typically modules will call it:
+     * $controller->set_grade_range(make_grades_menu($gradingtype), $gradingtype > 0);
+     * Negative $gradingtype means that scale is used and the grade must be rounded
+     * to the nearest int. Positive $gradingtype means that range 0..$gradingtype
+     * is used for the grades and in this case grade does not have to be rounded.
+     *
+     * Sometimes modules always expect grade to be rounded (like mod_assignment does).
+     *
+     * @param array $graderange array where first _key_ is the minimum grade and the
+     *     last key is the maximum grade.
+     * @param bool $allowgradedecimals if decimal values are allowed as grades.
      */
-    public final function set_grade_range(array $graderange) {
+    public final function set_grade_range(array $graderange, $allowgradedecimals = false) {
         $this->graderange = $graderange;
+        $this->allowgradedecimals = $allowgradedecimals;
     }
 
     /**
@@ -641,6 +675,49 @@ abstract class gradingform_controller {
             return array();
         }
         return $this->graderange;
+    }
+
+    /**
+     * Returns if decimal values are allowed as grades
+     *
+     * @return bool
+     */
+    public final function get_allow_grade_decimals() {
+        return $this->allowgradedecimals;
+    }
+
+    /**
+     * Overridden by sub classes that wish to make definition details available to web services.
+     * When not overridden, only definition data common to all grading methods is made available.
+     * When overriding, the return value should be an array containing one or more key/value pairs.
+     * These key/value pairs should match the definition returned by the get_definition() function.
+     * For examples, look at:
+     *    $gradingform_rubric_controller->get_external_definition_details()
+     *    $gradingform_guide_controller->get_external_definition_details()
+     * @return array An array of one or more key/value pairs containing the external_multiple_structure/s
+     * corresponding to the definition returned by $controller->get_definition()
+     * @since Moodle 2.5
+     */
+    public static function get_external_definition_details() {
+        return null;
+    }
+
+    /**
+     * Overridden by sub classes that wish to make instance filling details available to web services.
+     * When not overridden, only instance filling data common to all grading methods is made available.
+     * When overriding, the return value should be an array containing one or more key/value pairs.
+     * These key/value pairs should match the filling data returned by the get_<method>_filling() function
+     * in the gradingform_instance subclass.
+     * For examples, look at:
+     *    $gradingform_rubric_controller->get_external_instance_filling_details()
+     *    $gradingform_guide_controller->get_external_instance_filling_details()
+     *
+     * @return array An array of one or more key/value pairs containing the external_multiple_structure/s
+     * corresponding to the definition returned by $gradingform_<method>_instance->get_<method>_filling()
+     * @since Moodle 2.6
+     */
+    public static function get_external_instance_filling_details() {
+        return null;
     }
 }
 
@@ -850,9 +927,35 @@ abstract class gradingform_instance {
     /**
      * Calculates the grade to be pushed to the gradebook
      *
-     * @return int the valid grade from $this->get_controller()->get_grade_range()
+     * Returned grade must be in range $this->get_controller()->get_grade_range()
+     * Plugins must returned grade converted to int unless
+     * $this->get_controller()->get_allow_grade_decimals() is true.
+     *
+     * @return float|int
      */
     abstract public function get_grade();
+
+    /**
+     * Determines whether the submitted form was empty.
+     *
+     * @param array $elementvalue value of element submitted from the form
+     * @return boolean true if the form is empty
+     */
+    public function is_empty_form($elementvalue) {
+        return false;
+    }
+
+    /**
+     * Removes the attempt from the gradingform_*_fillings table.
+     * This function is not abstract as to not break plugins that might
+     * use advanced grading.
+     * @param array $data the attempt data
+     */
+    public function clear_attempt($data) {
+        // This function is empty because the way to clear a grade
+        // attempt will be different depending on the grading method.
+        return;
+    }
 
     /**
      * Called when teacher submits the grading form:
@@ -866,11 +969,15 @@ abstract class gradingform_instance {
      */
     public function submit_and_get_grade($elementvalue, $itemid) {
         $elementvalue['itemid'] = $itemid;
+        if ($this->is_empty_form($elementvalue)) {
+            $this->clear_attempt($elementvalue);
+            $this->make_active();
+            return -1;
+        }
         $this->update($elementvalue);
         $this->make_active();
         return $this->get_grade();
     }
-
 
     /**
      * Returns html for form element of type 'grading'. If there is a form input element

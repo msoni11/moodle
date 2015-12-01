@@ -30,13 +30,12 @@
 //
 // BasicLTI4Moodle is copyright 2009 by Marc Alier Forment, Jordi Piguillem and Nikolas Galanis
 // of the Universitat Politecnica de Catalunya http://www.upc.edu
-// Contact info: Marc Alier Forment granludo @ gmail.com or marc.alier @ upc.edu
+// Contact info: Marc Alier Forment granludo @ gmail.com or marc.alier @ upc.edu.
 
 /**
  * This file contains a library of functions and constants for the lti module
  *
- * @package    mod
- * @subpackage lti
+ * @package mod_lti
  * @copyright  2009 Marc Alier, Jordi Piguillem, Nikolas Galanis
  *  marc.alier@upc.edu
  * @copyright  2009 Universitat Politecnica de Catalunya http://www.upc.edu
@@ -50,23 +49,34 @@
 defined('MOODLE_INTERNAL') || die;
 
 /**
+ * Returns all other caps used in module.
+ *
+ * @return array
+ */
+function lti_get_extra_capabilities() {
+    return array('moodle/site:accessallgroups');
+}
+
+/**
  * List of features supported in URL module
  * @param string $feature FEATURE_xx constant for requested feature
  * @return mixed True if module supports feature, false if not, null if doesn't know
  */
 function lti_supports($feature) {
-    switch($feature) {
-        case FEATURE_GROUPS:                  return false;
-        case FEATURE_GROUPINGS:               return false;
-        case FEATURE_GROUPMEMBERSONLY:        return true;
-        case FEATURE_MOD_INTRO:               return true;
-        case FEATURE_COMPLETION_TRACKS_VIEWS: return true;
-        case FEATURE_GRADE_HAS_GRADE:         return true;
-        case FEATURE_GRADE_OUTCOMES:          return true;
-        case FEATURE_BACKUP_MOODLE2:          return true;
-        case FEATURE_SHOW_DESCRIPTION:        return true;
+    switch ($feature) {
+        case FEATURE_GROUPS:
+        case FEATURE_GROUPINGS:
+            return false;
+        case FEATURE_MOD_INTRO:
+        case FEATURE_COMPLETION_TRACKS_VIEWS:
+        case FEATURE_GRADE_HAS_GRADE:
+        case FEATURE_GRADE_OUTCOMES:
+        case FEATURE_BACKUP_MOODLE2:
+        case FEATURE_SHOW_DESCRIPTION:
+            return true;
 
-        default: return null;
+        default:
+            return null;
     }
 }
 
@@ -83,17 +93,28 @@ function lti_add_instance($lti, $mform) {
     global $DB, $CFG;
     require_once($CFG->dirroot.'/mod/lti/locallib.php');
 
+    if (!isset($lti->toolurl)) {
+        $lti->toolurl = '';
+    }
+
     $lti->timecreated = time();
     $lti->timemodified = $lti->timecreated;
     $lti->servicesalt = uniqid('', true);
 
-    if (!isset($lti->grade)) {
-        $lti->grade = 100; // TODO: Why is this harcoded here and default @ DB
+    lti_force_type_config_settings($lti, lti_get_type_config_by_instance($lti));
+
+    if (empty($lti->typeid) && isset($lti->urlmatchedtypeid)) {
+        $lti->typeid = $lti->urlmatchedtypeid;
+    }
+
+    if (!isset($lti->instructorchoiceacceptgrades) || $lti->instructorchoiceacceptgrades != LTI_SETTING_ALWAYS) {
+        // The instance does not accept grades back from the provider, so set to "No grade" value 0.
+        $lti->grade = 0;
     }
 
     $lti->id = $DB->insert_record('lti', $lti);
 
-    if ($lti->instructorchoiceacceptgrades == LTI_SETTING_ALWAYS) {
+    if (isset($lti->instructorchoiceacceptgrades) && $lti->instructorchoiceacceptgrades == LTI_SETTING_ALWAYS) {
         if (!isset($lti->cmidnumber)) {
             $lti->cmidnumber = '';
         }
@@ -127,14 +148,20 @@ function lti_update_instance($lti, $mform) {
         $lti->showdescriptionlaunch = 0;
     }
 
-    if (!isset($lti->grade)) {
-        $lti->grade = $DB->get_field('lti', 'grade', array('id' => $lti->id));
-    }
+    lti_force_type_config_settings($lti, lti_get_type_config_by_instance($lti));
 
-    if ($lti->instructorchoiceacceptgrades == LTI_SETTING_ALWAYS) {
+    if (isset($lti->instructorchoiceacceptgrades) && $lti->instructorchoiceacceptgrades == LTI_SETTING_ALWAYS) {
         lti_grade_item_update($lti);
     } else {
+        // Instance is no longer accepting grades from Provider, set grade to "No grade" value 0.
+        $lti->grade = 0;
+        $lti->instructorchoiceacceptgrades = 0;
+
         lti_grade_item_delete($lti);
+    }
+
+    if ($lti->typeid == 0 && isset($lti->urlmatchedtypeid)) {
+        $lti->typeid = $lti->urlmatchedtypeid;
     }
 
     return $DB->update_record('lti', $lti);
@@ -157,10 +184,58 @@ function lti_delete_instance($id) {
 
     $result = true;
 
-    # Delete any dependent records here #
+    // Delete any dependent records here.
     lti_grade_item_delete($basiclti);
 
+    $ltitype = $DB->get_record('lti_types', array('id' => $basiclti->typeid));
+    $DB->delete_records('lti_tool_settings',
+        array('toolproxyid' => $ltitype->toolproxyid, 'course' => $basiclti->course, 'coursemoduleid' => $id));
+
     return $DB->delete_records("lti", array("id" => $basiclti->id));
+}
+
+function lti_get_types() {
+    global $OUTPUT;
+
+    $subtypes = array();
+    foreach (get_plugin_list('ltisource') as $name => $dir) {
+        if ($moretypes = component_callback("ltisource_$name", 'get_types')) {
+            $subtypes = array_merge($subtypes, $moretypes);
+        }
+    }
+    if (empty($subtypes)) {
+        return MOD_SUBTYPE_NO_CHILDREN;
+    }
+
+    $types = array();
+
+    $type           = new stdClass();
+    $type->modclass = MOD_CLASS_ACTIVITY;
+    $type->type     = 'lti_group_start';
+    $type->typestr  = '--'.get_string('modulenameplural', 'mod_lti');
+    $types[]        = $type;
+
+    $link     = get_string('modulename_link', 'mod_lti');
+    $linktext = get_string('morehelp');
+    $help     = get_string('modulename_help', 'mod_lti');
+    $help    .= html_writer::tag('div', $OUTPUT->doc_link($link, $linktext, true), array('class' => 'helpdoclink'));
+
+    $type           = new stdClass();
+    $type->modclass = MOD_CLASS_ACTIVITY;
+    $type->type     = '';
+    $type->typestr  = get_string('generaltool', 'mod_lti');
+    $type->help     = $help;
+    $types[]        = $type;
+
+    $types = array_merge($types, $subtypes);
+
+    $type           = new stdClass();
+    $type->modclass = MOD_CLASS_ACTIVITY;
+    $type->type     = 'lti_group_end';
+    $type->typestr  = '--';
+    $types[]        = $type;
+
+    return $types;
 }
 
 /**
@@ -169,7 +244,7 @@ function lti_delete_instance($id) {
  * For this module we just need to support external urls as
  * activity icons
  *
- * @param cm_info $coursemodule
+ * @param stdClass $coursemodule
  * @return cached_cm_info info
  */
 function lti_get_coursemodule_info($coursemodule) {
@@ -177,23 +252,45 @@ function lti_get_coursemodule_info($coursemodule) {
     require_once($CFG->dirroot.'/mod/lti/locallib.php');
 
     if (!$lti = $DB->get_record('lti', array('id' => $coursemodule->instance),
-            'icon, secureicon, intro, introformat, name')) {
+            'icon, secureicon, intro, introformat, name, typeid, toolurl, launchcontainer')) {
         return null;
     }
 
     $info = new cached_cm_info();
 
-    // We want to use the right icon based on whether the
-    // current page is being requested over http or https.
-    if (lti_request_is_using_ssl() && !empty($lti->secureicon)) {
-        $info->iconurl = new moodle_url($lti->secureicon);
-    } else if (!empty($lti->icon)) {
-        $info->iconurl = new moodle_url($lti->icon);
-    }
-
     if ($coursemodule->showdescription) {
         // Convert intro to html. Do not filter cached version, filters run at display time.
         $info->content = format_module_intro('lti', $lti, $coursemodule->id, false);
+    }
+
+    if (!empty($lti->typeid)) {
+        $toolconfig = lti_get_type_config($lti->typeid);
+    } else if ($tool = lti_get_tool_by_url_match($lti->toolurl)) {
+        $toolconfig = lti_get_type_config($tool->id);
+    } else {
+        $toolconfig = array();
+    }
+
+    // We want to use the right icon based on whether the
+    // current page is being requested over http or https.
+    if (lti_request_is_using_ssl() &&
+        (!empty($lti->secureicon) || (isset($toolconfig['secureicon']) && !empty($toolconfig['secureicon'])))) {
+        if (!empty($lti->secureicon)) {
+            $info->iconurl = new moodle_url($lti->secureicon);
+        } else {
+            $info->iconurl = new moodle_url($toolconfig['secureicon']);
+        }
+    } else if (!empty($lti->icon)) {
+        $info->iconurl = new moodle_url($lti->icon);
+    } else if (isset($toolconfig['icon']) && !empty($toolconfig['icon'])) {
+        $info->iconurl = new moodle_url($toolconfig['icon']);
+    }
+
+    // Does the link open in a new window?
+    $launchcontainer = lti_get_launch_container($lti, $toolconfig);
+    if ($launchcontainer == LTI_LAUNCH_CONTAINER_WINDOW) {
+        $launchurl = new moodle_url('/mod/lti/launch.php', array('id' => $coursemodule->id));
+        $info->onclick = "window.open('" . $launchurl->out(false) . "', 'lti'); return false;";
     }
 
     $info->name = $lti->name;
@@ -236,7 +333,7 @@ function lti_user_complete($course, $user, $mod, $basiclti) {
  * @TODO: implement this moodle function
  **/
 function lti_print_recent_activity($course, $isteacher, $timestart) {
-    return false;  //  True if anything was printed, otherwise false
+    return false;  //  True if anything was printed, otherwise false.
 }
 
 /**
@@ -284,11 +381,11 @@ function lti_grades($basicltiid) {
 function lti_scale_used ($basicltiid, $scaleid) {
     $return = false;
 
-    //$rec = get_record("basiclti","id","$basicltiid","scale","-$scaleid");
+    // $rec = get_record("basiclti","id","$basicltiid","scale","-$scaleid");
     //
-    //if (!empty($rec)  && !empty($scaleid)) {
-    //    $return = true;
-    //}
+    // if (!empty($rec)  && !empty($scaleid)) {
+    //     $return = true;
+    // }
 
     return $return;
 }
@@ -351,11 +448,11 @@ function lti_get_lti_types() {
  * @param mixed optional array/object of grade(s); 'reset' means reset grades in gradebook
  * @return int 0 if ok, error code otherwise
  */
-function lti_grade_item_update($basiclti, $grades=null) {
+function lti_grade_item_update($basiclti, $grades = null) {
     global $CFG;
     require_once($CFG->libdir.'/gradelib.php');
 
-    $params = array('itemname'=>$basiclti->name, 'idnumber'=>$basiclti->cmidnumber);
+    $params = array('itemname' => $basiclti->name, 'idnumber' => $basiclti->cmidnumber);
 
     if ($basiclti->grade > 0) {
         $params['gradetype'] = GRADE_TYPE_VALUE;
@@ -367,10 +464,10 @@ function lti_grade_item_update($basiclti, $grades=null) {
         $params['scaleid']   = -$basiclti->grade;
 
     } else {
-        $params['gradetype'] = GRADE_TYPE_TEXT; // allow text comments only
+        $params['gradetype'] = GRADE_TYPE_TEXT; // Allow text comments only.
     }
 
-    if ($grades  === 'reset') {
+    if ($grades === 'reset') {
         $params['reset'] = true;
         $grades = null;
     }
@@ -389,19 +486,51 @@ function lti_grade_item_delete($basiclti) {
     global $CFG;
     require_once($CFG->libdir.'/gradelib.php');
 
-    return grade_update('mod/lti', $basiclti->course, 'mod', 'lti', $basiclti->id, 0, null, array('deleted'=>1));
+    return grade_update('mod/lti', $basiclti->course, 'mod', 'lti', $basiclti->id, 0, null, array('deleted' => 1));
 }
 
-function lti_extend_settings_navigation($settings, $parentnode) {
-    global $PAGE;
+/**
+ * Log post actions
+ *
+ * @return array
+ */
+function lti_get_post_actions() {
+    return array();
+}
 
-    if (has_capability('mod/lti:grade', context_module::instance($PAGE->cm->id))) {
-        $keys = $parentnode->get_children_key_list();
+/**
+ * Log view actions
+ *
+ * @return array
+ */
+function lti_get_view_actions() {
+    return array('view all', 'view');
+}
 
-        $node = navigation_node::create('Submissions',
-            new moodle_url('/mod/lti/grade.php', array('id'=>$PAGE->cm->id)),
-            navigation_node::TYPE_SETTING, null, 'mod_lti_submissions');
+/**
+ * Mark the activity completed (if required) and trigger the course_module_viewed event.
+ *
+ * @param  stdClass $lti        lti object
+ * @param  stdClass $course     course object
+ * @param  stdClass $cm         course module object
+ * @param  stdClass $context    context object
+ * @since Moodle 3.0
+ */
+function lti_view($lti, $course, $cm, $context) {
 
-        $parentnode->add_node($node, $keys[1]);
-    }
+    // Trigger course_module_viewed event.
+    $params = array(
+        'context' => $context,
+        'objectid' => $lti->id
+    );
+
+    $event = \mod_lti\event\course_module_viewed::create($params);
+    $event->add_record_snapshot('course_modules', $cm);
+    $event->add_record_snapshot('course', $course);
+    $event->add_record_snapshot('lti', $lti);
+    $event->trigger();
+
+    // Completion.
+    $completion = new completion_info($course);
+    $completion->set_module_viewed($cm);
 }

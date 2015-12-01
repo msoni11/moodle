@@ -77,6 +77,17 @@ $capabilities = array(
         )
     ),
 
+    'moodle/site:deleteanymessage' => array(
+
+        'riskbitmask' => RISK_DATALOSS,
+
+        'captype' => 'write',
+        'contextlevel' => CONTEXT_SYSTEM,
+        'archetypes' => array(
+            'manager' => CAP_ALLOW
+        )
+    ),
+
     'moodle/site:sendmessage' => array(
 
         'riskbitmask' => RISK_SPAM,
@@ -85,6 +96,15 @@ $capabilities = array(
         'contextlevel' => CONTEXT_SYSTEM,
         'archetypes' => array(
             'manager' => CAP_ALLOW,
+            'user' => CAP_ALLOW
+        )
+    ),
+
+    'moodle/site:deleteownmessage' => array(
+
+        'captype' => 'write',
+        'contextlevel' => CONTEXT_SYSTEM,
+        'archetypes' => array(
             'user' => CAP_ALLOW
         )
     ),
@@ -505,6 +525,16 @@ $capabilities = array(
         'clonepermissionsfrom' => 'moodle/user:update'
     ),
 
+    'moodle/user:viewlastip' => array(
+        'riskbitmask' => RISK_PERSONAL,
+        'captype' => 'read',
+        'contextlevel' => CONTEXT_USER,
+        'archetypes' => array(
+            'manager' => CAP_ALLOW
+        ),
+        'clonepermissionsfrom' => 'moodle/user:update'
+    ),
+
     'moodle/user:viewhiddendetails' => array(
 
         'riskbitmask' => RISK_PERSONAL,
@@ -713,8 +743,7 @@ $capabilities = array(
         )
     ),
 
-    // view members of a cohort, this can be used in course context too,
-    // this also controls the ability to actually use cohort
+    // View visible and hidden cohorts defined in the current context.
     'moodle/cohort:view' => array(
 
         'captype' => 'read',
@@ -801,6 +830,17 @@ $capabilities = array(
             'editingteacher' => CAP_ALLOW,
             'manager' => CAP_ALLOW,
         )
+    ),
+
+    'moodle/course:reviewotherusers' => array(
+
+        'captype' => 'read',
+        'contextlevel' => CONTEXT_COURSE,
+        'archetypes' => array(
+            'editingteacher' => CAP_ALLOW,
+            'manager' => CAP_ALLOW,
+        ),
+        'clonepermissionsfrom' => 'moodle/role:assign'
     ),
 
     'moodle/course:bulkmessaging' => array(
@@ -1040,6 +1080,27 @@ $capabilities = array(
         )
     ),
 
+    'moodle/course:viewsuspendedusers' => array(
+
+        'captype' => 'read',
+        'contextlevel' => CONTEXT_SYSTEM,
+        'archetypes' => array(
+            'editingteacher' => CAP_ALLOW,
+            'manager' => CAP_ALLOW
+        )
+    ),
+
+    'moodle/course:tag' => array(
+        'riskbitmask' => RISK_SPAM,
+        'captype' => 'write',
+        'contextlevel' => CONTEXT_COURSE,
+        'archetypes' => array(
+            'manager' => CAP_ALLOW,
+            'editingteacher' => CAP_ALLOW,
+        ),
+        'clonepermissionsfrom' => 'moodle/course:update'
+    ),
+
     'moodle/blog:view' => array(
 
         'captype' => 'read',
@@ -1117,30 +1178,19 @@ $capabilities = array(
         )
     ),
 
+    // TODO: Remove 'moodle/blog:associatecourse' and 'moodle/blog:associatemodule' after a few releases.
     'moodle/blog:associatecourse' => array(
 
         'captype' => 'write',
         'contextlevel' => CONTEXT_COURSE,
-        'archetypes' => array(
-            'student' => CAP_ALLOW,
-            'user' => CAP_ALLOW,
-            'teacher' => CAP_ALLOW,
-            'editingteacher' => CAP_ALLOW,
-            'manager' => CAP_ALLOW
-        )
+        'archetypes' => array()
     ),
 
     'moodle/blog:associatemodule' => array(
 
         'captype' => 'write',
         'contextlevel' => CONTEXT_MODULE,
-        'archetypes' => array(
-            'student' => CAP_ALLOW,
-            'user' => CAP_ALLOW,
-            'teacher' => CAP_ALLOW,
-            'editingteacher' => CAP_ALLOW,
-            'manager' => CAP_ALLOW
-        )
+        'archetypes' => array()
     ),
 
     'moodle/calendar:manageownentries' => array( // works in CONTEXT_SYSTEM only
@@ -1658,20 +1708,7 @@ $capabilities = array(
         'captype' => 'write',
         'contextlevel' => CONTEXT_SYSTEM,
         'archetypes' => array(
-            'teacher' => CAP_ALLOW,
-            'editingteacher' => CAP_ALLOW,
             'manager' => CAP_ALLOW
-        )
-    ),
-
-    'moodle/tag:create' => array(
-        'riskbitmask' => RISK_SPAM,
-
-        'captype' => 'write',
-        'contextlevel' => CONTEXT_SYSTEM,
-        'archetypes' => array(
-            'manager' => CAP_ALLOW,
-            'user' => CAP_ALLOW
         )
     ),
 
@@ -1681,8 +1718,7 @@ $capabilities = array(
         'captype' => 'write',
         'contextlevel' => CONTEXT_SYSTEM,
         'archetypes' => array(
-            'manager' => CAP_ALLOW,
-            'user' => CAP_ALLOW
+            'manager' => CAP_ALLOW
         )
     ),
 
@@ -1692,7 +1728,6 @@ $capabilities = array(
         'captype' => 'write',
         'contextlevel' => CONTEXT_SYSTEM,
         'archetypes' => array(
-            'manager' => CAP_ALLOW,
             'user' => CAP_ALLOW
         )
     ),
@@ -1877,6 +1912,140 @@ $capabilities = array(
         'archetypes' => array(
             'manager' => CAP_ALLOW,
             'editingteacher' => CAP_ALLOW,
+        )
+    ),
+
+    // Badges.
+    'moodle/badges:manageglobalsettings' => array(
+        'riskbitmask'  => RISK_DATALOSS | RISK_CONFIG,
+        'captype'      => 'write',
+        'contextlevel' => CONTEXT_SYSTEM,
+        'archetypes'   => array(
+            'manager'       => CAP_ALLOW,
+        )
+    ),
+
+    // View available badges without earning them.
+    'moodle/badges:viewbadges' => array(
+        'captype'       => 'read',
+        'contextlevel'  => CONTEXT_COURSE,
+        'archetypes'    => array(
+            'user'          => CAP_ALLOW,
+        )
+    ),
+
+    // Manage badges on own private badges page.
+    'moodle/badges:manageownbadges' => array(
+        'riskbitmap'    => RISK_SPAM,
+        'captype'       => 'write',
+        'contextlevel'  => CONTEXT_USER,
+        'archetypes'    => array(
+            'user'    => CAP_ALLOW
+        )
+    ),
+
+    // View public badges in other users' profiles.
+    'moodle/badges:viewotherbadges' => array(
+        'riskbitmap'    => RISK_PERSONAL,
+        'captype'       => 'read',
+        'contextlevel'  => CONTEXT_USER,
+        'archetypes'    => array(
+            'user'    => CAP_ALLOW
+        )
+    ),
+
+    // Earn badge.
+    'moodle/badges:earnbadge' => array(
+        'captype'       => 'write',
+        'contextlevel'  => CONTEXT_COURSE,
+        'archetypes'    => array(
+            'user'           => CAP_ALLOW,
+        )
+    ),
+
+    // Create/duplicate badges.
+    'moodle/badges:createbadge' => array(
+        'riskbitmask'  => RISK_SPAM,
+        'captype'      => 'write',
+        'contextlevel' => CONTEXT_COURSE,
+        'archetypes'   => array(
+            'manager'        => CAP_ALLOW,
+            'editingteacher' => CAP_ALLOW,
+        )
+    ),
+
+    // Delete badges.
+    'moodle/badges:deletebadge' => array(
+        'riskbitmask'  => RISK_DATALOSS,
+        'captype'      => 'write',
+        'contextlevel' => CONTEXT_COURSE,
+        'archetypes'   => array(
+            'manager'        => CAP_ALLOW,
+            'editingteacher' => CAP_ALLOW,
+        )
+    ),
+
+    // Set up/edit badge details.
+    'moodle/badges:configuredetails' => array(
+        'riskbitmask'  => RISK_SPAM,
+        'captype'      => 'write',
+        'contextlevel' => CONTEXT_COURSE,
+        'archetypes'   => array(
+            'manager'        => CAP_ALLOW,
+            'editingteacher' => CAP_ALLOW,
+        )
+    ),
+
+    // Set up/edit criteria of earning a badge.
+    'moodle/badges:configurecriteria' => array(
+        'riskbitmask'  => RISK_XSS,
+        'captype'      => 'write',
+        'contextlevel' => CONTEXT_COURSE,
+        'archetypes'   => array(
+            'manager'        => CAP_ALLOW,
+            'editingteacher' => CAP_ALLOW,
+        )
+    ),
+
+    // Configure badge messages.
+    'moodle/badges:configuremessages' => array(
+        'riskbitmask'  => RISK_SPAM,
+        'captype'      => 'write',
+        'contextlevel' => CONTEXT_COURSE,
+        'archetypes'   => array(
+            'manager'        => CAP_ALLOW,
+            'editingteacher' => CAP_ALLOW,
+        )
+    ),
+
+    // Award badge to a user.
+    'moodle/badges:awardbadge' => array(
+        'riskbitmask'  => RISK_SPAM,
+        'captype'      => 'write',
+        'contextlevel' => CONTEXT_COURSE,
+        'archetypes'   => array(
+            'manager'        => CAP_ALLOW,
+            'teacher'        => CAP_ALLOW,
+            'editingteacher' => CAP_ALLOW,
+        )
+    ),
+
+    // View users who earned a specific badge without being able to award a badge.
+    'moodle/badges:viewawarded' => array(
+        'riskbitmask'  => RISK_PERSONAL,
+        'captype'      => 'read',
+        'contextlevel' => CONTEXT_COURSE,
+        'archetypes'   => array(
+                'manager'        => CAP_ALLOW,
+                'teacher'        => CAP_ALLOW,
+                'editingteacher' => CAP_ALLOW,
+        )
+    ),
+
+    'moodle/site:forcelanguage' => array(
+        'captype' => 'read',
+        'contextlevel' => CONTEXT_SYSTEM,
+        'archetypes' => array(
         )
     )
 );

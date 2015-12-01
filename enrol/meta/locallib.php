@@ -17,8 +17,7 @@
 /**
  * Local stuff for meta course enrolment plugin.
  *
- * @package    enrol
- * @subpackage meta
+ * @package    enrol_meta
  * @copyright  2010 Petr Skoda {@link http://skodak.org}
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -81,6 +80,7 @@ class enrol_meta_handler {
      */
     protected static function sync_with_parent_course(stdClass $instance, $userid) {
         global $DB, $CFG;
+        require_once($CFG->dirroot . '/group/lib.php');
 
         $plugin = enrol_get_plugin('meta');
 
@@ -91,17 +91,11 @@ class enrol_meta_handler {
 
         $context = context_course::instance($instance->courseid);
 
-        if (!$parentcontext = context_course::instance($instance->customint1, IGNORE_MISSING)) {
-            // linking to missing course is not possible
-            role_unassign_all(array('userid'=>$userid, 'contextid'=>$context->id, 'component'=>'enrol_meta'));
-            return;
-        }
-
         // list of enrolments in parent course (we ignore meta enrols in parents completely)
         list($enabled, $params) = $DB->get_in_or_equal(explode(',', $CFG->enrol_plugins_enabled), SQL_PARAMS_NAMED, 'e');
         $params['userid'] = $userid;
         $params['parentcourse'] = $instance->customint1;
-        $sql = "SELECT ue.*
+        $sql = "SELECT ue.*, e.status AS enrolstatus
                   FROM {user_enrolments} ue
                   JOIN {enrol} e ON (e.id = ue.enrolid AND e.enrol <> 'meta' AND e.courseid = :parentcourse AND e.enrol $enabled)
                  WHERE ue.userid = :userid";
@@ -115,10 +109,8 @@ class enrol_meta_handler {
             return;
         }
 
-        if (!enrol_is_enabled('meta')) {
-            if ($ue) {
-                role_unassign_all(array('userid'=>$userid, 'contextid'=>$context->id, 'component'=>'enrol_meta'));
-            }
+        if (!$parentcontext = context_course::instance($instance->customint1, IGNORE_MISSING)) {
+            // Weird, we should not get here.
             return;
         }
 
@@ -150,32 +142,51 @@ class enrol_meta_handler {
             return;
         }
 
-        // is parent enrol active? (we ignore enrol starts and ends, sorry it would be too complex)
+        // Is parent enrol active? Find minimum timestart and maximum timeend of all active enrolments.
         $parentstatus = ENROL_USER_SUSPENDED;
+        $parenttimeend = null;
+        $parenttimestart = null;
         foreach ($parentues as $pue) {
-            if ($pue->status == ENROL_USER_ACTIVE) {
+            if ($pue->status == ENROL_USER_ACTIVE && $pue->enrolstatus == ENROL_INSTANCE_ENABLED) {
                 $parentstatus = ENROL_USER_ACTIVE;
-                break;
+                if ($parenttimeend === null || $pue->timeend == 0 || ($parenttimeend && $parenttimeend < $pue->timeend)) {
+                    $parenttimeend = $pue->timeend;
+                }
+                if ($parenttimestart === null || $parenttimestart > $pue->timestart) {
+                    $parenttimestart = $pue->timestart;
+                }
             }
         }
 
-        // enrol user if not enrolled yet or fix status
+        // Enrol user if not enrolled yet or fix status/timestart/timeend. Use the minimum timestart and maximum timeend found above.
         if ($ue) {
-            if ($parentstatus != $ue->status) {
-                $plugin->update_user_enrol($instance, $userid, $parentstatus);
+            if ($parentstatus != $ue->status ||
+                    ($parentstatus == ENROL_USER_ACTIVE && ($parenttimestart != $ue->timestart || $parenttimeend != $ue->timeend))) {
+                $plugin->update_user_enrol($instance, $userid, $parentstatus, $parenttimestart, $parenttimeend);
                 $ue->status = $parentstatus;
+                $ue->timestart = $parenttimestart;
+                $ue->timeend = $parenttimeend;
             }
         } else {
-            $plugin->enrol_user($instance, $userid, NULL, 0, 0, $parentstatus);
+            $plugin->enrol_user($instance, $userid, NULL, (int)$parenttimestart, (int)$parenttimeend, $parentstatus);
             $ue = new stdClass();
             $ue->userid = $userid;
             $ue->enrolid = $instance->id;
             $ue->status = $parentstatus;
+            if ($instance->customint2) {
+                groups_add_member($instance->customint2, $userid, 'enrol_meta', $instance->id);
+            }
         }
 
-        // only active users in enabled instances are supposed to have roles (we can reassign the roles any time later)
-        if ($ue->status != ENROL_USER_ACTIVE or $instance->status != ENROL_INSTANCE_ENABLED) {
-            if ($roles) {
+        $unenrolaction = $plugin->get_config('unenrolaction', ENROL_EXT_REMOVED_SUSPENDNOROLES);
+
+        // Only active users in enabled instances are supposed to have roles (we can reassign the roles any time later).
+        if ($ue->status != ENROL_USER_ACTIVE or $instance->status != ENROL_INSTANCE_ENABLED or
+                ($parenttimeend and $parenttimeend < time()) or ($parenttimestart > time())) {
+            if ($unenrolaction == ENROL_EXT_REMOVED_SUSPEND) {
+                // Always keep the roles.
+            } else if ($roles) {
+                // This will only unassign roles that were assigned in this enrolment method, leaving all manual role assignments intact.
                 role_unassign_all(array('userid'=>$userid, 'contextid'=>$context->id, 'component'=>'enrol_meta', 'itemid'=>$instance->id));
             }
             return;
@@ -186,6 +197,11 @@ class enrol_meta_handler {
             if (!isset($roles[$rid])) {
                 role_assign($rid, $userid, $context->id, 'enrol_meta', $instance->id);
             }
+        }
+
+        if ($unenrolaction == ENROL_EXT_REMOVED_SUSPEND) {
+            // Always keep the roles.
+            return;
         }
 
         // remove roles
@@ -207,187 +223,33 @@ class enrol_meta_handler {
      */
     protected static function user_not_supposed_to_be_here($instance, $ue, context_course $context, $plugin) {
         if (!$ue) {
-            // not enrolled yet - simple!
+            // Not enrolled yet - simple!
             return;
         }
 
         $userid = $ue->userid;
-        $unenrolaction = $plugin->get_config('unenrolaction', ENROL_EXT_REMOVED_UNENROL);
+        $unenrolaction = $plugin->get_config('unenrolaction', ENROL_EXT_REMOVED_SUSPENDNOROLES);
 
         if ($unenrolaction == ENROL_EXT_REMOVED_UNENROL) {
-            // purges grades, group membership, preferences, etc. - admins were warned!
+            // Purges grades, group membership, preferences, etc. - admins were warned!
             $plugin->unenrol_user($instance, $userid);
-            return;
 
-        } else { // ENROL_EXT_REMOVED_SUSPENDNOROLES
-            // just suspend users and remove all roles (we can reassign the roles any time later)
+        } else if ($unenrolaction == ENROL_EXT_REMOVED_SUSPEND) {
             if ($ue->status != ENROL_USER_SUSPENDED) {
                 $plugin->update_user_enrol($instance, $userid, ENROL_USER_SUSPENDED);
-                role_unassign_all(array('userid'=>$userid, 'contextid'=>$context->id, 'component'=>'enrol_meta', 'itemid'=>$instance->id));
             }
-            return;
+
+        } else if ($unenrolaction == ENROL_EXT_REMOVED_SUSPENDNOROLES) {
+            if ($ue->status != ENROL_USER_SUSPENDED) {
+                $plugin->update_user_enrol($instance, $userid, ENROL_USER_SUSPENDED);
+            }
+            role_unassign_all(array('userid'=>$userid, 'contextid'=>$context->id, 'component'=>'enrol_meta', 'itemid'=>$instance->id));
+
+        } else {
+            debugging('Unknown unenrol action '.$unenrolaction);
         }
-    }
-
-    /**
-     * Triggered via role assigned event.
-     * @static
-     * @param stdClass $ra
-     * @return bool success
-     */
-    public static function role_assigned($ra) {
-        if (!enrol_is_enabled('meta')) {
-            return true;
-        }
-
-        // prevent circular dependencies - we can not sync meta roles recursively
-        if ($ra->component === 'enrol_meta') {
-            return true;
-        }
-
-        // only course level roles are interesting
-        if (!$parentcontext = context::instance_by_id($ra->contextid, IGNORE_MISSING)) {
-            return true;
-        }
-        if ($parentcontext->contextlevel != CONTEXT_COURSE) {
-            return true;
-        }
-
-        self::sync_course_instances($parentcontext->instanceid, $ra->userid);
-
-        return true;
-    }
-
-    /**
-     * Triggered via role unassigned event.
-     * @static
-     * @param stdClass $ra
-     * @return bool success
-     */
-    public static function role_unassigned($ra) {
-        if (!enrol_is_enabled('meta')) {
-            // all roles are removed via cron automatically
-            return true;
-        }
-
-        // prevent circular dependencies - we can not sync meta roles recursively
-        if ($ra->component === 'enrol_meta') {
-            return true;
-        }
-
-        // only course level roles are interesting
-        if (!$parentcontext = context::instance_by_id($ra->contextid, IGNORE_MISSING)) {
-            return true;
-        }
-        if ($parentcontext->contextlevel != CONTEXT_COURSE) {
-            return true;
-        }
-
-        self::sync_course_instances($parentcontext->instanceid, $ra->userid);
-
-        return true;
-    }
-
-    /**
-     * Triggered via user enrolled event.
-     * @static
-     * @param stdClass $ue
-     * @return bool success
-     */
-    public static function user_enrolled($ue) {
-        if (!enrol_is_enabled('meta')) {
-            // no more enrolments for disabled plugins
-            return true;
-        }
-
-        if ($ue->enrol === 'meta') {
-            // prevent circular dependencies - we can not sync meta enrolments recursively
-            return true;
-        }
-
-        self::sync_course_instances($ue->courseid, $ue->userid);
-
-        return true;
-    }
-
-    /**
-     * Triggered via user unenrolled event.
-     * @static
-     * @param stdClass $ue
-     * @return bool success
-     */
-    public static function user_unenrolled($ue) {
-
-        // keep unenrolling even if plugin disabled
-
-        if ($ue->enrol === 'meta') {
-            // prevent circular dependencies - we can not sync meta enrolments recursively
-            return true;
-        }
-
-        self::sync_course_instances($ue->courseid, $ue->userid);
-
-        return true;
-    }
-
-    /**
-     * Triggered via user enrolment modification  event.
-     * @static
-     * @param stdClass $ue
-     * @return bool success
-     */
-    public static function user_enrol_modified($ue) {
-        if (!enrol_is_enabled('meta')) {
-            // no modifications if plugin disabled
-            return true;
-        }
-
-        if ($ue->enrol === 'meta') {
-            // prevent circular dependencies - we can not sync meta enrolments recursively
-            return true;
-        }
-
-        self::sync_course_instances($ue->courseid, $ue->userid);
-
-        return true;
-    }
-
-    /**
-     * Triggered via course_deleted event.
-     * @static
-     * @param stdClass $course
-     * @return bool success
-     */
-    public static function course_deleted($course) {
-        global $DB;
-
-        // NOTE: do not test if plugin enabled, we want to keep disabling instances with invalid course links
-
-        // does anything want to sync with this parent?
-        if (!$enrols = $DB->get_records('enrol', array('customint1'=>$course->id, 'enrol'=>'meta'), 'courseid ASC, id ASC')) {
-            return true;
-        }
-
-        $plugin = enrol_get_plugin('meta');
-
-        // hack the DB info for all courses first
-        foreach ($enrols as $enrol) {
-            $enrol->customint1 = 0;
-            $enrol->status = ENROL_INSTANCE_DISABLED;
-            $DB->update_record('enrol', $enrol);
-            $context = context_course::instance($enrol->courseid);
-            role_unassign_all(array('contextid'=>$context->id, 'component'=>'enrol_meta', 'itemid'=>$enrol->id));
-        }
-
-        // now trigger sync for each instance and purge caches
-        foreach ($enrols as $enrol) {
-            $plugin->update_status($enrol, ENROL_INSTANCE_DISABLED);
-        }
-
-        return true;
     }
 }
-
 
 /**
  * Sync all meta course links.
@@ -398,6 +260,7 @@ class enrol_meta_handler {
  */
 function enrol_meta_sync($courseid = NULL, $verbose = false) {
     global $CFG, $DB;
+    require_once("{$CFG->dirroot}/group/lib.php");
 
     // purge all roles if meta sync disabled, those can be recreated later here in cron
     if (!enrol_is_enabled('meta')) {
@@ -409,7 +272,7 @@ function enrol_meta_sync($courseid = NULL, $verbose = false) {
     }
 
     // unfortunately this may take a long time, execution can be interrupted safely
-    @set_time_limit(0);
+    core_php_time_limit::raise();
     raise_memory_limit(MEMORY_HUGE);
 
     if ($verbose) {
@@ -420,7 +283,7 @@ function enrol_meta_sync($courseid = NULL, $verbose = false) {
 
     $meta = enrol_get_plugin('meta');
 
-    $unenrolaction = $meta->get_config('unenrolaction', ENROL_EXT_REMOVED_UNENROL);
+    $unenrolaction = $meta->get_config('unenrolaction', ENROL_EXT_REMOVED_SUSPENDNOROLES);
     $skiproles     = $meta->get_config('nosyncroleids', '');
     $skiproles     = empty($skiproles) ? array() : explode(',', $skiproles);
     $syncall       = $meta->get_config('syncall', 1);
@@ -428,16 +291,27 @@ function enrol_meta_sync($courseid = NULL, $verbose = false) {
     $allroles = get_all_roles();
 
 
-    // iterate through all not enrolled yet users
+    // Iterate through all not enrolled yet users. For each active enrolment of each user find the minimum
+    // enrolment startdate and maximum enrolment enddate.
+    // This SQL relies on the fact that ENROL_USER_ACTIVE < ENROL_USER_SUSPENDED
+    // and ENROL_INSTANCE_ENABLED < ENROL_INSTANCE_DISABLED. Condition "pue.status + pe.status = 0" means
+    // that enrolment is active. When MIN(pue.status + pe.status)=0 it means there exists an active
+    // enrolment.
     $onecourse = $courseid ? "AND e.courseid = :courseid" : "";
     list($enabled, $params) = $DB->get_in_or_equal(explode(',', $CFG->enrol_plugins_enabled), SQL_PARAMS_NAMED, 'e');
     $params['courseid'] = $courseid;
-    $sql = "SELECT pue.userid, e.id AS enrolid, pue.status
+    $sql = "SELECT pue.userid, e.id AS enrolid, MIN(pue.status + pe.status) AS status,
+                      MIN(CASE WHEN (pue.status + pe.status = 0) THEN pue.timestart ELSE 9999999999 END) AS timestart,
+                      MAX(CASE WHEN (pue.status + pe.status = 0) THEN
+                                (CASE WHEN pue.timeend = 0 THEN 9999999999 ELSE pue.timeend END)
+                                ELSE 0 END) AS timeend
               FROM {user_enrolments} pue
               JOIN {enrol} pe ON (pe.id = pue.enrolid AND pe.enrol <> 'meta' AND pe.enrol $enabled)
               JOIN {enrol} e ON (e.customint1 = pe.courseid AND e.enrol = 'meta' $onecourse)
+              JOIN {user} u ON (u.id = pue.userid AND u.deleted = 0)
          LEFT JOIN {user_enrolments} ue ON (ue.enrolid = e.id AND ue.userid = pue.userid)
-             WHERE ue.id IS NULL";
+             WHERE ue.id IS NULL
+             GROUP BY pue.userid, e.id";
 
     $rs = $DB->get_recordset_sql($sql, $params);
     foreach($rs as $ue) {
@@ -462,7 +336,18 @@ function enrol_meta_sync($courseid = NULL, $verbose = false) {
             }
         }
 
-        $meta->enrol_user($instance, $ue->userid, $ue->status);
+        // So now we have aggregated values that we will use for the meta enrolment status, timeend and timestart.
+        // Again, we use the fact that active=0 and disabled/suspended=1. Only when MIN(pue.status + pe.status)=0 the enrolment is active:
+        $ue->status = ($ue->status == ENROL_USER_ACTIVE + ENROL_INSTANCE_ENABLED) ? ENROL_USER_ACTIVE : ENROL_USER_SUSPENDED;
+        // Timeend 9999999999 was used instead of 0 in the "MAX()" function:
+        $ue->timeend = ($ue->timeend == 9999999999) ? 0 : (int)$ue->timeend;
+        // Timestart 9999999999 is only possible when there are no active enrolments:
+        $ue->timestart = ($ue->timestart == 9999999999) ? 0 : (int)$ue->timestart;
+
+        $meta->enrol_user($instance, $ue->userid, null, $ue->timestart, $ue->timeend, $ue->status);
+        if ($instance->customint2) {
+            groups_add_member($instance->customint2, $ue->userid, 'enrol_meta', $instance->id);
+        }
         if ($verbose) {
             mtrace("  enrolling: $ue->userid ==> $instance->courseid");
         }
@@ -493,47 +378,61 @@ function enrol_meta_sync($courseid = NULL, $verbose = false) {
             if ($verbose) {
                 mtrace("  unenrolling: $ue->userid ==> $instance->courseid");
             }
-            continue;
 
-        } else { // ENROL_EXT_REMOVED_SUSPENDNOROLES
-            // just disable and ignore any changes
+        } else if ($unenrolaction == ENROL_EXT_REMOVED_SUSPEND) {
+            if ($ue->status != ENROL_USER_SUSPENDED) {
+                $meta->update_user_enrol($instance, $ue->userid, ENROL_USER_SUSPENDED);
+                if ($verbose) {
+                    mtrace("  suspending: $ue->userid ==> $instance->courseid");
+                }
+            }
+
+        } else if ($unenrolaction == ENROL_EXT_REMOVED_SUSPENDNOROLES) {
             if ($ue->status != ENROL_USER_SUSPENDED) {
                 $meta->update_user_enrol($instance, $ue->userid, ENROL_USER_SUSPENDED);
                 $context = context_course::instance($instance->courseid);
-                role_unassign_all(array('userid'=>$ue->userid, 'contextid'=>$context->id, 'component'=>'enrol_meta'));
+                role_unassign_all(array('userid'=>$ue->userid, 'contextid'=>$context->id, 'component'=>'enrol_meta', 'itemid'=>$instance->id));
                 if ($verbose) {
                     mtrace("  suspending and removing all roles: $ue->userid ==> $instance->courseid");
                 }
             }
-            continue;
         }
     }
     $rs->close();
 
 
-    // update status - meta enrols + start and end dates are ignored, sorry
-    // note the trick here is that the active enrolment and instance constants have value 0
+    // Update status - meta enrols are ignored to avoid recursion.
+    // Note the trick here is that the active enrolment and instance constants have value 0.
     $onecourse = $courseid ? "AND e.courseid = :courseid" : "";
     list($enabled, $params) = $DB->get_in_or_equal(explode(',', $CFG->enrol_plugins_enabled), SQL_PARAMS_NAMED, 'e');
     $params['courseid'] = $courseid;
-    $sql = "SELECT ue.userid, ue.enrolid, pue.pstatus
+    $sql = "SELECT ue.userid, ue.enrolid, pue.pstatus, pue.ptimestart, pue.ptimeend
               FROM {user_enrolments} ue
               JOIN {enrol} e ON (e.id = ue.enrolid AND e.enrol = 'meta' $onecourse)
-              JOIN (SELECT xpue.userid, xpe.courseid, MIN(xpue.status + xpe.status) AS pstatus
+              JOIN (SELECT xpue.userid, xpe.courseid, MIN(xpue.status + xpe.status) AS pstatus,
+                      MIN(CASE WHEN (xpue.status + xpe.status = 0) THEN xpue.timestart ELSE 9999999999 END) AS ptimestart,
+                      MAX(CASE WHEN (xpue.status + xpe.status = 0) THEN
+                                (CASE WHEN xpue.timeend = 0 THEN 9999999999 ELSE xpue.timeend END)
+                                ELSE 0 END) AS ptimeend
                       FROM {user_enrolments} xpue
                       JOIN {enrol} xpe ON (xpe.id = xpue.enrolid AND xpe.enrol <> 'meta' AND xpe.enrol $enabled)
                   GROUP BY xpue.userid, xpe.courseid
                    ) pue ON (pue.courseid = e.customint1 AND pue.userid = ue.userid)
-             WHERE (pue.pstatus = 0 AND ue.status > 0) OR (pue.pstatus > 0 and ue.status = 0)";
+             WHERE (pue.pstatus = 0 AND ue.status > 0) OR (pue.pstatus > 0 and ue.status = 0)
+             OR ((CASE WHEN pue.ptimestart = 9999999999 THEN 0 ELSE pue.ptimestart END) <> ue.timestart)
+             OR ((CASE WHEN pue.ptimeend = 9999999999 THEN 0 ELSE pue.ptimeend END) <> ue.timeend)";
     $rs = $DB->get_recordset_sql($sql, $params);
     foreach($rs as $ue) {
         if (!isset($instances[$ue->enrolid])) {
             $instances[$ue->enrolid] = $DB->get_record('enrol', array('id'=>$ue->enrolid));
         }
         $instance = $instances[$ue->enrolid];
-        $ue->pstatus = ($ue->pstatus == ENROL_USER_ACTIVE) ? ENROL_USER_ACTIVE : ENROL_USER_SUSPENDED;
+        $ue->pstatus = ($ue->pstatus == ENROL_USER_ACTIVE + ENROL_INSTANCE_ENABLED) ? ENROL_USER_ACTIVE : ENROL_USER_SUSPENDED;
+        $ue->ptimeend = ($ue->ptimeend == 9999999999) ? 0 : (int)$ue->ptimeend;
+        $ue->ptimestart = ($ue->ptimestart == 9999999999) ? 0 : (int)$ue->ptimestart;
 
-        if ($ue->pstatus == ENROL_USER_ACTIVE and !$syncall and $unenrolaction != ENROL_EXT_REMOVED_UNENROL) {
+        if ($ue->pstatus == ENROL_USER_ACTIVE and (!$ue->ptimeend || $ue->ptimeend > time())
+                and !$syncall and $unenrolaction != ENROL_EXT_REMOVED_UNENROL) {
             // this may be slow if very many users are ignored in sync
             $parentcontext = context_course::instance($instance->customint1);
             list($ignoreroles, $params) = $DB->get_in_or_equal($skiproles, SQL_PARAMS_NAMED, 'ri', false, -1);
@@ -549,7 +448,7 @@ function enrol_meta_sync($courseid = NULL, $verbose = false) {
             }
         }
 
-        $meta->update_user_enrol($instance, $ue->userid, $ue->pstatus);
+        $meta->update_user_enrol($instance, $ue->userid, $ue->pstatus, $ue->ptimestart, $ue->ptimeend);
         if ($verbose) {
             if ($ue->pstatus == ENROL_USER_ACTIVE) {
                 mtrace("  unsuspending: $ue->userid ==> $instance->courseid");
@@ -569,7 +468,7 @@ function enrol_meta_sync($courseid = NULL, $verbose = false) {
         }
         $enabled[$k] = 'enrol_'.$v;
     }
-    $enabled[] = $DB->sql_empty(); // manual assignments are replicated too
+    $enabled[] = ''; // manual assignments are replicated too
 
     $onecourse = $courseid ? "AND e.courseid = :courseid" : "";
     list($enabled, $params) = $DB->get_in_or_equal($enabled, SQL_PARAMS_NAMED, 'e');
@@ -617,6 +516,7 @@ function enrol_meta_sync($courseid = NULL, $verbose = false) {
     } else {
         $notignored = "";
     }
+
     $sql = "SELECT ra.roleid, ra.userid, ra.contextid, ra.itemid, e.courseid
               FROM {role_assignments} ra
               JOIN {enrol} e ON (e.id = ra.itemid AND ra.component = 'enrol_meta' AND e.enrol = 'meta' $onecourse)
@@ -625,14 +525,16 @@ function enrol_meta_sync($courseid = NULL, $verbose = false) {
          LEFT JOIN {user_enrolments} ue ON (ue.enrolid = e.id AND ue.userid = ra.userid AND ue.status = :activeuser)
              WHERE pra.id IS NULL OR ue.id IS NULL OR e.status <> :enabledinstance";
 
-    $rs = $DB->get_recordset_sql($sql, $params);
-    foreach($rs as $ra) {
-        role_unassign($ra->roleid, $ra->userid, $ra->contextid, 'enrol_meta', $ra->itemid);
-        if ($verbose) {
-            mtrace("  unassigning role: $ra->userid ==> $ra->courseid as ".$allroles[$ra->roleid]->shortname);
+    if ($unenrolaction != ENROL_EXT_REMOVED_SUSPEND) {
+        $rs = $DB->get_recordset_sql($sql, $params);
+        foreach($rs as $ra) {
+            role_unassign($ra->roleid, $ra->userid, $ra->contextid, 'enrol_meta', $ra->itemid);
+            if ($verbose) {
+                mtrace("  unassigning role: $ra->userid ==> $ra->courseid as ".$allroles[$ra->roleid]->shortname);
+            }
         }
+        $rs->close();
     }
-    $rs->close();
 
 
     // kick out or suspend users without synced roles if syncall disabled
@@ -689,9 +591,52 @@ function enrol_meta_sync($courseid = NULL, $verbose = false) {
         }
     }
 
+    // Finally sync groups.
+    $affectedusers = groups_sync_with_enrolment('meta', $courseid);
+    if ($verbose) {
+        foreach ($affectedusers['removed'] as $gm) {
+            mtrace("removing user from group: $gm->userid ==> $gm->courseid - $gm->groupname", 1);
+        }
+        foreach ($affectedusers['added'] as $ue) {
+            mtrace("adding user to group: $ue->userid ==> $ue->courseid - $ue->groupname", 1);
+        }
+    }
+
     if ($verbose) {
         mtrace('...user enrolment synchronisation finished.');
     }
 
     return 0;
+}
+
+/**
+ * Create a new group with the course's name.
+ *
+ * @param int $courseid
+ * @param int $linkedcourseid
+ * @return int $groupid Group ID for this cohort.
+ */
+function enrol_meta_create_new_group($courseid, $linkedcourseid) {
+    global $DB, $CFG;
+
+    require_once($CFG->dirroot.'/group/lib.php');
+
+    $coursename = $DB->get_field('course', 'fullname', array('id' => $linkedcourseid), MUST_EXIST);
+    $a = new stdClass();
+    $a->name = $coursename;
+    $a->increment = '';
+    $inc = 1;
+    $groupname = trim(get_string('defaultgroupnametext', 'enrol_meta', $a));
+    // Check to see if the group name already exists in this course. Add an incremented number if it does.
+    while ($DB->record_exists('groups', array('name' => $groupname, 'courseid' => $courseid))) {
+        $a->increment = '(' . (++$inc) . ')';
+        $groupname = trim(get_string('defaultgroupnametext', 'enrol_meta', $a));
+    }
+    // Create a new group for the course meta sync.
+    $groupdata = new stdClass();
+    $groupdata->courseid = $courseid;
+    $groupdata->name = $groupname;
+    $groupid = groups_create_group($groupdata);
+
+    return $groupid;
 }

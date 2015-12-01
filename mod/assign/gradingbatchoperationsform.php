@@ -49,8 +49,11 @@ class mod_assign_grading_batch_operations_form extends moodleform {
         if ($instance['submissiondrafts']) {
             $options['reverttodraft'] = get_string('reverttodraft', 'assign');
         }
-        if ($instance['duedate']) {
+        if ($instance['duedate'] && has_capability('mod/assign:grantextension', $instance['context'])) {
             $options['grantextension'] = get_string('grantextension', 'assign');
+        }
+        if ($instance['attemptreopenmethod'] == ASSIGN_ATTEMPT_REOPEN_METHOD_MANUAL) {
+            $options['addattempt'] = get_string('addattempt', 'assign');
         }
 
         foreach ($instance['feedbackplugins'] as $plugin) {
@@ -61,11 +64,21 @@ class mod_assign_grading_batch_operations_form extends moodleform {
                 }
             }
         }
+        if ($instance['markingworkflow']) {
+            $options['setmarkingworkflowstate'] = get_string('setmarkingworkflowstate', 'assign');
+        }
+        if ($instance['markingallocation']) {
+            $options['setmarkingallocation'] = get_string('setmarkingallocation', 'assign');
+        }
 
         $mform->addElement('hidden', 'action', 'gradingbatchoperation');
+        $mform->setType('action', PARAM_ALPHA);
         $mform->addElement('hidden', 'id', $instance['cm']);
+        $mform->setType('id', PARAM_INT);
         $mform->addElement('hidden', 'selectedusers', '', array('class'=>'selectedusers'));
+        $mform->setType('selectedusers', PARAM_SEQUENCE);
         $mform->addElement('hidden', 'returnaction', 'grading');
+        $mform->setType('returnaction', PARAM_ALPHA);
 
         $objs = array();
         $objs[] =& $mform->createElement('select', 'operation', get_string('chooseoperation', 'assign'), $options);

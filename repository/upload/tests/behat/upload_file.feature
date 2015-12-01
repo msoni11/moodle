@@ -1,32 +1,22 @@
-@repository_upload @core_form @repository @_only_local
+@repository @repository_upload @_file_upload
 Feature: Upload files
   In order to add contents
-  As a moodle user
+  As a user
   I need to upload files
 
   @javascript
-  Scenario: Upload a file in a single file filepicker
-    Given I log in as "admin"
-    And I expand "Front page settings" node
-    And I expand "Site administration" node
-    And I expand "Users" node
-    And I expand "Accounts" node
-    And I follow "Upload users"
-    When I upload "lib/tests/fixtures/upload_users.csv" file to "File" filepicker
-    And I press "Upload users"
-    Then I should see "Upload users preview"
-    And I should see "Teacher"
-    And I should see "teacher1@teacher1.com"
-    And I press "Cancel"
-
-  @javascript
-  Scenario: Upload a file in a multiple file filepicker
-    Given the following "courses" exists:
+  Scenario: Upload a file in a multiple file filemanager
+    Given the following "courses" exist:
       | fullname | shortname | category |
       | Course 1 | C1 | 0 |
     And I log in as "admin"
-    And I follow "Admin User"
-    And I follow "My private files"
-    And I upload "lib/tests/fixtures/empty.txt" file to "Files" filepicker
-    Then I should see "empty.txt" in the "div.fp-content" "css_element"
+    When I follow "Manage private files..."
+    And I upload "lib/tests/fixtures/empty.txt" file to "Files" filemanager
+    Then I should see "1" elements in "Files" filemanager
+    And I should see "empty.txt" in the "div.fp-content" "css_element"
+    And I upload "lib/tests/fixtures/empty.txt" file to "Files" filemanager as:
+      | Save as | empty_copy.txt |
+    Then I should see "2" elements in "Files" filemanager
+    And I should see "empty.txt"
+    And I should see "empty_copy.txt"
     And I press "Cancel"

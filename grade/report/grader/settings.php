@@ -35,14 +35,14 @@ if ($ADMIN->fulltree) {
     $settings->add(new admin_setting_configtext('grade_report_studentsperpage', get_string('studentsperpage', 'grades'),
                                             get_string('studentsperpage_help', 'grades'), 100));
 
+    $settings->add(new admin_setting_configcheckbox('grade_report_showonlyactiveenrol', get_string('showonlyactiveenrol', 'grades'),
+                                                get_string('showonlyactiveenrol_help', 'grades'), 1));
+
     $settings->add(new admin_setting_configcheckbox('grade_report_quickgrading', get_string('quickgrading', 'grades'),
                                                 get_string('quickgrading_help', 'grades'), 1));
 
     $settings->add(new admin_setting_configcheckbox('grade_report_showquickfeedback', get_string('quickfeedback', 'grades'),
                                                 get_string('showquickfeedback_help', 'grades'), 0));
-
-    $settings->add(new admin_setting_configcheckbox('grade_report_fixedstudents', get_string('fixedstudents', 'grades'),
-                                                get_string('fixedstudents_help', 'grades'), 0));
 
     $settings->add(new admin_setting_configselect('grade_report_meanselection', get_string('meanselection', 'grades'),
                                               get_string('meanselection_help', 'grades'), GRADE_REPORT_MEAN_GRADED,
@@ -52,8 +52,9 @@ if ($ADMIN->fulltree) {
     $settings->add(new admin_setting_configcheckbox('grade_report_enableajax', get_string('enableajax', 'grades'),
                                                 get_string('enableajax_help', 'grades'), 0));
 
-    $settings->add(new admin_setting_configcheckbox('grade_report_showcalculations', get_string('showcalculations', 'grades'),
-                                                get_string('showcalculations_help', 'grades'), 0));
+    $settings->add(new admin_setting_configcheckbox('grade_report_showcalculations',
+                                                    get_string('showcalculations', 'grades'),
+                                                    get_string('showcalculations_help', 'grades'), 1));
 
     $settings->add(new admin_setting_configcheckbox('grade_report_showeyecons', get_string('showeyecons', 'grades'),
                                                 get_string('showeyecons_help', 'grades'), 0));

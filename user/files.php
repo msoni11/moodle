@@ -1,5 +1,4 @@
 <?php
-
 // This file is part of Moodle - http://moodle.org/
 //
 // Moodle is free software: you can redistribute it and/or modify
@@ -18,7 +17,8 @@
 /**
  * Manage files in folder in private area.
  *
- * @package   core_files
+ * @package   core_user
+ * @category  files
  * @copyright 2010 Petr Skoda (http://skodak.org)
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -41,28 +41,36 @@ if (empty($returnurl)) {
 $context = context_user::instance($USER->id);
 require_capability('moodle/user:manageownfiles', $context);
 
-$title = get_string('myfiles');
+$title = get_string('privatefiles');
 $struser = get_string('user');
 
 $PAGE->set_url('/user/files.php');
 $PAGE->set_context($context);
 $PAGE->set_title($title);
-$PAGE->set_heading($title);
+$PAGE->set_heading(fullname($USER));
 $PAGE->set_pagelayout('mydashboard');
 $PAGE->set_pagetype('user-files');
 
+$maxbytes = $CFG->userquota;
 $maxareabytes = $CFG->userquota;
 if (has_capability('moodle/user:ignoreuserquota', $context)) {
+    $maxbytes = USER_CAN_IGNORE_FILE_SIZE_LIMITS;
     $maxareabytes = FILE_AREA_MAX_BYTES_UNLIMITED;
 }
 
 $data = new stdClass();
 $data->returnurl = $returnurl;
-$options = array('subdirs' => 1, 'maxbytes' => $CFG->userquota, 'maxfiles' => -1, 'accepted_types' => '*',
+$options = array('subdirs' => 1, 'maxbytes' => $maxbytes, 'maxfiles' => -1, 'accepted_types' => '*',
         'areamaxbytes' => $maxareabytes);
 file_prepare_standard_filemanager($data, 'files', $options, $context, 'user', 'private', 0);
 
-$mform = new user_files_form(null, array('data'=>$data, 'options'=>$options));
+// Attempt to generate an inbound message address to support e-mail to private files.
+$generator = new \core\message\inbound\address_manager();
+$generator->set_handler('\core\message\inbound\private_files_handler');
+$generator->set_data(-1);
+$data->emaillink = $generator->generate($USER->id);
+
+$mform = new user_files_form(null, array('data' => $data, 'options' => $options));
 
 if ($mform->is_cancelled()) {
     redirect($returnurl);
@@ -73,6 +81,8 @@ if ($mform->is_cancelled()) {
 
 echo $OUTPUT->header();
 echo $OUTPUT->box_start('generalbox');
+
+
 $mform->display();
 echo $OUTPUT->box_end();
 echo $OUTPUT->footer();

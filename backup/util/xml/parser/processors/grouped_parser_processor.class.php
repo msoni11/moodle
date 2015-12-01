@@ -1,5 +1,4 @@
 <?php
-
 // This file is part of Moodle - http://moodle.org/
 //
 // Moodle is free software: you can redistribute it and/or modify
@@ -43,6 +42,34 @@ abstract class grouped_parser_processor extends simplified_parser_processor {
     protected $groupedpaths; // Paths we are requesting grouped
     protected $currentdata;  // Where we'll be acummulating data
 
+    // We create a array that stores each of the paths in a tree fashion
+    // like the filesystem.  Each element stores all the child elements that are
+    // part of a full path that builds the grouped parent path we are storing.
+    // eg Array keys are stored as follows;
+    // root => a => b
+    //      => b
+    //      => c => d
+    //           => e => f.
+    // Grouped paths here are; /a/b, /b, /c/d, /c/e/f.
+    // There are no nested parent paths, that is an enforced rule so
+    // we store an empty array to designate that the particular XML path element
+    // is in fact a grouped path.
+    // eg; $this->groupedparentprefixtree['a']['b'] = array();
+    /** @var array Search tree storing the grouped paths. */
+    protected $groupedparentprefixtree;
+
+    /**
+     * Keep cache of parent directory paths for XML parsing.
+     * @var array
+     */
+    protected $parentcache = array();
+
+    /**
+     * Remaining space for parent directory paths.
+     * @var integer
+     */
+    protected $parentcacheavailablesize = 2048;
+
     public function __construct(array $paths = array()) {
         $this->groupedpaths = array();
         $this->currentdata = null;
@@ -65,7 +92,19 @@ abstract class grouped_parser_processor extends simplified_parser_processor {
                 $a->child = $found;
                 throw new progressive_parser_exception('xml_grouped_child_found', $a);
             }
-            $this->groupedpaths[] = $path;
+            $this->groupedpaths[$path] = true;
+
+            // We check earlier in the function if there is a parent that is above the path
+            // to be added so we can be sure no parent exists in the tree.
+            $patharray = explode('/', $path);
+            $currentpos = &$this->groupedparentprefixtree;
+            foreach ($patharray as $item) {
+                if (!isset($currentpos[$item])) {
+                    $currentpos[$item] = array();
+                }
+                // Update the current array position using a reference to allow in-place updates to the array.
+                $currentpos = &$currentpos[$item];
+            }
         }
         parent::add_path($path);
     }
@@ -141,7 +180,7 @@ abstract class grouped_parser_processor extends simplified_parser_processor {
     }
 
     protected function path_is_grouped($path) {
-        return in_array($path, $this->groupedpaths);
+        return isset($this->groupedpaths[$path]);
     }
 
     /**
@@ -150,15 +189,56 @@ abstract class grouped_parser_processor extends simplified_parser_processor {
      * false if not
      */
     protected function grouped_parent_exists($path) {
-        $parentpath = progressive_parser::dirname($path);
-        while ($parentpath != '/') {
-            if ($this->path_is_grouped($parentpath)) {
-                return $parentpath;
+        // Search the tree structure to find out if one of the paths
+        // above the $path is a grouped path.
+        $patharray = explode('/', $this->get_parent_path($path));
+        $groupedpath = '';
+        $currentpos = &$this->groupedparentprefixtree;
+        foreach ($patharray as $item) {
+            // When the item isn't set in the array we know
+            // there is no parent grouped path.
+            if (!isset($currentpos[$item])) {
+                return false;
             }
-            $parentpath = progressive_parser::dirname($parentpath);
+
+            // When we aren't at the start of the path, continue to build
+            // a string representation of the path that is traversed.  We will
+            // return the grouped path to the caller if we find one.
+            if ($item != '') {
+                $groupedpath .= '/'.$item;
+            }
+
+            if ($currentpos[$item] == array()) {
+                return $groupedpath;
+            }
+            $currentpos = &$currentpos[$item];
         }
         return false;
     }
+
+    /**
+     * Get the parent path using a local cache for performance.
+     *
+     * @param $path string The pathname you wish to obtain the parent name for.
+     * @return string The parent pathname.
+     */
+    protected function get_parent_path($path) {
+        if (!isset($this->parentcache[$path])) {
+            $this->parentcache[$path] = progressive_parser::dirname($path);
+            $this->parentcacheavailablesize--;
+            if ($this->parentcacheavailablesize < 0) {
+                // Older first is cheaper than LRU.  We use 10% as items are grouped together and the large quiz
+                // restore from MDL-40585 used only 600 parent paths. This is an XML heirarchy, so common paths
+                // are grouped near each other. eg; /question_bank/question_category/question/element. After keeping
+                // question_bank paths in the cache when we move to another area and the question_bank cache is not
+                // useful any longer.
+                $this->parentcache = array_slice($this->parentcache, 200, null, true);
+                $this->parentcacheavailablesize += 200;
+            }
+        }
+        return $this->parentcache[$path];
+    }
+
 
     /**
      * Function that will look for any grouped
@@ -167,7 +247,7 @@ abstract class grouped_parser_processor extends simplified_parser_processor {
      */
     protected function grouped_child_exists($path) {
         $childpath = $path . '/';
-        foreach ($this->groupedpaths as $groupedpath) {
+        foreach ($this->groupedpaths as $groupedpath => $set) {
             if (strpos($groupedpath, $childpath) === 0) {
                 return $groupedpath;
             }

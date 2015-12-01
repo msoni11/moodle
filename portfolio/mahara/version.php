@@ -17,7 +17,7 @@
 /**
  * This file contains the version information for the mahara portfolio plugin
  *
- * @since      2.0
+ * @since      Moodle 2.0
  * @package    portfolio
  * @subpackage mahara
  * @copyright  2009 Penny Leach
@@ -26,7 +26,7 @@
 
 defined('MOODLE_INTERNAL') || die();
 
-$plugin->version   = 2012112900;        // The current plugin version (Date: YYYYMMDDXX)
-$plugin->requires  = 2012112900;        // Requires this Moodle version
+$plugin->version   = 2015111600;        // The current plugin version (Date: YYYYMMDDXX)
+$plugin->requires  = 2015111000;        // Requires this Moodle version
 $plugin->component = 'portfolio_mahara'; // Full name of the plugin (used for diagnostics)
 $plugin->cron      = 0;

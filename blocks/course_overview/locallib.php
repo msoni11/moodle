@@ -22,6 +22,10 @@
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
+define('BLOCKS_COURSE_OVERVIEW_SHOWCATEGORIES_NONE', '0');
+define('BLOCKS_COURSE_OVERVIEW_SHOWCATEGORIES_ONLY_PARENT_NAME', '1');
+define('BLOCKS_COURSE_OVERVIEW_SHOWCATEGORIES_FULL_PATH', '2');
+
 /**
  * Display overview for courses
  *
@@ -31,8 +35,17 @@
 function block_course_overview_get_overviews($courses) {
     $htmlarray = array();
     if ($modules = get_plugin_list_with_function('mod', 'print_overview')) {
-        foreach ($modules as $fname) {
-            $fname($courses,$htmlarray);
+        // Split courses list into batches with no more than MAX_MODINFO_CACHE_SIZE courses in one batch.
+        // Otherwise we exceed the cache limit in get_fast_modinfo() and rebuild it too often.
+        if (defined('MAX_MODINFO_CACHE_SIZE') && MAX_MODINFO_CACHE_SIZE > 0 && count($courses) > MAX_MODINFO_CACHE_SIZE) {
+            $batches = array_chunk($courses, MAX_MODINFO_CACHE_SIZE, true);
+        } else {
+            $batches = array($courses);
+        }
+        foreach ($batches as $courses) {
+            foreach ($modules as $fname) {
+                $fname($courses, $htmlarray);
+            }
         }
     }
     return $htmlarray;
@@ -50,10 +63,34 @@ function block_course_overview_update_mynumber($number) {
 /**
  * Sets user course sorting preference in course_overview block
  *
- * @param array $sortorder sort order of course
+ * @param array $sortorder list of course ids
  */
 function block_course_overview_update_myorder($sortorder) {
-    set_user_preference('course_overview_course_order', serialize($sortorder));
+    $value = implode(',', $sortorder);
+    if (core_text::strlen($value) > 1333) {
+        // The value won't fit into the user preference. Remove courses in the end of the list (mostly likely user won't even notice).
+        $value = preg_replace('/,[\d]*$/', '', core_text::substr($value, 0, 1334));
+    }
+    set_user_preference('course_overview_course_sortorder', $value);
+}
+
+/**
+ * Gets user course sorting preference in course_overview block
+ *
+ * @return array list of course ids
+ */
+function block_course_overview_get_myorder() {
+    if ($value = get_user_preferences('course_overview_course_sortorder')) {
+        return explode(',', $value);
+    }
+    // If preference was not found, look in the old location and convert if found.
+    $order = array();
+    if ($value = get_user_preferences('course_overview_course_order')) {
+        $order = unserialize($value);
+        block_course_overview_update_myorder($order);
+        unset_user_preference('course_overview_course_order');
+    }
+    return $order;
 }
 
 /**
@@ -101,16 +138,21 @@ function block_course_overview_get_child_shortnames($courseid) {
 /**
  * Returns maximum number of courses which will be displayed in course_overview block
  *
+ * @param bool $showallcourses if set true all courses will be visible.
  * @return int maximum number of courses
  */
-function block_course_overview_get_max_user_courses() {
+function block_course_overview_get_max_user_courses($showallcourses = false) {
     // Get block configuration
     $config = get_config('block_course_overview');
     $limit = $config->defaultmaxcourses;
 
     // If max course is not set then try get user preference
     if (empty($config->forcedefaultmaxcourses)) {
-        $limit = get_user_preferences('course_overview_number_of_courses', $limit);
+        if ($showallcourses) {
+            $limit = 0;
+        } else {
+            $limit = get_user_preferences('course_overview_number_of_courses', $limit);
+        }
     }
     return $limit;
 }
@@ -118,14 +160,15 @@ function block_course_overview_get_max_user_courses() {
 /**
  * Return sorted list of user courses
  *
+ * @param bool $showallcourses if set true all courses will be visible.
  * @return array list of sorted courses and count of courses.
  */
-function block_course_overview_get_sorted_courses() {
+function block_course_overview_get_sorted_courses($showallcourses = false) {
     global $USER;
 
-    $limit = block_course_overview_get_max_user_courses();
+    $limit = block_course_overview_get_max_user_courses($showallcourses);
 
-    $courses = enrol_get_my_courses('id, shortname, fullname, modinfo, sectioncache');
+    $courses = enrol_get_my_courses();
     $site = get_site();
 
     if (array_key_exists($site->id,$courses)) {
@@ -152,10 +195,7 @@ function block_course_overview_get_sorted_courses() {
         $courses[$remoteid] = $val;
     }
 
-    $order = array();
-    if (!is_null($usersortorder = get_user_preferences('course_overview_course_order'))) {
-        $order = unserialize($usersortorder);
-    }
+    $order = block_course_overview_get_myorder();
 
     $sortedcourses = array();
     $counter = 0;

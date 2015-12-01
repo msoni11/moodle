@@ -1,5 +1,4 @@
 <?php
-
 // This file is part of Moodle - http://moodle.org/
 //
 // Moodle is free software: you can redistribute it and/or modify
@@ -18,8 +17,7 @@
 /**
  * Provides support for the conversion of moodle1 backup to the moodle2 format
  *
- * @package    mod
- * @subpackage imscp
+ * @package mod_imscp
  * @copyright  2011 Andrew Davis <andrew@moodle.com>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -28,6 +26,9 @@ defined('MOODLE_INTERNAL') || die();
 
 /**
  * imscp conversion handler. This resource handler is called by moodle1_mod_resource_handler
+ *
+ * @copyright  2011 Andrew Davis <andrew@moodle.com>
+ * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class moodle1_mod_imscp_handler extends moodle1_resource_successor_handler {
 
@@ -45,7 +46,7 @@ class moodle1_mod_imscp_handler extends moodle1_resource_successor_handler {
         $moduleid      = $currentcminfo['id'];
         $contextid     = $this->converter->get_contextid(CONTEXT_MODULE, $moduleid);
 
-        // prepare the new imscp instance record
+        // Prepare the new imscp instance record.
         $imscp                  = array();
         $imscp['id']            = $data['id'];
         $imscp['name']          = $data['name'];
@@ -56,15 +57,15 @@ class moodle1_mod_imscp_handler extends moodle1_resource_successor_handler {
         $imscp['structure']     = null;
         $imscp['timemodified']  = $data['timemodified'];
 
-        // prepare a fresh new file manager for this instance
+        // Prepare a fresh new file manager for this instance.
         $this->fileman = $this->converter->get_file_manager($contextid, 'mod_imscp');
 
-        // convert course files embedded into the intro
+        // Convert course files embedded into the intro.
         $this->fileman->filearea = 'intro';
         $this->fileman->itemid   = 0;
         $imscp['intro'] = moodle1_converter::migrate_referenced_files($imscp['intro'], $this->fileman);
 
-        // migrate package backup file
+        // Migrate package backup file.
         if ($data['reference']) {
             $packagename = basename($data['reference']);
             $packagepath = $this->converter->get_tempdir_path().'/moddata/resource/'.$data['id'].'/'.$packagename;
@@ -77,16 +78,17 @@ class moodle1_mod_imscp_handler extends moodle1_resource_successor_handler {
             }
         }
 
-        // migrate extracted package data
+        // Migrate extracted package data.
         $this->fileman->filearea = 'content';
         $this->fileman->itemid   = 1;
         $this->fileman->migrate_directory('moddata/resource/'.$data['id']);
 
-        // parse manifest
-        $structure = $this->parse_structure($this->converter->get_tempdir_path().'/moddata/resource/'.$data['id'].'/imsmanifest.xml');
+        // Parse manifest.
+        $structure = $this->parse_structure($this->converter->get_tempdir_path().
+                    '/moddata/resource/'.$data['id'].'/imsmanifest.xml', $imscp, $contextid);
         $imscp['structure'] = is_array($structure) ? serialize($structure) : null;
 
-        // write imscp.xml
+        // Write imscp.xml.
         $this->open_xml_writer("activities/imscp_{$moduleid}/imscp.xml");
         $this->xmlwriter->begin_tag('activity', array('id' => $instanceid, 'moduleid' => $moduleid,
             'modulename' => 'imscp', 'contextid' => $contextid));
@@ -94,7 +96,7 @@ class moodle1_mod_imscp_handler extends moodle1_resource_successor_handler {
         $this->xmlwriter->end_tag('activity');
         $this->close_xml_writer();
 
-        // write inforef.xml
+        // Write inforef.xml.
         $this->open_xml_writer("activities/imscp_{$moduleid}/inforef.xml");
         $this->xmlwriter->begin_tag('inforef');
         $this->xmlwriter->begin_tag('fileref');
@@ -106,14 +108,14 @@ class moodle1_mod_imscp_handler extends moodle1_resource_successor_handler {
         $this->close_xml_writer();
     }
 
-    /// internal implementation details follow /////////////////////////////////
+    // Internal implementation details follow.
 
     /**
      * Parse the IMS package structure for the $imscp->structure field
      *
      * @param string $manifestfilepath the full path to the manifest file to parse
      */
-    protected function parse_structure($manifestfilepath) {
+    protected function parse_structure($manifestfilepath, $imscp, $context) {
         global $CFG;
 
         if (!file_exists($manifestfilepath)) {
@@ -127,6 +129,6 @@ class moodle1_mod_imscp_handler extends moodle1_resource_successor_handler {
         }
 
         require_once($CFG->dirroot.'/mod/imscp/locallib.php');
-        return imscp_parse_manifestfile($manifestfilecontents);
+        return imscp_parse_manifestfile($manifestfilecontents, $imscp, $context);
     }
 }

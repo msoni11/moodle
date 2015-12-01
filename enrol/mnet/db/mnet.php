@@ -20,9 +20,8 @@
  * If we rewrite MNet as proposed in MDL-21993 this file would contain
  * just a declaration of xml-rpc methods that this plugin publishes.
  *
- * @since      2.0
- * @package    enrol
- * @subpackage mnet
+ * @since      Moodle 2.0
+ * @package    enrol_mnet
  * @copyright  2010 Penny Leach
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */

@@ -25,11 +25,28 @@
 defined('MOODLE_INTERNAL') || die();
 
 /**
+ * COHORT_CREATEGROUP constant for automatically creating a group for a cohort.
+ */
+define('COHORT_CREATE_GROUP', -1);
+
+/**
  * Cohort enrolment plugin implementation.
  * @author Petr Skoda
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class enrol_cohort_plugin extends enrol_plugin {
+
+    /**
+     * Is it possible to delete enrol instance via standard UI?
+     *
+     * @param stdClass $instance
+     * @return bool
+     */
+    public function can_delete_instance($instance) {
+        $context = context_course::instance($instance->courseid);
+        return has_capability('enrol/cohort:config', $context);
+    }
+
     /**
      * Returns localised name of enrol instance.
      *
@@ -46,6 +63,9 @@ class enrol_cohort_plugin extends enrol_plugin {
         } else if (empty($instance->name)) {
             $enrol = $this->get_name();
             $cohort = $DB->get_record('cohort', array('id'=>$instance->customint1));
+            if (!$cohort) {
+                return get_string('pluginname', 'enrol_'.$enrol);
+            }
             $cohortname = format_string($cohort->name, true, array('context'=>context::instance_by_id($cohort->contextid)));
             if ($role = $DB->get_record('role', array('id'=>$instance->roleid))) {
                 $role = role_get_name($role, context_course::instance($instance->courseid, IGNORE_MISSING));
@@ -80,25 +100,13 @@ class enrol_cohort_plugin extends enrol_plugin {
      * @return bool
      */
     protected function can_add_new_instances($courseid) {
-        global $DB;
-
+        global $CFG;
+        require_once($CFG->dirroot . '/cohort/lib.php');
         $coursecontext = context_course::instance($courseid);
         if (!has_capability('moodle/course:enrolconfig', $coursecontext) or !has_capability('enrol/cohort:config', $coursecontext)) {
             return false;
         }
-        list($sqlparents, $params) = $DB->get_in_or_equal(get_parent_contexts($coursecontext));
-        $sql = "SELECT id, contextid
-                  FROM {cohort}
-                 WHERE contextid $sqlparents
-              ORDER BY name ASC";
-        $cohorts = $DB->get_records_sql($sql, $params);
-        foreach ($cohorts as $c) {
-            $context = context::instance_by_id($c->contextid);
-            if (has_capability('moodle/cohort:view', $context)) {
-                return true;
-            }
-        }
-        return false;
+        return cohort_get_available_cohorts($coursecontext, 0, 0, 1) ? true : false;
     }
 
     /**
@@ -119,7 +127,7 @@ class enrol_cohort_plugin extends enrol_plugin {
         if (has_capability('enrol/cohort:config', $context)) {
             $editlink = new moodle_url("/enrol/cohort/edit.php", array('courseid'=>$instance->courseid, 'id'=>$instance->id));
             $icons[] = $OUTPUT->action_icon($editlink, new pix_icon('t/edit', get_string('edit'), 'core',
-                    array('class' => 'smallicon')));
+                    array('class' => 'iconsmall')));
         }
 
         return $icons;
@@ -203,54 +211,6 @@ class enrol_cohort_plugin extends enrol_plugin {
             $actions[] = new user_enrolment_action(new pix_icon('t/delete', ''), get_string('unenrol', 'enrol'), $url, array('class'=>'unenrollink', 'rel'=>$ue->id));
         }
         return $actions;
-    }
-
-    /**
-     * Returns a button to enrol a cohort or its users through the manual enrolment plugin.
-     *
-     * This function also adds a quickenrolment JS ui to the page so that users can be enrolled
-     * via AJAX.
-     *
-     * @param course_enrolment_manager $manager
-     * @return enrol_user_button
-     */
-    public function get_manual_enrol_button(course_enrolment_manager $manager) {
-        $course = $manager->get_course();
-        if (!$this->can_add_new_instances($course->id)) {
-            return false;
-        }
-
-        $cohorturl = new moodle_url('/enrol/cohort/edit.php', array('courseid' => $course->id));
-        $button = new enrol_user_button($cohorturl, get_string('enrolcohort', 'enrol'), 'get');
-        $button->class .= ' enrol_cohort_plugin';
-
-        $button->strings_for_js(array(
-            'enrol',
-            'synced',
-            'enrolcohort',
-            'enrolcohortusers',
-            ), 'enrol');
-        $button->strings_for_js(array(
-            'ajaxmore',
-            'cohortsearch',
-            ), 'enrol_cohort');
-        $button->strings_for_js('assignroles', 'role');
-        $button->strings_for_js('cohort', 'cohort');
-        $button->strings_for_js('users', 'moodle');
-
-        // No point showing this at all if the user cant manually enrol users.
-        $hasmanualinstance = has_capability('enrol/manual:enrol', $manager->get_context()) && $manager->has_instance('manual');
-
-        $modules = array('moodle-enrol_cohort-quickenrolment', 'moodle-enrol_cohort-quickenrolment-skin');
-        $function = 'M.enrol_cohort.quickenrolment.init';
-        $arguments = array(
-            'courseid'        => $course->id,
-            'ajaxurl'         => '/enrol/cohort/ajax.php',
-            'url'             => $manager->get_moodlepage()->url->out(false),
-            'manualEnrolment' => $hasmanualinstance);
-        $button->require_yui_module($modules, $function, array($arguments));
-
-        return $button;
     }
 
     /**
@@ -345,6 +305,17 @@ class enrol_cohort_plugin extends enrol_plugin {
         // Nothing to do here, the group members are added in $this->restore_group_restored()
         return;
     }
+
+    /**
+     * Is it possible to hide/show enrol instance via standard UI?
+     *
+     * @param stdClass $instance
+     * @return bool
+     */
+    public function can_hide_show_instance($instance) {
+        $context = context_course::instance($instance->courseid);
+        return has_capability('enrol/cohort:config', $context);
+    }
 }
 
 /**
@@ -356,4 +327,35 @@ class enrol_cohort_plugin extends enrol_plugin {
  */
 function enrol_cohort_allow_group_member_remove($itemid, $groupid, $userid) {
     return false;
+}
+
+/**
+ * Create a new group with the cohorts name.
+ *
+ * @param int $courseid
+ * @param int $cohortid
+ * @return int $groupid Group ID for this cohort.
+ */
+function enrol_cohort_create_new_group($courseid, $cohortid) {
+    global $DB;
+
+    $groupname = $DB->get_field('cohort', 'name', array('id' => $cohortid), MUST_EXIST);
+    $a = new stdClass();
+    $a->name = $groupname;
+    $a->increment = '';
+    $groupname = trim(get_string('defaultgroupnametext', 'enrol_cohort', $a));
+    $inc = 1;
+    // Check to see if the cohort group name already exists. Add an incremented number if it does.
+    while ($DB->record_exists('groups', array('name' => $groupname, 'courseid' => $courseid))) {
+        $a->increment = '(' . (++$inc) . ')';
+        $newshortname = trim(get_string('defaultgroupnametext', 'enrol_cohort', $a));
+        $groupname = $newshortname;
+    }
+    // Create a new group for the cohort.
+    $groupdata = new stdClass();
+    $groupdata->courseid = $courseid;
+    $groupdata->name = $groupname;
+    $groupid = groups_create_group($groupdata);
+
+    return $groupid;
 }

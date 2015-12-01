@@ -18,8 +18,7 @@
 /**
  * Settings used by the lesson module, were moved from mod_edit
  *
- * @package    mod
- * @subpackage lesson
+ * @package mod_lesson
  * @copyright  2009 Sam Hemelryk
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or late
  **/
@@ -48,10 +47,6 @@ if ($ADMIN->fulltree) {
 
     $settings->add(new admin_setting_configcheckbox('lesson_mediaclose', get_string('mediaclose', 'lesson'),
             get_string('configmediaclose', 'lesson'), false, PARAM_TEXT));
-
-    /** Misc lesson settings */
-    $settings->add(new admin_setting_configtext('lesson_maxhighscores', get_string('maxhighscores', 'lesson'),
-            get_string('configmaxhighscores','lesson'), 10, PARAM_INT));
 
     /** Default lesson settings */
     $numbers = array();

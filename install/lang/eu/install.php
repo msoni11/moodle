@@ -31,9 +31,11 @@
 defined('MOODLE_INTERNAL') || die();
 
 $string['admindirname'] = 'Admin direktorioa';
-$string['availablelangs'] = 'Hizkuntza eskuragarrien zerrenda';
+$string['availablelangs'] = 'Hizkuntza-pakete eskuragarriak';
 $string['chooselanguagehead'] = 'Aukeratu hizkuntza bat';
-$string['chooselanguagesub'] = 'Instalazio-prozesurako hizkuntza aukeratu, mesedez.';
+$string['chooselanguagesub'] = 'Mesedez, aukeratu instalaziorako hizkuntza bat. Hizkuntza hori erabiliko da gunearen berezko hizkuntza gisa, baina aurrerago alda daiteke.';
+$string['clialreadyconfigured'] = 'File config.php fitxategia badago, mesedez erabili admin/cli/install_database.php gune hau instalatu nahi baduzu.';
+$string['clialreadyinstalled'] = 'File config.php fitxategia badago, mesedez erabili admin/cli/upgrade.php zure gunea eguneratu nahi baduzu.';
 $string['databasehost'] = 'Datu-basearen ostalaria';
 $string['databasename'] = 'Datu-basearen izena';
 $string['dataroot'] = 'Datu-direktorioa';
@@ -69,9 +71,10 @@ $string['pathsunsecuredataroot'] = 'Dataroot-en kokapena ez da segurua';
 $string['pathswrongadmindir'] = 'Kudeaketa direktorioa ez da existitzen';
 $string['phpextension'] = '{$a} PHP luzapena';
 $string['phpversion'] = 'PHP bertsioa';
-$string['phpversionhelp'] = '<p>Moodle-k PHP 4.1.0 edo geroagoko bertsioa behar du.</p>
+$string['phpversionhelp'] = '<p>Moodle-k gutxienez PHP 4.3.0 edo 5.1.0 (5.0.x errore batzuk ditu). </p>
 <p>Zure bertsioa: {$a}</p>
-<p>PHP eguneratu edo PHP bertsio berriagoa duen zerbitzari batera jo</p>';
+<p>PHP eguneratu edo PHP bertsio berriagoa duen zerbitzari batera jo</p>
+<p>5.0.x baduzu, nahi izanez gero, 4.4.x. bertsiora jaitsi dezakezu</p>';
 $string['welcomep10'] = '{$a->installername} ({$a->installerversion})';
 $string['welcomep20'] = 'Orri hau ikusten baduzu <strong>{$a->packname} {$a->packversion}</strong> paketea
     zure ordenadorean instalatu ahal izan duzu. Zorionak!';

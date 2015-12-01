@@ -15,17 +15,16 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * Quiz statistics report version information.
+ * Quiz activity version information.
  *
- * @package    mod
- * @subpackage quiz
- * @copyright  1999 onwards Martin Dougiamas  {@link http://moodle.com}
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @package   mod_quiz
+ * @copyright 1999 onwards Martin Dougiamas  {@link http://moodle.com}
+ * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
 defined('MOODLE_INTERNAL') || die();
 
-$module->version   = 2013310100;       // The current module version (Date: YYYYMMDDXX).
-$module->requires  = 2012112900;    // Requires this Moodle version.
-$module->component = 'mod_quiz';       // Full name of the plugin (used for diagnostics).
-$module->cron      = 60;
+$plugin->version   = 2015111600;
+$plugin->requires  = 2015111000;
+$plugin->component = 'mod_quiz';
+$plugin->cron      = 60;

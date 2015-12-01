@@ -4,8 +4,6 @@
 
     require_once('../config.php');
     require_once('lib.php');
-    require_once($CFG->dirroot.'/mod/forum/lib.php');
-    require_once($CFG->libdir.'/conditionlib.php');
     require_once($CFG->libdir.'/completionlib.php');
 
     $id          = optional_param('id', 0, PARAM_INT);
@@ -50,7 +48,7 @@
     // Prevent caching of this page to stop confusion when changing page after making AJAX changes
     $PAGE->set_cacheable(false);
 
-    preload_course_contexts($course->id);
+    context_helper::preload_course($course->id);
     $context = context_course::instance($course->id, MUST_EXIST);
 
     // Remove any switched roles before checking login
@@ -95,11 +93,10 @@
 
     require_once($CFG->dirroot.'/calendar/lib.php');    /// This is after login because it needs $USER
 
-    $logparam = 'id='. $course->id;
-    $loglabel = 'view';
-    $infoid = $course->id;
+    // Must set layout before gettting section info. See MDL-47555.
+    $PAGE->set_pagelayout('course');
+
     if ($section and $section > 0) {
-        $loglabel = 'view section';
 
         // Get section details and check it exists.
         $modinfo = get_fast_modinfo($course);
@@ -112,17 +109,19 @@
             // correct error message shown.
             require_capability('moodle/course:viewhiddensections', $context);
         }
-        $infoid = $coursesections->id;
-        $logparam .= '&sectionid='. $infoid;
     }
-    add_to_log($course->id, 'course', $loglabel, "view.php?". $logparam, $infoid);
 
     // Fix course format if it is no longer installed
     $course->format = course_get_format($course)->get_format();
 
-    $PAGE->set_pagelayout('course');
     $PAGE->set_pagetype('course-view-' . $course->format);
+    $PAGE->set_other_editing_capability('moodle/course:update');
     $PAGE->set_other_editing_capability('moodle/course:manageactivities');
+    $PAGE->set_other_editing_capability('moodle/course:activityvisibility');
+    if (course_format_uses_sections($course->format)) {
+        $PAGE->set_other_editing_capability('moodle/course:sectionvisibility');
+        $PAGE->set_other_editing_capability('moodle/course:movesections');
+    }
 
     // Preload course format renderer before output starts.
     // This is a little hacky but necessary since
@@ -189,20 +188,17 @@
             }
         }
 
-        if (has_capability('moodle/course:update', $context)) {
-            if (!empty($section)) {
-                if (!empty($move) and has_capability('moodle/course:movesections', $context) and confirm_sesskey()) {
-                    $destsection = $section + $move;
-                    if (move_section_to($course, $section, $destsection)) {
-                        if ($course->id == SITEID) {
-                            redirect($CFG->wwwroot . '/?redirect=0');
-                        } else {
-                            redirect(course_get_url($course));
-                        }
-                    } else {
-                        echo $OUTPUT->notification('An error occurred while moving a section');
-                    }
+        if (!empty($section) && !empty($move) &&
+                has_capability('moodle/course:movesections', $context) && confirm_sesskey()) {
+            $destsection = $section + $move;
+            if (move_section_to($course, $section, $destsection)) {
+                if ($course->id == SITEID) {
+                    redirect($CFG->wwwroot . '/?redirect=0');
+                } else {
+                    redirect(course_get_url($course));
                 }
+            } else {
+                echo $OUTPUT->notification('An error occurred while moving a section');
             }
         }
     } else {
@@ -218,7 +214,7 @@
     }
 
     $completion = new completion_info($course);
-    if ($completion->is_enabled() && ajaxenabled()) {
+    if ($completion->is_enabled()) {
         $PAGE->requires->string_for_js('completion-title-manual-y', 'completion');
         $PAGE->requires->string_for_js('completion-title-manual-n', 'completion');
         $PAGE->requires->string_for_js('completion-alt-manual-y', 'completion');
@@ -235,11 +231,19 @@
         $PAGE->set_button($buttons);
     }
 
-    $PAGE->set_title(get_string('course') . ': ' . $course->fullname);
+    // If viewing a section, make the title more specific
+    if ($section and $section > 0 and course_format_uses_sections($course->format)) {
+        $sectionname = get_string('sectionname', "format_$course->format");
+        $sectiontitle = get_section_name($course, $section);
+        $PAGE->set_title(get_string('coursesectiontitle', 'moodle', array('course' => $course->fullname, 'sectiontitle' => $sectiontitle, 'sectionname' => $sectionname)));
+    } else {
+        $PAGE->set_title(get_string('coursetitle', 'moodle', array('course' => $course->fullname)));
+    }
+
     $PAGE->set_heading($course->fullname);
     echo $OUTPUT->header();
 
-    if ($completion->is_enabled() && ajaxenabled()) {
+    if ($completion->is_enabled()) {
         // This value tracks whether there has been a dynamic change to the page.
         // It is used so that if a user does this - (a) set some tickmarks, (b)
         // go to another page, (c) clicks Back button - the page will
@@ -277,6 +281,11 @@
     // Content wrapper end.
 
     echo html_writer::end_tag('div');
+
+    // Trigger course viewed event.
+    // We don't trust $context here. Course format inclusion above executes in the global space. We can't assume
+    // anything after that point.
+    course_view(context_course::instance($course->id), $section);
 
     // Include course AJAX
     include_course_ajax($course, $modnamesused);

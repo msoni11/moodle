@@ -18,7 +18,7 @@
 /**
  * Strings for component 'page', language 'en', branch 'MOODLE_20_STABLE'
  *
- * @package   page
+ * @package   mod_page
  * @copyright 1999 onwards Martin Dougiamas  {@link http://moodle.com}
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -46,8 +46,7 @@ A page may be used
 * To embed several videos or sound files together with some explanatory text';
 $string['modulename_link'] = 'mod/page/view';
 $string['modulenameplural'] = 'Pages';
-$string['neverseen'] = 'Never seen';
-$string['optionsheader'] = 'Options';
+$string['optionsheader'] = 'Display options';
 $string['page-mod-page-x'] = 'Any page module page';
 $string['page:addinstance'] = 'Add a new page resource';
 $string['page:view'] = 'View page content';

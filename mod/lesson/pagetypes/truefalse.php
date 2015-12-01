@@ -18,8 +18,7 @@
 /**
  * True/false
  *
- * @package    mod
- * @subpackage lesson
+ * @package mod_lesson
  * @copyright  2009 Sam Hemelryk
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  **/
@@ -51,6 +50,9 @@ class lesson_page_type_truefalse extends lesson_page {
     public function display($renderer, $attempt) {
         global $USER, $CFG, $PAGE;
         $answers = $this->get_answers();
+        foreach ($answers as $key => $answer) {
+            $answers[$key] = parent::rewrite_answers_urls($answer);
+        }
         shuffle($answers);
 
         $params = array('answers'=>$answers, 'lessonid'=>$this->lesson->id, 'contents'=>$this->get_contents(), 'attempt'=>$attempt);
@@ -59,6 +61,18 @@ class lesson_page_type_truefalse extends lesson_page {
         $data->id = $PAGE->cm->id;
         $data->pageid = $this->properties->id;
         $mform->set_data($data);
+
+        // Trigger an event question viewed.
+        $eventparams = array(
+            'context' => context_module::instance($PAGE->cm->id),
+            'objectid' => $this->properties->id,
+            'other' => array(
+                    'pagetype' => $this->get_typestring()
+                )
+            );
+
+        $event = \mod_lesson\event\question_viewed::create($eventparams);
+        $event->trigger();
         return $mform->display();
     }
     public function check_answer() {
@@ -82,6 +96,7 @@ class lesson_page_type_truefalse extends lesson_page {
         }
         $result->answerid = $data->answerid;
         $answer = $DB->get_record("lesson_answers", array("id" => $result->answerid), '*', MUST_EXIST);
+        $answer = parent::rewrite_answers_urls($answer);
         if ($this->lesson->jumpto_is_correct($this->properties->id, $answer->jumpto)) {
             $result->correctanswer = true;
         }
@@ -105,6 +120,7 @@ class lesson_page_type_truefalse extends lesson_page {
         $options->para = false;
         $i = 1;
         foreach ($answers as $answer) {
+            $answer = parent::rewrite_answers_urls($answer);
             $cells = array();
             if ($this->lesson->custom && $answer->score > 0) {
                 // if the score is > 0, then it is correct
@@ -157,8 +173,12 @@ class lesson_page_type_truefalse extends lesson_page {
         $answers  = $this->get_answers();
         $properties->id = $this->properties->id;
         $properties->lessonid = $this->lesson->id;
+        $properties->timemodified = time();
         $properties = file_postupdate_standard_editor($properties, 'contents', array('noclean'=>true, 'maxfiles'=>EDITOR_UNLIMITED_FILES, 'maxbytes'=>$PAGE->course->maxbytes), context_module::instance($PAGE->cm->id), 'mod_lesson', 'page_contents', $properties->id);
         $DB->update_record("lesson_pages", $properties);
+
+        // Trigger an event: page updated.
+        \mod_lesson\event\page_updated::create_from_lesson_page($this, $context)->trigger();
 
         // need to reset offset for correct and wrong responses
         $this->lesson->maxanswers = 2;
@@ -193,6 +213,9 @@ class lesson_page_type_truefalse extends lesson_page {
                 } else {
                     $DB->update_record("lesson_answers", $this->answers[$i]->properties());
                 }
+                // Save files in answers and responses.
+                $this->save_answers_files($context, $maxbytes, $this->answers[$i],
+                        $properties->answer_editor[$i], $properties->response_editor[$i]);
             } else if (isset($this->answers[$i]->id)) {
                 $DB->delete_records('lesson_answers', array('id'=>$this->answers[$i]->id));
                 unset($this->answers[$i]);
@@ -237,9 +260,12 @@ class lesson_page_type_truefalse extends lesson_page {
         $formattextdefoptions = new stdClass(); //I'll use it widely in this page
         $formattextdefoptions->para = false;
         $formattextdefoptions->noclean = true;
+        $formattextdefoptions->context = $answerpage->context;
+
         foreach ($answers as $answer) {
+            $answer = parent::rewrite_answers_urls($answer);
             if ($this->properties->qoption) {
-                if ($useranswer == NULL) {
+                if ($useranswer == null) {
                     $userresponse = array();
                 } else {
                     $userresponse = explode(",", $useranswer->useranswer);
@@ -248,7 +274,7 @@ class lesson_page_type_truefalse extends lesson_page {
                     // make checked
                     $data = "<input  readonly=\"readonly\" disabled=\"disabled\" name=\"answer[$i]\" checked=\"checked\" type=\"checkbox\" value=\"1\" />";
                     if (!isset($answerdata->response)) {
-                        if ($answer->response == NULL) {
+                        if ($answer->response == null) {
                             if ($useranswer->correct) {
                                 $answerdata->response = get_string("thatsthecorrectanswer", "lesson");
                             } else {
@@ -277,10 +303,10 @@ class lesson_page_type_truefalse extends lesson_page {
                     $data .= format_text($answer->answer, $answer->answerformat, $formattextdefoptions);
                 }
             } else {
-                if ($useranswer != NULL and $answer->id == $useranswer->answerid) {
+                if ($useranswer != null and $answer->id == $useranswer->answerid) {
                     // make checked
                     $data = "<input  readonly=\"readonly\" disabled=\"disabled\" name=\"answer[$i]\" checked=\"checked\" type=\"checkbox\" value=\"1\" />";
-                    if ($answer->response == NULL) {
+                    if ($answer->response == null) {
                         if ($useranswer->correct) {
                             $answerdata->response = get_string("thatsthecorrectanswer", "lesson");
                         } else {
@@ -325,16 +351,18 @@ class lesson_add_page_form_truefalse extends lesson_add_page_form_base {
 
     public $qtype = 'truefalse';
     public $qtypestring = 'truefalse';
+    protected $answerformat = LESSON_ANSWER_HTML;
+    protected $responseformat = LESSON_ANSWER_HTML;
 
     public function custom_definition() {
         $this->_form->addElement('header', 'answertitle0', get_string('correctresponse', 'lesson'));
-        $this->add_answer(0, NULL, true);
+        $this->add_answer(0, null, true, $this->get_answer_format());
         $this->add_response(0);
         $this->add_jumpto(0, get_string('correctanswerjump', 'lesson'), LESSON_NEXTPAGE);
         $this->add_score(0, get_string('correctanswerscore', 'lesson'), 1);
 
         $this->_form->addElement('header', 'answertitle1', get_string('wrongresponse', 'lesson'));
-        $this->add_answer(1, NULL, true);
+        $this->add_answer(1, null, true, $this->get_answer_format());
         $this->add_response(1);
         $this->add_jumpto(1, get_string('wronganswerjump', 'lesson'), LESSON_THISPAGE);
         $this->add_score(1, get_string('wronganswerscore', 'lesson'), 0);
@@ -355,6 +383,9 @@ class lesson_display_answer_form_truefalse extends moodleform {
             $attempt = new stdClass();
             $attempt->answerid = null;
         }
+
+        // Disable shortforms.
+        $mform->setDisableShortforms();
 
         $mform->addElement('header', 'pageheader');
 

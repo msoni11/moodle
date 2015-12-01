@@ -65,7 +65,7 @@ M.mod_quiz.timer = {
      */
     init: function(Y, start, preview) {
         M.mod_quiz.timer.Y = Y;
-        M.mod_quiz.timer.endtime = new Date().getTime() + start*1000;
+        M.mod_quiz.timer.endtime = M.pageloadstarttime.getTime() + start*1000;
         M.mod_quiz.timer.preview = preview;
         M.mod_quiz.timer.update();
         Y.one('#quiz-timer').setStyle('display', 'block');
@@ -95,17 +95,11 @@ M.mod_quiz.timer = {
     update: function() {
         var Y = M.mod_quiz.timer.Y;
         var secondsleft = Math.floor((M.mod_quiz.timer.endtime - new Date().getTime())/1000);
-        
-        // If this is a preview and time expired, display timeleft 0 and don't renew the timer.
-        if (M.mod_quiz.timer.preview && secondsleft < 0) {
-            Y.one('#quiz-time-left').setContent('0:00:00');
-            return;
-        }
 
-        // If time has expired, Set the hidden form field that says time has expired.
+        // If time has expired, set the hidden form field that says time has expired and submit
         if (secondsleft < 0) {
             M.mod_quiz.timer.stop(null);
-            Y.one('#quiz-time-left').setContent(M.str.quiz.timesup);
+            Y.one('#quiz-time-left').setContent(M.util.get_string('timesup', 'quiz'));
             var input = Y.one('input[name=timeup]');
             input.set('value', 1);
             var form = input.ancestor('form');
@@ -147,7 +141,7 @@ M.mod_quiz.nav.update_flag_state = function(attemptid, questionid, newstate) {
     navlink.removeClass('flagged');
     if (newstate == 1) {
         navlink.addClass('flagged');
-        navlink.one('.accesshide .flagstate').setContent(M.str.question.flagged);
+        navlink.one('.accesshide .flagstate').setContent(M.util.get_string('flagged', 'question'));
     } else {
         navlink.one('.accesshide .flagstate').setContent('');
     }
@@ -225,14 +219,13 @@ M.mod_quiz.secure_window = {
             window.location = 'about:blank';
         }
         Y.delegate('contextmenu', M.mod_quiz.secure_window.prevent, document, '*');
-        Y.delegate('mousedown',   M.mod_quiz.secure_window.prevent_mouse, document, '*');
-        Y.delegate('mouseup',     M.mod_quiz.secure_window.prevent_mouse, document, '*');
+        Y.delegate('mousedown',   M.mod_quiz.secure_window.prevent_mouse, 'body', '*');
+        Y.delegate('mouseup',     M.mod_quiz.secure_window.prevent_mouse, 'body', '*');
         Y.delegate('dragstart',   M.mod_quiz.secure_window.prevent, document, '*');
-        Y.delegate('selectstart', M.mod_quiz.secure_window.prevent, document, '*');
+        Y.delegate('selectstart', M.mod_quiz.secure_window.prevent_selection, document, '*');
         Y.delegate('cut',         M.mod_quiz.secure_window.prevent, document, '*');
         Y.delegate('copy',        M.mod_quiz.secure_window.prevent, document, '*');
         Y.delegate('paste',       M.mod_quiz.secure_window.prevent, document, '*');
-        M.mod_quiz.secure_window.clear_status;
         Y.on('beforeprint', function() {
             Y.one(document.body).setStyle('display', 'none');
         }, window);
@@ -247,19 +240,33 @@ M.mod_quiz.secure_window = {
         Y.on('key', M.mod_quiz.secure_window.prevent, '*', 'down:67,86,88+meta');
     },
 
-    clear_status: function() {
-        window.status = '';
-        setTimeout(M.mod_quiz.secure_window.clear_status, 10);
+    is_content_editable: function(n) {
+        if (n.test('[contenteditable=true]')) {
+            return true;
+        }
+        n = n.get('parentNode');
+        if (n === null) {
+            return false;
+        }
+        return M.mod_quiz.secure_window.is_content_editable(n);
+    },
+
+    prevent_selection: function(e) {
+        return false;
     },
 
     prevent: function(e) {
-        alert(M.str.quiz.functiondisabledbysecuremode);
+        alert(M.util.get_string('functiondisabledbysecuremode', 'quiz'));
         e.halt();
     },
 
     prevent_mouse: function(e) {
         if (e.button == 1 && /^(INPUT|TEXTAREA|BUTTON|SELECT|LABEL|A)$/i.test(e.target.get('tagName'))) {
             // Left click on a button or similar. No worries.
+            return;
+        }
+        if (e.button == 1 && M.mod_quiz.secure_window.is_content_editable(e.target)) {
+            // Left click in Atto or similar.
             return;
         }
         e.halt();

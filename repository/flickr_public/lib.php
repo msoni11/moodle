@@ -17,7 +17,7 @@
 /**
  * This plugin is used to access flickr pictures
  *
- * @since 2.0
+ * @since Moodle 2.0
  * @package    repository_flickr_public
  * @copyright  2010 Dongsheng Cai {@link http://dongsheng.org}
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
@@ -32,7 +32,7 @@ require_once(dirname(__FILE__) . '/image.php');
  * You can set up a public account in admin page, so everyone can access
  * flickr photos from this plugin
  *
- * @since 2.0
+ * @since Moodle 2.0
  * @package    repository_flickr_public
  * @copyright  2009 Dongsheng Cai {@link http://dongsheng.org}
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
@@ -397,7 +397,7 @@ class repository_flickr_public extends repository {
         $str .= '<input type="hidden" name="repo_id" value="'.$this->id.'" />';
         $str .= '<input type="hidden" name="ctx_id" value="'.$this->context->id.'" />';
         $str .= '<input type="hidden" name="seekey" value="'.sesskey().'" />';
-        $str .= '<label>'.get_string('fulltext', 'repository_flickr_public').': </label><br/><input name="s" value="" /><br/>';
+        $str .= '<label>'.get_string('fulltext', 'repository_flickr_public').'</label><br/><input name="s" value="" /><br/>';
         $str .= '<label>'.get_string('tag', 'repository_flickr_public').'</label><br /><input type="text" name="flickr_tag" /><br />';
         return $str;
     }
@@ -484,6 +484,7 @@ class repository_flickr_public extends repository {
      */
     public static function instance_config_form($mform) {
         $mform->addElement('text', 'email_address', get_string('emailaddress', 'repository_flickr_public'));
+        $mform->setType('email_address', PARAM_RAW_TRIMMED); // This is for sending to flickr. Not our job to validate it.
         $mform->addElement('checkbox', 'usewatermarks', get_string('watermark', 'repository_flickr_public'));
         $mform->setDefault('usewatermarks', 0);
     }
@@ -508,6 +509,7 @@ class repository_flickr_public extends repository {
         $strrequired = get_string('required');
 
         $mform->addElement('text', 'api_key', get_string('apikey', 'repository_flickr_public'), array('value'=>$api_key,'size' => '40'));
+        $mform->setType('api_key', PARAM_RAW_TRIMMED);
         $mform->addRule('api_key', $strrequired, 'required', null, 'client');
 
         $mform->addElement('static', null, '',  get_string('information','repository_flickr_public'));
@@ -527,7 +529,7 @@ class repository_flickr_public extends repository {
     public static function plugin_init() {
         //here we create a default instance for this type
 
-        $id = repository::static_function('flickr_public','create', 'flickr_public', 0, get_system_context(), array('name'=>'', 'email_address' => null, 'usewatermarks' => false), 0);
+        $id = repository::static_function('flickr_public','create', 'flickr_public', 0, context_system::instance(), array('name'=>'', 'email_address' => null, 'usewatermarks' => false), 0);
         if (empty($id)) {
             return false;
         } else {

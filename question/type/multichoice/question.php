@@ -64,6 +64,24 @@ abstract class qtype_multichoice_base extends question_graded_automatically {
 
     public function apply_attempt_state(question_attempt_step $step) {
         $this->order = explode(',', $step->get_qt_var('_order'));
+
+        // Add any missing answers. Sometimes people edit questions after they
+        // have been attempted which breaks things.
+        foreach ($this->order as $ansid) {
+            if (isset($this->answers[$ansid])) {
+                continue;
+            }
+            $a = new stdClass();
+            $a->id = 0;
+            $a->answer = html_writer::span(get_string('deletedchoice', 'qtype_multichoice'),
+                    'notifyproblem');
+            $a->answerformat = FORMAT_HTML;
+            $a->fraction = 0;
+            $a->feedback = '';
+            $a->feedbackformat = FORMAT_HTML;
+            $this->answers[$ansid] = $this->qtype->make_answer($a);
+            $this->answers[$ansid]->answerformat = FORMAT_HTML;
+        }
     }
 
     public function get_question_summary() {
@@ -97,11 +115,11 @@ abstract class qtype_multichoice_base extends question_graded_automatically {
             return $this->check_combined_feedback_file_access($qa, $options, $filearea);
 
         } else if ($component == 'question' && $filearea == 'answer') {
-            $answerid = reset($args); // itemid is answer id.
+            $answerid = reset($args); // Itemid is answer id.
             return  in_array($answerid, $this->order);
 
         } else if ($component == 'question' && $filearea == 'answerfeedback') {
-            $answerid = reset($args); // itemid is answer id.
+            $answerid = reset($args); // Itemid is answer id.
             $response = $this->get_response($qa);
             $isselected = false;
             foreach ($this->order as $value => $ansid) {
@@ -110,7 +128,7 @@ abstract class qtype_multichoice_base extends question_graded_automatically {
                     break;
                 }
             }
-            // $options->suppresschoicefeedback is a hack specific to the
+            // Param $options->suppresschoicefeedback is a hack specific to the
             // oumultiresponse question type. It would be good to refactor to
             // avoid refering to it here.
             return $options->feedback && empty($options->suppresschoicefeedback) &&
@@ -123,13 +141,6 @@ abstract class qtype_multichoice_base extends question_graded_automatically {
             return parent::check_file_access($qa, $options, $component, $filearea,
                     $args, $forcedownload);
         }
-    }
-
-    public function make_html_inline($html) {
-        $html = preg_replace('~\s*<p>\s*~u', '', $html);
-        $html = preg_replace('~\s*</p>\s*~u', '<br />', $html);
-        $html = preg_replace('~(<br\s*/?>)+$~u', '', $html);
-        return trim($html);
     }
 }
 
@@ -192,6 +203,29 @@ class qtype_multichoice_single_question extends qtype_multichoice_base {
             }
         }
         return array();
+    }
+
+    public function prepare_simulated_post_data($simulatedresponse) {
+        $ansid = 0;
+        foreach ($this->answers as $answer) {
+            if (clean_param($answer->answer, PARAM_NOTAGS) == $simulatedresponse['answer']) {
+                $ansid = $answer->id;
+            }
+        }
+        if ($ansid) {
+            return array('answer' => array_search($ansid, $this->order));
+        } else {
+            return array();
+        }
+    }
+
+    public function get_student_response_values_for_simulation($postdata) {
+        if (!isset($postdata['answer'])) {
+            return array();
+        } else {
+            $answer = $this->answers[$this->order[$postdata['answer']]];
+            return array('answer' => clean_param($answer->answer, PARAM_NOTAGS));
+        }
     }
 
     public function is_same_response(array $prevresponse, array $newresponse) {
@@ -335,10 +369,36 @@ class qtype_multichoice_multi_question extends qtype_multichoice_base {
         return $response;
     }
 
+    public function prepare_simulated_post_data($simulatedresponse) {
+        $postdata = array();
+        foreach ($simulatedresponse as $ans => $checked) {
+            foreach ($this->answers as $ansid => $answer) {
+                if (clean_param($answer->answer, PARAM_NOTAGS) == $ans) {
+                    $fieldno = array_search($ansid, $this->order);
+                    $postdata[$this->field($fieldno)] = $checked;
+                    break;
+                }
+            }
+        }
+        return $postdata;
+    }
+
+    public function get_student_response_values_for_simulation($postdata) {
+        $simulatedresponse = array();
+        foreach ($this->order as $fieldno => $ansid) {
+            if (isset($postdata[$this->field($fieldno)])) {
+                $checked = $postdata[$this->field($fieldno)];
+                $simulatedresponse[clean_param($this->answers[$ansid]->answer, PARAM_NOTAGS)] = $checked;
+            }
+        }
+        ksort($simulatedresponse);
+        return $simulatedresponse;
+    }
+
     public function is_same_response(array $prevresponse, array $newresponse) {
         foreach ($this->order as $key => $notused) {
             $fieldname = $this->field($key);
-            if (!question_utils::arrays_same_at_key($prevresponse, $newresponse, $fieldname)) {
+            if (!question_utils::arrays_same_at_key_integer($prevresponse, $newresponse, $fieldname)) {
                 return false;
             }
         }
@@ -366,7 +426,8 @@ class qtype_multichoice_multi_question extends qtype_multichoice_base {
     public function get_num_selected_choices(array $response) {
         $numselected = 0;
         foreach ($response as $key => $value) {
-            if (!empty($value)) {
+            // Response keys starting with _ are internal values like _order, so ignore them.
+            if (!empty($value) && $key[0] != '_') {
                 $numselected += 1;
             }
         }

@@ -1,5 +1,4 @@
 <?php
-
 // This file is part of Moodle - http://moodle.org/
 //
 // Moodle is free software: you can redistribute it and/or modify
@@ -18,7 +17,7 @@
 /**
  * Strings for component 'block', language 'en', branch 'MOODLE_20_STABLE'
  *
- * @package   block
+ * @package   core_block
  * @copyright 1999 onwards Martin Dougiamas  {@link http://moodle.com}
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -43,11 +42,14 @@ $string['deletecheck'] = 'Delete {$a} block?';
 $string['deleteblock'] = 'Delete {$a} block';
 $string['deleteblockcheck'] = 'Are you sure that you want to delete this block titled {$a}?';
 $string['deleteblockwarning'] = '<p>You are about to delete a block that appears elsewhere.</p><p>Original block location: {$a->location}<br />Display on page types: {$a->pagetype}</p><p>Are you sure you want to continue?</p>';
+$string['dockblock'] = 'Dock {$a} block';
 $string['hideblock'] = 'Hide {$a} block';
 $string['hidedockpanel'] = 'Hide the dock panel';
 $string['hidepanel'] = 'Hide panel';
 $string['moveblock'] = 'Move {$a} block';
-$string['moveblockhere'] = 'Move block here';
+$string['moveblockafter'] = 'Move block to after {$a} block';
+$string['moveblockbefore'] = 'Move block to before {$a} block';
+$string['moveblockinregion'] = 'Move block to {$a} region';
 $string['movingthisblockcancel'] = 'Moving this block ({$a})';
 $string['onthispage'] = 'On this page';
 $string['pagetypes'] = 'Page types';

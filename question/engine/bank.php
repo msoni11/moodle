@@ -73,7 +73,7 @@ abstract class question_bank {
      * @return bool whether that question type is installed in this Moodle.
      */
     public static function is_qtype_installed($qtypename) {
-        $plugindir = get_plugin_directory('qtype', $qtypename);
+        $plugindir = core_component::get_plugin_directory('qtype', $qtypename);
         return $plugindir && is_readable($plugindir . '/questiontype.php');
     }
 
@@ -89,7 +89,7 @@ abstract class question_bank {
         if (isset(self::$questiontypes[$qtypename])) {
             return self::$questiontypes[$qtypename];
         }
-        $file = get_plugin_directory('qtype', $qtypename) . '/questiontype.php';
+        $file = core_component::get_plugin_directory('qtype', $qtypename) . '/questiontype.php';
         if (!is_readable($file)) {
             if ($mustexist || $qtypename == 'missingtype') {
                 throw new coding_exception('Unknown question type ' . $qtypename);
@@ -100,7 +100,7 @@ abstract class question_bank {
         include_once($file);
         $class = 'qtype_' . $qtypename;
         if (!class_exists($class)) {
-            throw new coding_exception("Class $class must be defined in $file");
+            throw new coding_exception("Class {$class} must be defined in {$file}.");
         }
         self::$questiontypes[$qtypename] = new $class();
         return self::$questiontypes[$qtypename];
@@ -133,7 +133,7 @@ abstract class question_bank {
      * @return bool whether this question type exists.
      */
     public static function qtype_exists($qtypename) {
-        return array_key_exists($qtypename, get_plugin_list('qtype'));
+        return array_key_exists($qtypename, core_component::get_plugin_list('qtype'));
     }
 
     /**
@@ -149,7 +149,7 @@ abstract class question_bank {
      */
     public static function get_all_qtypes() {
         $qtypes = array();
-        foreach (get_plugin_list('qtype') as $plugin => $notused) {
+        foreach (core_component::get_plugin_list('qtype') as $plugin => $notused) {
             try {
                 $qtypes[$plugin] = self::get_qtype($plugin);
             } catch (coding_exception $e) {
@@ -183,7 +183,7 @@ abstract class question_bank {
         }
 
         ksort($sortorder);
-        collatorlib::asort($otherqtypes);
+        core_collator::asort($otherqtypes);
 
         $sortedqtypes = array();
         foreach ($sortorder as $name) {
@@ -380,14 +380,15 @@ abstract class question_bank {
 
         // The the positive grades in descending order.
         foreach ($rawfractions as $fraction) {
-            $percentage = (100 * $fraction) . '%';
-            self::$fractionoptions["$fraction"] = $percentage;
-            self::$fractionoptionsfull["$fraction"] = $percentage;
+            $percentage = format_float(100 * $fraction, 5, true, true) . '%';
+            self::$fractionoptions["{$fraction}"] = $percentage;
+            self::$fractionoptionsfull["{$fraction}"] = $percentage;
         }
 
         // The the negative grades in descending order.
         foreach (array_reverse($rawfractions) as $fraction) {
-            self::$fractionoptionsfull['' . (-$fraction)] = (-100 * $fraction) . '%';
+            self::$fractionoptionsfull['' . (-$fraction)] =
+                    format_float(-100 * $fraction, 5, true, true) . '%';
         }
 
         self::$fractionoptionsfull['-1.0'] = '-100%';
@@ -420,6 +421,10 @@ abstract class question_bank {
         // Delete any old question preview that got left in the database.
         require_once($CFG->dirroot . '/question/previewlib.php');
         question_preview_cron();
+
+        // Clear older calculated stats from cache.
+        require_once($CFG->dirroot . '/question/engine/statisticslib.php');
+        question_usage_statistics_cron();
     }
 }
 
@@ -433,9 +438,6 @@ abstract class question_bank {
 class question_finder implements cache_data_source {
     /** @var question_finder the singleton instance of this class. */
     protected static $questionfinder = null;
-
-    /** @var cache the question definition cache. */
-    protected $cache = null;
 
     /**
      * @return question_finder a question finder.
@@ -456,10 +458,8 @@ class question_finder implements cache_data_source {
      * @return get the question definition cache we are using.
      */
     protected function get_data_cache() {
-        if ($this->cache == null) {
-            $this->cache = cache::make('core', 'questiondata');
-        }
-        return $this->cache;
+        // Do not double cache here because it may break cache resetting.
+        return cache::make('core', 'questiondata');
     }
 
     /**
@@ -480,7 +480,7 @@ class question_finder implements cache_data_source {
     }
 
     /**
-     * Get the ids of all the questions in a list of categoryies.
+     * Get the ids of all the questions in a list of categories.
      * @param array $categoryids either a categoryid, or a comma-separated list
      *      category ids, or an array of them.
      * @param string $extraconditions extra conditions to AND with the rest of
@@ -499,10 +499,50 @@ class question_finder implements cache_data_source {
         }
 
         return $DB->get_records_select_menu('question',
-                "category $qcsql
+                "category {$qcsql}
                  AND parent = 0
                  AND hidden = 0
-                 $extraconditions", $qcparams + $extraparams, '', 'id,id AS id2');
+                 {$extraconditions}", $qcparams + $extraparams, '', 'id,id AS id2');
+    }
+
+    /**
+     * Get the ids of all the questions in a list of categories, with the number
+     * of times they have already been used in a given set of usages.
+     *
+     * The result array is returned in order of increasing (count previous uses).
+     *
+     * @param array $categoryids an array question_category ids.
+     * @param qubaid_condition $qubaids which question_usages to count previous uses from.
+     * @param string $extraconditions extra conditions to AND with the rest of
+     *      the where clause. Must use named parameters.
+     * @param array $extraparams any parameters used by $extraconditions.
+     * @return array questionid => count of number of previous uses.
+     */
+    public function get_questions_from_categories_with_usage_counts($categoryids,
+            qubaid_condition $qubaids, $extraconditions = '', $extraparams = array()) {
+        global $DB;
+
+        list($qcsql, $qcparams) = $DB->get_in_or_equal($categoryids, SQL_PARAMS_NAMED, 'qc');
+
+        if ($extraconditions) {
+            $extraconditions = ' AND (' . $extraconditions . ')';
+        }
+
+        return $DB->get_records_sql_menu("
+                    SELECT q.id, (SELECT COUNT(1)
+                                    FROM " . $qubaids->from_question_attempts('qa') . "
+                                   WHERE qa.questionid = q.id AND " . $qubaids->where() . "
+                                 ) AS previous_attempts
+
+                      FROM {question} q
+
+                     WHERE q.category {$qcsql}
+                       AND q.parent = 0
+                       AND q.hidden = 0
+                      {$extraconditions}
+
+                  ORDER BY previous_attempts
+                ", $qubaids->from_where_params() + $qcparams + $extraparams);
     }
 
     /* See cache_data_source::load_for_cache. */

@@ -1,5 +1,4 @@
 <?php
-
 // This file is part of Moodle - http://moodle.org/
 //
 // Moodle is free software: you can redistribute it and/or modify
@@ -24,5 +23,5 @@
  */
 
 $string['news_items:addinstance'] = 'Add a new latest news block';
-$string['news_items:myaddinstance'] = 'Add a new latest news block to the My Moodle page';
+$string['news_items:myaddinstance'] = 'Add a new latest news block to Dashboard';
 $string['pluginname'] = 'Latest news';

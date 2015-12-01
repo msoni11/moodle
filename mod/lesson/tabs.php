@@ -20,8 +20,7 @@
 *
 * This file was adapted from the mod/quiz/tabs.php
 *
- * @package    mod
- * @subpackage lesson
+ * @package mod_lesson
  * @copyright  1999 onwards Martin Dougiamas  {@link http://moodle.com}
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or late
 */
@@ -51,12 +50,12 @@ $attemptscount = $DB->count_records('lesson_grades', array('lessonid'=>$lesson->
 
 $row[] = new tabobject('view', "$CFG->wwwroot/mod/lesson/view.php?id=$cm->id", get_string('preview', 'lesson'), get_string('previewlesson', 'lesson', format_string($lesson->name)));
 $row[] = new tabobject('edit', "$CFG->wwwroot/mod/lesson/edit.php?id=$cm->id", get_string('edit', 'lesson'), get_string('edita', 'moodle', format_string($lesson->name)));
-$row[] = new tabobject('reports', "$CFG->wwwroot/mod/lesson/report.php?id=$cm->id", get_string('reports', 'lesson'), get_string('viewreports2', 'lesson', $attemptscount));
-if (has_capability('mod/lesson:edit', $context)) {
-    $row[] = new tabobject('essay', "$CFG->wwwroot/mod/lesson/essay.php?id=$cm->id", get_string('manualgrading', 'lesson'));
+if (has_capability('mod/lesson:viewreports', $context)) {
+    $row[] = new tabobject('reports', "$CFG->wwwroot/mod/lesson/report.php?id=$cm->id", get_string('reports', 'lesson'),
+            get_string('viewreports2', 'lesson', $attemptscount));
 }
-if ($lesson->highscores) {
-    $row[] = new tabobject('highscores', "$CFG->wwwroot/mod/lesson/highscores.php?id=$cm->id", get_string('highscores', 'lesson'));
+if (has_capability('mod/lesson:grade', $context)) {
+    $row[] = new tabobject('essay', "$CFG->wwwroot/mod/lesson/essay.php?id=$cm->id", get_string('manualgrading', 'lesson'));
 }
 
 $tabs[] = $row;

@@ -58,6 +58,7 @@ class edit_grade_form extends moodleform {
         if ($grade_item->gradetype == GRADE_TYPE_VALUE) {
             // numeric grade
             $mform->addElement('text', 'finalgrade', get_string('finalgrade', 'grades'));
+            $mform->setType('finalgrade', PARAM_RAW);
             $mform->addHelpButton('finalgrade', 'finalgrade', 'grades');
             $mform->disabledIf('finalgrade', 'overridden', 'notchecked');
 
@@ -84,11 +85,7 @@ class edit_grade_form extends moodleform {
             $mform->disabledIf('finalgrade', 'overridden', 'notchecked');
         }
 
-        if ($grade_category and $grade_category->aggregation == GRADE_AGGREGATE_SUM) {
-            $mform->addElement('advcheckbox', 'excluded', get_string('excluded', 'grades'), '<small>('.get_string('warningexcludedsum', 'grades').')</small>');
-        } else {
-            $mform->addElement('advcheckbox', 'excluded', get_string('excluded', 'grades'));
-        }
+        $mform->addElement('advcheckbox', 'excluded', get_string('excluded', 'grades'));
         $mform->addHelpButton('excluded', 'excluded', 'grades');
 
         /// hiding

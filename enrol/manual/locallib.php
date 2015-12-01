@@ -257,9 +257,21 @@ class enrol_manual_editselectedusers_operation extends enrol_bulk_enrolment_oper
                 foreach ($user->enrolments as $enrolment) {
                     $enrolment->courseid  = $enrolment->enrolmentinstance->courseid;
                     $enrolment->enrol     = 'manual';
-                    events_trigger('user_enrol_modified', $enrolment);
+                    // Trigger event.
+                    $event = \core\event\user_enrolment_updated::create(
+                            array(
+                                'objectid' => $enrolment->id,
+                                'courseid' => $enrolment->courseid,
+                                'context' => context_course::instance($enrolment->courseid),
+                                'relateduserid' => $user->id,
+                                'other' => array('enrol' => 'manual')
+                                )
+                            );
+                    $event->trigger();
                 }
             }
+            // Delete cached course contacts for this course because they may be affected.
+            cache::make('core', 'coursecontacts')->delete($manager->get_context()->instanceid);
             return true;
         }
 
@@ -411,7 +423,7 @@ function enrol_manual_migrate_plugin_enrolments($enrol) {
         }
 
         // First delete potential role duplicates.
-        $params = array('id'=>$e->id, 'component'=>'enrol_'.$enrol, 'empty'=>$DB->sql_empty());
+        $params = array('id'=>$e->id, 'component'=>'enrol_'.$enrol, 'empty'=>'');
         $sql = "SELECT ra.id
                   FROM {role_assignments} ra
                   JOIN {role_assignments} mra ON (mra.contextid = ra.contextid AND mra.userid = ra.userid AND mra.roleid = ra.roleid AND mra.component = :empty AND mra.itemid = 0)
@@ -425,7 +437,7 @@ function enrol_manual_migrate_plugin_enrolments($enrol) {
         $sql = "UPDATE {role_assignments}
                    SET itemid = 0, component = :empty
                  WHERE itemid = :id AND component = :component";
-        $params = array('empty'=>$DB->sql_empty(), 'id'=>$e->id, 'component'=>'enrol_'.$enrol);
+        $params = array('empty'=>'', 'id'=>$e->id, 'component'=>'enrol_'.$enrol);
         $DB->execute($sql, $params);
 
         // Delete potential enrol duplicates.
@@ -453,4 +465,35 @@ function enrol_manual_migrate_plugin_enrolments($enrol) {
         $DB->execute($sql, $params);
     }
     $rs->close();
+}
+
+/**
+ * Gets an array of the cohorts that can be enrolled in this course.
+ *
+ * @param int $enrolid
+ * @param string $search
+ * @param int $page Defaults to 0
+ * @param int $perpage Defaults to 25
+ * @param int $addedenrollment
+ * @return array Array(totalcohorts => int, cohorts => array)
+ */
+function enrol_manual_get_potential_cohorts($context, $enrolid, $search = '', $page = 0, $perpage = 25, $addedenrollment = 0) {
+    global $CFG;
+    require_once($CFG->dirroot . '/cohort/lib.php');
+
+    $allcohorts = cohort_get_available_cohorts($context, COHORT_WITH_NOTENROLLED_MEMBERS_ONLY, 0, 0, $search);
+    $totalcohorts = count($allcohorts);
+    $cohorts = array();
+    $cnt = 0;
+    foreach ($allcohorts as $c) {
+        if ($cnt >= $page * $perpage && (!$perpage || $cnt < ($page+1)*$perpage)) {
+            $cohorts[] = (object)array(
+                'id' => $c->id,
+                'name' => format_string($c->name, true, array('context' => $c->contextid)),
+                'cnt' => $c->memberscnt - $c->enrolledcnt
+            );
+        }
+        $cnt++;
+    }
+    return array('totalcohorts' => $totalcohorts, 'cohorts' => $cohorts);
 }

@@ -46,20 +46,20 @@ if (!empty($swid)) {
     $subwiki = wiki_get_subwiki($swid);
 
     if (!$wiki = wiki_get_wiki($subwiki->wikiid)) {
-        print_error('invalidwikiid', 'wiki');
+        print_error('incorrectwikiid', 'wiki');
     }
 
 } else {
     $subwiki = wiki_get_subwiki_by_group($wid, $group, $uid);
 
     if (!$wiki = wiki_get_wiki($wid)) {
-        print_error('invalidwikiid', 'wiki');
+        print_error('incorrectwikiid', 'wiki');
     }
 
 }
 
 if (!$cm = get_coursemodule_from_instance('wiki', $wiki->id)) {
-    print_error('invalidcoursemoduleid', 'wiki');
+    print_error('invalidcoursemodule');
 }
 
 $groups = new stdClass();
@@ -107,14 +107,12 @@ $wikipage->set_action($action);
 switch ($action) {
 case 'create':
     $newpageid = $wikipage->create_page($title);
-    add_to_log($course->id, 'wiki', 'add page', "view.php?pageid=".$newpageid, $newpageid, $cm->id);
     redirect($CFG->wwwroot . '/mod/wiki/edit.php?pageid='.$newpageid);
     break;
 case 'new':
     // Go straight to editing if we know the page title and we're in force format mode.
     if ((int)$wiki->forceformat == 1 && $title != get_string('newpage', 'wiki')) {
         $newpageid = $wikipage->create_page($title);
-        add_to_log($course->id, 'wiki', 'add page', "view.php?pageid=".$newpageid, $newpageid, $cm->id);
         redirect($CFG->wwwroot . '/mod/wiki/edit.php?pageid='.$newpageid);
     } else {
         $wikipage->print_header();

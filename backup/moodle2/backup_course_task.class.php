@@ -80,18 +80,26 @@ class backup_course_task extends backup_task {
             $this->add_step(new backup_enrolments_structure_step('course_enrolments', 'enrolments.xml'));
         }
 
-        // Annotate all the groups and groupings belonging to the course
-        $this->add_step(new backup_annotate_course_groups_and_groupings('annotate_course_groups'));
+        // Annotate enrolment custom fields.
+        $this->add_step(new backup_enrolments_execution_step('annotate_enrol_custom_fields'));
+
+        // Annotate all the groups and groupings belonging to the course. This can be optional.
+        if ($this->get_setting_value('groups')) {
+            $this->add_step(new backup_annotate_course_groups_and_groupings('annotate_course_groups'));
+        }
 
         // Annotate the groups used in already annotated groupings (note this may be
         // unnecessary now that we are annotating all the course groups and groupings in the
-        // step above. But we keep it working in case we decide, someday, to introduce one
-        // setting to transform the step above into an optional one. This is here to support
-        // course->defaultgroupingid
-        $this->add_step(new backup_annotate_groups_from_groupings('annotate_groups_from_groupings'));
+        // step above). This is here to support course->defaultgroupingid.
+        // This may not be required to annotate if groups are not being backed up.
+        if ($this->get_setting_value('groups')) {
+            $this->add_step(new backup_annotate_groups_from_groupings('annotate_groups_from_groupings'));
+        }
 
-        // Annotate the question_categories belonging to the course context
-        $this->add_step(new backup_calculate_question_categories('course_question_categories'));
+        // Annotate the question_categories belonging to the course context (conditionally).
+        if ($this->get_setting_value('questionbank')) {
+            $this->add_step(new backup_calculate_question_categories('course_question_categories'));
+        }
 
         // Generate the roles file (optionally role assignments and always role overrides)
         $this->add_step(new backup_roles_structure_step('course_roles', 'roles.xml'));
@@ -113,7 +121,10 @@ class backup_course_task extends backup_task {
 
         // Generate the logs file (conditionally)
         if ($this->get_setting_value('logs')) {
+            // Legacy logs.
             $this->add_step(new backup_course_logs_structure_step('course_logs', 'logs.xml'));
+            // New log stores.
+            $this->add_step(new backup_course_logstores_structure_step('course_logstores', 'logstores.xml'));
         }
 
         // Generate the inforef file (must be after ALL steps gathering annotations of ANY type)
@@ -129,18 +140,36 @@ class backup_course_task extends backup_task {
     /**
      * Code the transformations to perform in the course in
      * order to get transportable (encoded) links
+     * @param string $content content in which to encode links.
+     * @return string content with links encoded.
      */
     static public function encode_content_links($content) {
-        global $CFG;
-
-        $base = preg_quote($CFG->wwwroot, '/');
 
         // Link to the course main page (it also covers "&topic=xx" and "&week=xx"
-        // because they don't become transformed (section number) in backup/restore
-        $search = '/(' . $base . '\/course\/view.php\?id\=)([0-9]+)/';
-        $content= preg_replace($search, '$@COURSEVIEWBYID*$2@$', $content);
+        // because they don't become transformed (section number) in backup/restore.
+        $content = self::encode_links_helper($content, 'COURSEVIEWBYID',       '/course/view.php?id=');
+
+        // A few other key course links.
+        $content = self::encode_links_helper($content, 'GRADEINDEXBYID',       '/grade/index.php?id=');
+        $content = self::encode_links_helper($content, 'GRADEREPORTINDEXBYID', '/grade/report/index.php?id=');
+        $content = self::encode_links_helper($content, 'BADGESVIEWBYID',       '/badges/view.php?type=2&id=');
+        $content = self::encode_links_helper($content, 'USERINDEXVIEWBYID',    '/user/index.php?id=');
 
         return $content;
+    }
+
+    /**
+     * Helper method, used by encode_content_links.
+     * @param string $content content in which to encode links.
+     * @param unknown_type $name the name of this type of encoded link.
+     * @param unknown_type $path the path that identifies this type of link, up
+     *      to the ?paramname= bit.
+     * @return string content with one type of link encoded.
+     */
+    static private function encode_links_helper($content, $name, $path) {
+        global $CFG;
+        $base = preg_quote($CFG->wwwroot . $path, '/');
+        return preg_replace('/(' . $base . ')([0-9]+)/', '$@' . $name . '*$2@$', $content);
     }
 
 // Protected API starts here

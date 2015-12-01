@@ -17,8 +17,7 @@
 /**
  * Main course enrolment management UI.
  *
- * @package    core
- * @subpackage enrol
+ * @package    core_enrol
  * @copyright  2010 Petr Skoda {@link http://skodak.org}
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -29,6 +28,7 @@ $id         = required_param('id', PARAM_INT); // course id
 $action     = optional_param('action', '', PARAM_ALPHANUMEXT);
 $instanceid = optional_param('instance', 0, PARAM_INT);
 $confirm    = optional_param('confirm', 0, PARAM_BOOL);
+$confirm2   = optional_param('confirm2', 0, PARAM_BOOL);
 
 $course = $DB->get_record('course', array('id'=>$id), '*', MUST_EXIST);
 $context = context_course::instance($course->id, MUST_EXIST);
@@ -96,38 +96,89 @@ if ($canconfig and $action and confirm_sesskey()) {
             $instance = $instances[$instanceid];
             $plugin = $plugins[$instance->enrol];
 
-            if ($confirm) {
-                $plugin->delete_instance($instance);
-                redirect($PAGE->url);
-            }
+            if ($plugin->can_delete_instance($instance)) {
+                if ($confirm) {
+                    if (enrol_accessing_via_instance($instance)) {
+                        if (!$confirm2) {
+                            $yesurl = new moodle_url('/enrol/instances.php',
+                                                     array('id' => $course->id,
+                                                           'action' => 'delete',
+                                                           'instance' => $instance->id,
+                                                           'confirm' => 1,
+                                                           'confirm2' => 1,
+                                                           'sesskey' => sesskey()));
+                            $displayname = $plugin->get_instance_name($instance);
+                            $message = markdown_to_html(get_string('deleteinstanceconfirmself',
+                                                                   'enrol',
+                                                                   array('name' => $displayname)));
+                            echo $OUTPUT->header();
+                            echo $OUTPUT->confirm($message, $yesurl, $PAGE->url);
+                            echo $OUTPUT->footer();
+                            die();
+                        }
+                    }
+                    $plugin->delete_instance($instance);
+                    redirect($PAGE->url);
+                }
 
-            echo $OUTPUT->header();
-            $yesurl = new moodle_url('/enrol/instances.php', array('id'=>$course->id, 'action'=>'delete', 'instance'=>$instance->id, 'confirm'=>1,'sesskey'=>sesskey()));
-            $displayname = $plugin->get_instance_name($instance);
-            $users = $DB->count_records('user_enrolments', array('enrolid'=>$instance->id));
-            if ($users) {
-                $message = markdown_to_html(get_string('deleteinstanceconfirm', 'enrol', array('name'=>$displayname, 'users'=>$users)));
-            } else {
-                $message = markdown_to_html(get_string('deleteinstancenousersconfirm', 'enrol', array('name'=>$displayname)));
+                echo $OUTPUT->header();
+                $yesurl = new moodle_url('/enrol/instances.php',
+                                         array('id' => $course->id,
+                                               'action' => 'delete',
+                                               'instance' => $instance->id,
+                                               'confirm' => 1,
+                                               'sesskey' => sesskey()));
+                $displayname = $plugin->get_instance_name($instance);
+                $users = $DB->count_records('user_enrolments', array('enrolid' => $instance->id));
+                if ($users) {
+                    $message = markdown_to_html(get_string('deleteinstanceconfirm', 'enrol',
+                                                           array('name' => $displayname,
+                                                                 'users' => $users)));
+                } else {
+                    $message = markdown_to_html(get_string('deleteinstancenousersconfirm', 'enrol',
+                                                           array('name' => $displayname)));
+                }
+                echo $OUTPUT->confirm($message, $yesurl, $PAGE->url);
+                echo $OUTPUT->footer();
+                die();
             }
-            echo $OUTPUT->confirm($message, $yesurl, $PAGE->url);
-            echo $OUTPUT->footer();
-            die();
 
         } else if ($action === 'disable') {
             $instance = $instances[$instanceid];
             $plugin = $plugins[$instance->enrol];
-            if ($instance->status != ENROL_INSTANCE_DISABLED) {
-                $plugin->update_status($instance, ENROL_INSTANCE_DISABLED);
-                redirect($PAGE->url);
+            if ($plugin->can_hide_show_instance($instance)) {
+                if ($instance->status != ENROL_INSTANCE_DISABLED) {
+                    if (enrol_accessing_via_instance($instance)) {
+                        if (!$confirm2) {
+                            $yesurl = new moodle_url('/enrol/instances.php',
+                                                     array('id' => $course->id,
+                                                           'action' => 'disable',
+                                                           'instance' => $instance->id,
+                                                           'confirm2' => 1,
+                                                           'sesskey' => sesskey()));
+                            $displayname = $plugin->get_instance_name($instance);
+                            $message = markdown_to_html(get_string('disableinstanceconfirmself',
+                                                        'enrol',
+                                                        array('name' => $displayname)));
+                            echo $OUTPUT->header();
+                            echo $OUTPUT->confirm($message, $yesurl, $PAGE->url);
+                            echo $OUTPUT->footer();
+                            die();
+                        }
+                    }
+                    $plugin->update_status($instance, ENROL_INSTANCE_DISABLED);
+                    redirect($PAGE->url);
+                }
             }
 
         } else if ($action === 'enable') {
             $instance = $instances[$instanceid];
             $plugin = $plugins[$instance->enrol];
-            if ($instance->status != ENROL_INSTANCE_ENABLED) {
-                $plugin->update_status($instance, ENROL_INSTANCE_ENABLED);
-                redirect($PAGE->url);
+            if ($plugin->can_hide_show_instance($instance)) {
+                if ($instance->status != ENROL_INSTANCE_ENABLED) {
+                    $plugin->update_status($instance, ENROL_INSTANCE_ENABLED);
+                    redirect($PAGE->url);
+                }
             }
         }
     }
@@ -178,48 +229,47 @@ foreach ($instances as $instance) {
         $updown = '';
         if ($updowncount > 1) {
             $aurl = new moodle_url($url, array('action'=>'up', 'instance'=>$instance->id));
-            $updown[] = html_writer::link($aurl, html_writer::empty_tag('img', array('src'=>$OUTPUT->pix_url('t/up'), 'alt'=>$strup, 'class'=>'smallicon')));
+            $updown[] = $OUTPUT->action_icon($aurl, new pix_icon('t/up', $strup, 'core', array('class' => 'iconsmall')));
         } else {
-            $updown[] = html_writer::empty_tag('img', array('src'=>$OUTPUT->pix_url('spacer'), 'alt'=>'', 'class'=>'smallicon'));
+            $updown[] = html_writer::empty_tag('img', array('src'=>$OUTPUT->pix_url('spacer'), 'alt'=>'', 'class'=>'iconsmall'));
         }
         if ($updowncount < $icount) {
             $aurl = new moodle_url($url, array('action'=>'down', 'instance'=>$instance->id));
-            $updown[] = html_writer::link($aurl, html_writer::empty_tag('img', array('src'=>$OUTPUT->pix_url('t/down'), 'alt'=>$strdown, 'class'=>'smallicon')));
+            $updown[] = $OUTPUT->action_icon($aurl, new pix_icon('t/down', $strdown, 'core', array('class' => 'iconsmall')));
         } else {
-            $updown[] = html_writer::empty_tag('img', array('src'=>$OUTPUT->pix_url('spacer'), 'alt'=>'', 'class'=>'smallicon'));
+            $updown[] = html_writer::empty_tag('img', array('src'=>$OUTPUT->pix_url('spacer'), 'alt'=>'', 'class'=>'iconsmall'));
         }
         ++$updowncount;
 
-        // edit links
-        if ($plugin->instance_deleteable($instance)) {
+        if ($plugin->can_delete_instance($instance)) {
             $aurl = new moodle_url($url, array('action'=>'delete', 'instance'=>$instance->id));
-            $edit[] = html_writer::link($aurl, html_writer::empty_tag('img', array('src'=>$OUTPUT->pix_url('t/delete'), 'alt'=>$strdelete, 'class'=>'smallicon')));
+            $edit[] = $OUTPUT->action_icon($aurl, new pix_icon('t/delete', $strdelete, 'core', array('class' => 'iconsmall')));
         }
 
-        if (enrol_is_enabled($instance->enrol)) {
+        if (enrol_is_enabled($instance->enrol) && $plugin->can_hide_show_instance($instance)) {
             if ($instance->status == ENROL_INSTANCE_ENABLED) {
                 $aurl = new moodle_url($url, array('action'=>'disable', 'instance'=>$instance->id));
-                $edit[] = html_writer::link($aurl, html_writer::empty_tag('img', array('src'=>$OUTPUT->pix_url('t/hide'), 'alt'=>$strdisable, 'class'=>'smallicon')));
+                $edit[] = $OUTPUT->action_icon($aurl, new pix_icon('t/hide', $strdisable, 'core', array('class' => 'iconsmall')));
             } else if ($instance->status == ENROL_INSTANCE_DISABLED) {
                 $aurl = new moodle_url($url, array('action'=>'enable', 'instance'=>$instance->id));
-                $edit[] = html_writer::link($aurl, html_writer::empty_tag('img', array('src'=>$OUTPUT->pix_url('t/show'), 'alt'=>$strenable, 'class'=>'smallicon')));
+                $edit[] = $OUTPUT->action_icon($aurl, new pix_icon('t/show', $strenable, 'core', array('class' => 'iconsmall')));
             } else {
                 // plugin specific state - do not mess with it!
-                $edit[] = html_writer::empty_tag('img', array('src'=>$OUTPUT->pix_url('t/show'), 'alt'=>'', 'class'=>'smallicon'));
+                $edit[] = html_writer::empty_tag('img', array('src'=>$OUTPUT->pix_url('t/show'), 'alt'=>'', 'class'=>'iconsmall'));
             }
 
         }
     }
 
     // link to instance management
-    if (enrol_is_enabled($instance->enrol)) {
+    if (enrol_is_enabled($instance->enrol) && $canconfig) {
         if ($icons = $plugin->get_action_icons($instance)) {
             $edit = array_merge($edit, $icons);
         }
     }
 
-    // add a row to the table
-    $table->data[] = array($displayname, $users, implode('&nbsp;', $updown), implode('&nbsp;', $edit));
+    // Add a row to the table.
+    $table->data[] = array($displayname, $users, implode('', $updown), implode('', $edit));
 
 }
 echo html_writer::table($table);

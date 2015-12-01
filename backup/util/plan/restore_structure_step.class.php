@@ -101,11 +101,17 @@ abstract class restore_structure_step extends restore_step {
             $xmlprocessor->add_path($element->get_path(), $element->is_grouped());
         }
 
+        // Set up progress tracking.
+        $progress = $this->get_task()->get_progress();
+        $progress->start_progress($this->get_name(), \core\progress\base::INDETERMINATE);
+        $xmlparser->set_progress($progress);
+
         // And process it, dispatch to target methods in step will start automatically
         $xmlparser->process();
 
         // Have finished, launch the after_execute method of all the processing objects
         $this->launch_after_execute_methods();
+        $progress->end_progress();
     }
 
     /**
@@ -217,62 +223,26 @@ abstract class restore_structure_step extends restore_step {
      * Add all the existing file, given their component and filearea and one backup_ids itemname to match with
      */
     public function add_related_files($component, $filearea, $mappingitemname, $filesctxid = null, $olditemid = null) {
+        // If the current progress object is set up and ready to receive
+        // indeterminate progress, then use it, otherwise don't. (This check is
+        // just in case this function is ever called from somewhere not within
+        // the execute() method here, which does set up progress like this.)
+        $progress = $this->get_task()->get_progress();
+        if (!$progress->is_in_progress_section() ||
+                $progress->get_current_max() !== \core\progress\base::INDETERMINATE) {
+            $progress = null;
+        }
+
         $filesctxid = is_null($filesctxid) ? $this->task->get_old_contextid() : $filesctxid;
         $results = restore_dbops::send_files_to_pool($this->get_basepath(), $this->get_restoreid(), $component,
-                $filearea, $filesctxid, $this->task->get_userid(), $mappingitemname, $olditemid);
+                $filearea, $filesctxid, $this->task->get_userid(), $mappingitemname, $olditemid, null, false,
+                $progress);
         $resultstoadd = array();
         foreach ($results as $result) {
             $this->log($result->message, $result->level);
             $resultstoadd[$result->code] = true;
         }
         $this->task->add_result($resultstoadd);
-    }
-
-    /**
-     * Apply course startdate offset based in original course startdate and course_offset_startdate setting
-     * Note we are using one static cache here, but *by restoreid*, so it's ok for concurrence/multiple
-     * executions in the same request
-     */
-    public function apply_date_offset($value) {
-
-        // empties don't offset - zeros (int and string), false and nulls return original value
-        if (empty($value)) {
-            return $value;
-        }
-
-        static $cache = array();
-        // Lookup cache
-        if (isset($cache[$this->get_restoreid()])) {
-            return $value + $cache[$this->get_restoreid()];
-        }
-        // No cache, let's calculate the offset
-        $original = $this->task->get_info()->original_course_startdate;
-        $setting = 0;
-        if ($this->setting_exists('course_startdate')) { // Seting may not exist (MDL-25019)
-            $setting  = $this->get_setting_value('course_startdate');
-        }
-
-        // Original course has not startdate or setting doesn't exist, offset = 0
-        if (empty($original) || empty($setting)) {
-            $cache[$this->get_restoreid()] = 0;
-
-        // Less than 24h of difference, offset = 0 (this avoids some problems with timezones)
-        } else if (abs($setting - $original) < 24 * 60 * 60) {
-            $cache[$this->get_restoreid()] = 0;
-
-        // Re-enforce 'moodle/restore:rolldates' capability for the user in the course, just in case
-        } else if (!has_capability('moodle/restore:rolldates',
-                                   context_course::instance($this->get_courseid()),
-                                   $this->task->get_userid())) {
-            $cache[$this->get_restoreid()] = 0;
-
-        // Arrived here, let's calculate the real offset
-        } else {
-            $cache[$this->get_restoreid()] = $setting - $original;
-        }
-
-        // Return the passed value with cached offset applied
-        return $value + $cache[$this->get_restoreid()];
     }
 
     /**
@@ -289,7 +259,7 @@ abstract class restore_structure_step extends restore_step {
     /**
      * Add plugin structure to any element in the structure restore tree
      *
-     * @param string $plugintype type of plugin as defined by get_plugin_types()
+     * @param string $plugintype type of plugin as defined by core_component::get_plugin_types()
      * @param restore_path_element $element element in the structure restore tree that
      *                                       we are going to add plugin information to
      */
@@ -298,12 +268,12 @@ abstract class restore_structure_step extends restore_step {
         global $CFG;
 
         // Check the requested plugintype is a valid one
-        if (!array_key_exists($plugintype, get_plugin_types($plugintype))) {
+        if (!array_key_exists($plugintype, core_component::get_plugin_types($plugintype))) {
              throw new restore_step_exception('incorrect_plugin_type', $plugintype);
         }
 
         // Get all the restore path elements, looking across all the plugin dirs
-        $pluginsdirs = get_plugin_list($plugintype);
+        $pluginsdirs = core_component::get_plugin_list($plugintype);
         foreach ($pluginsdirs as $name => $pluginsdir) {
             // We need to add also backup plugin classes on restore, they may contain
             // some stuff used both in backup & restore
@@ -320,6 +290,76 @@ abstract class restore_structure_step extends restore_step {
                 $restoreplugin = new $restoreclassname($plugintype, $name, $this);
                 // Add plugin paths to the step
                 $this->prepare_pathelements($restoreplugin->define_plugin_structure($element));
+            }
+        }
+    }
+
+    /**
+     * Add subplugin structure for a given plugin to any element in the structure restore tree
+     *
+     * This method allows the injection of subplugins (of a specific plugin) parsing and proccessing
+     * to any element in the restore structure.
+     *
+     * NOTE: Initially subplugins were only available for activities (mod), so only the
+     * {@link restore_activity_structure_step} class had support for them, always
+     * looking for /mod/modulenanme subplugins. This new method is a generalization of the
+     * existing one for activities, supporting all subplugins injecting information everywhere.
+     *
+     * @param string $subplugintype type of subplugin as defined in plugin's db/subplugins.php.
+     * @param restore_path_element $element element in the structure restore tree that
+     *                              we are going to add subplugin information to.
+     * @param string $plugintype type of the plugin.
+     * @param string $pluginname name of the plugin.
+     * @return void
+     */
+    protected function add_subplugin_structure($subplugintype, $element, $plugintype = null, $pluginname = null) {
+
+        // Verify if this is a BC call for an activity restore. See NOTE above for this special case.
+        if ($plugintype === null and $pluginname === null) {
+            $plugintype = 'mod';
+            $pluginname = $this->task->get_modulename();
+            // TODO: Once all the calls have been changed to add both not null plugintype and pluginname, add a debugging here.
+        }
+
+        // Check the requested plugintype is a valid one.
+        if (!array_key_exists($plugintype, core_component::get_plugin_types())) {
+            throw new restore_step_exception('incorrect_plugin_type', $plugintype);
+        }
+
+        // Check the requested pluginname, for the specified plugintype, is a valid one.
+        if (!array_key_exists($pluginname, core_component::get_plugin_list($plugintype))) {
+            throw new restore_step_exception('incorrect_plugin_name', array($plugintype, $pluginname));
+        }
+
+        // Check the requested subplugintype is a valid one.
+        $subpluginsfile = core_component::get_component_directory($plugintype . '_' . $pluginname) . '/db/subplugins.php';
+        if (!file_exists($subpluginsfile)) {
+            throw new restore_step_exception('plugin_missing_subplugins_php_file', array($plugintype, $pluginname));
+        }
+        include($subpluginsfile);
+        if (!array_key_exists($subplugintype, $subplugins)) {
+             throw new restore_step_exception('incorrect_subplugin_type', $subplugintype);
+        }
+
+        // Every subplugin optionally can have a common/parent subplugin
+        // class for shared stuff.
+        $parentclass = 'restore_' . $plugintype . '_' . $pluginname . '_' . $subplugintype . '_subplugin';
+        $parentfile = core_component::get_component_directory($plugintype . '_' . $pluginname) .
+            '/backup/moodle2/' . $parentclass . '.class.php';
+        if (file_exists($parentfile)) {
+            require_once($parentfile);
+        }
+
+        // Get all the restore path elements, looking across all the subplugin dirs.
+        $subpluginsdirs = core_component::get_plugin_list($subplugintype);
+        foreach ($subpluginsdirs as $name => $subpluginsdir) {
+            $classname = 'restore_' . $subplugintype . '_' . $name . '_subplugin';
+            $restorefile = $subpluginsdir . '/backup/moodle2/' . $classname . '.class.php';
+            if (file_exists($restorefile)) {
+                require_once($restorefile);
+                $restoresubplugin = new $classname($subplugintype, $name, $this);
+                // Add subplugin paths to the step.
+                $this->prepare_pathelements($restoresubplugin->define_subplugin_structure($element));
             }
         }
     }

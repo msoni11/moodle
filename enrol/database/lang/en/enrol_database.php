@@ -22,11 +22,13 @@
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
+$string['database:config'] = 'Configure database enrol instances';
 $string['database:unenrol'] = 'Unenrol suspended users';
 $string['dbencoding'] = 'Database encoding';
 $string['dbhost'] = 'Database host';
-$string['dbhost_desc'] = 'Type database server IP address or host name';
+$string['dbhost_desc'] = 'Type database server IP address or host name. Use a system DSN name if using ODBC.';
 $string['dbname'] = 'Database name';
+$string['dbname_desc'] = 'Leave empty if using a DSN name in database host.';
 $string['dbpass'] = 'Database password';
 $string['dbsetupsql'] = 'Database setup command';
 $string['dbsetupsql_desc'] = 'SQL command for special database setup, often used to setup communication encoding - example for MySQL and PostgreSQL: <em>SET NAMES \'utf8\'</em>';
@@ -59,6 +61,8 @@ $string['remotecoursefield'] = 'Remote course field';
 $string['remotecoursefield_desc'] = 'The name of the field in the remote table that we are using to match entries in the course table.';
 $string['remoteenroltable'] = 'Remote user enrolment table';
 $string['remoteenroltable_desc'] = 'Specify the name of the table that contains list of user enrolments. Empty means no user enrolment sync.';
+$string['remoteotheruserfield'] = 'Remote Other User field';
+$string['remoteotheruserfield_desc'] = 'The name of the field in the remote table that we are using to flag "Other User" role assignments.';
 $string['remoterolefield'] = 'Remote role field';
 $string['remoterolefield_desc'] = 'The name of the field in the remote table that we are using to match entries in the roles table.';
 $string['remoteuserfield'] = 'Remote user field';

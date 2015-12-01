@@ -1,5 +1,4 @@
 <?php
-
 ///////////////////////////////////////////////////////////////////////////
 //                                                                       //
 // This file is part of Moodle - http://moodle.org/                      //
@@ -20,14 +19,13 @@
 //                                                                       //
 ///////////////////////////////////////////////////////////////////////////
 
-/*
- * @package    blocks
- * @subpackage community
+/**
+ * Form for community search
+ *
+ * @package    block_community
  * @author     Jerome Mouneyrac <jerome@mouneyrac.com>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL
  * @copyright  (C) 1999 onwards Martin Dougiamas  http://dougiamas.com
- *
- * Form for community search
  */
 
 require_once($CFG->libdir . '/formslib.php');
@@ -93,7 +91,9 @@ class community_hub_search_form extends moodleform {
 
         //add the course id (of the context)
         $mform->addElement('hidden', 'courseid', $this->_customdata['courseid']);
+        $mform->setType('courseid', PARAM_INT);
         $mform->addElement('hidden', 'executesearch', 1);
+        $mform->setType('executesearch', PARAM_INT);
 
         //retrieve the hub list on the hub directory by web service
         $function = 'hubdirectory_get_hubs';
@@ -211,6 +211,7 @@ class community_hub_search_form extends moodleform {
             } else {
                 $mform->addElement('hidden', 'downloadable', 0);
             }
+            $mform->setType('downloadable', PARAM_INT);
 
             $options = array();
             $options['all'] = get_string('any');
@@ -270,7 +271,7 @@ class community_hub_search_form extends moodleform {
             $mform->setDefault('licence', $licence);
 
             $languages = get_string_manager()->get_list_of_languages();
-            collatorlib::asort($languages);
+            core_collator::asort($languages);
             $languages = array_merge(array('all' => get_string('any')), $languages);
             $mform->addElement('select', 'language', get_string('language'), $languages);
 
@@ -298,7 +299,7 @@ class community_hub_search_form extends moodleform {
             $mform->addElement('text', 'search', get_string('keywords', 'block_community'),
                 array('size' => 30));
             $mform->addHelpButton('search', 'keywords', 'block_community');
-
+            $mform->setType('search', PARAM_NOTAGS);
 
             $mform->addElement('submit', 'submitbutton', get_string('search', 'block_community'));
         }

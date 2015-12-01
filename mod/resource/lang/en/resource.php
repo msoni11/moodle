@@ -18,8 +18,7 @@
 /**
  * Strings for component 'resource', language 'en', branch 'MOODLE_20_STABLE'
  *
- * @package    mod
- * @subpackage resource
+ * @package    mod_resource
  * @copyright  1999 onwards Martin Dougiamas  {@link http://moodle.com}
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -49,7 +48,7 @@ $string['displayselect_help'] = 'This setting, together with the file type and w
 * Force download - The user is prompted to download the file
 * Open - Only the file is displayed in the browser window
 * In pop-up - The file is displayed in a new browser window without menus or an address bar
-* In frame - The file is displayed within a frame below the the navigation bar and file description
+* In frame - The file is displayed within a frame below the navigation bar and file description
 * New window - The file is displayed in a new browser window with menus and an address bar';
 $string['displayselect_link'] = 'mod/file/mod';
 $string['displayselectexplain'] = 'Choose display type, unfortunately not all types are suitable for all files.';
@@ -64,6 +63,7 @@ $string['framesize'] = 'Frame height';
 $string['legacyfiles'] = 'Migration of old course file';
 $string['legacyfilesactive'] = 'Active';
 $string['legacyfilesdone'] = 'Finished';
+$string['modifieddate'] = 'Modified {$a}';
 $string['modulename'] = 'File';
 $string['modulename_help'] = 'The file module enables a teacher to provide a file as a course resource. Where possible, the file will be displayed within the course interface; otherwise students will be prompted to download it. The file may include supporting files, for example an HTML page may have embedded images or Flash objects.
 
@@ -76,9 +76,8 @@ A file may be used
 * To provide draft files of certain software programs (eg Photoshop .psd) so students can edit and submit them for assessment';
 $string['modulename_link'] = 'mod/resource/view';
 $string['modulenameplural'] = 'Files';
-$string['neverseen'] = 'Never seen';
 $string['notmigrated'] = 'This legacy resource type ({$a}) was not yet migrated, sorry.';
-$string['optionsheader'] = 'Options';
+$string['optionsheader'] = 'Display options';
 $string['page-mod-resource-x'] = 'Any file module page';
 $string['pluginadministration'] = 'File module administration';
 $string['pluginname'] = 'File';
@@ -88,16 +87,22 @@ $string['popupresource'] = 'This resource should appear in a popup window.';
 $string['popupresourcelink'] = 'If it didn\'t, click here: {$a}';
 $string['popupwidth'] = 'Pop-up width (in pixels)';
 $string['popupwidthexplain'] = 'Specifies default width of popup windows.';
-$string['printheading'] = 'Display resource name';
-$string['printheadingexplain'] = 'Display resource name above content? Some display types may not display resource name even if enabled.';
 $string['printintro'] = 'Display resource description';
 $string['printintroexplain'] = 'Display resource description below content? Some display types may not display description even if enabled.';
 $string['resource:addinstance'] = 'Add a new resource';
 $string['resourcecontent'] = 'Files and subfolders';
 $string['resourcedetails_sizetype'] = '{$a->size} {$a->type}';
+$string['resourcedetails_sizedate'] = '{$a->size} {$a->date}';
+$string['resourcedetails_typedate'] = '{$a->type} {$a->date}';
+$string['resourcedetails_sizetypedate'] = '{$a->size} {$a->type} {$a->date}';
 $string['resource:exportresource'] = 'Export resource';
 $string['resource:view'] = 'View resource';
 $string['selectmainfile'] = 'Please select the main file by clicking the icon next to file name.';
+$string['showdate'] = 'Show upload/modified date';
+$string['showdate_desc'] = 'Display upload/modified date on course page?';
+$string['showdate_help'] = 'Displays the upload/modified date beside links to the file.
+
+If there are multiple files in this resource, the start file upload/modified date is displayed.';
 $string['showsize'] = 'Show size';
 $string['showsize_help'] = 'Displays the file size, such as \'3.1 MB\', beside links to the file.
 
@@ -110,3 +115,4 @@ $string['showtype_help'] = 'Displays the type of the file, such as \'Word docume
 If there are multiple files in this resource, the start file type is displayed.
 
 If the file type is not known to the system, it will not display.';
+$string['uploadeddate'] = 'Uploaded {$a}';

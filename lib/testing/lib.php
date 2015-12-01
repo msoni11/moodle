@@ -26,6 +26,13 @@
  */
 
 /**
+ * Composer error exit status.
+ *
+ * @var int
+ */
+define('TESTING_EXITCODE_COMPOSER', 255);
+
+/**
  * Returns relative path against current working directory,
  * to be used for shell execution hints.
  * @param string $moodlepath starting with "/", ex: "/admin/tool/cli/init.php"
@@ -38,7 +45,13 @@ function testing_cli_argument_path($moodlepath) {
         $moodlepath = preg_replace('|^/admin/|', "/$CFG->admin/", $moodlepath);
     }
 
-    $cwd = getcwd();
+    if (isset($_SERVER['REMOTE_ADDR'])) {
+        // Web access, this should not happen often.
+        $cwd = dirname(dirname(__DIR__));
+    } else {
+        // This is the real CLI script, work with relative paths.
+        $cwd = getcwd();
+    }
     if (substr($cwd, -1) !== DIRECTORY_SEPARATOR) {
         $cwd .= DIRECTORY_SEPARATOR;
     }
@@ -92,6 +105,30 @@ function testing_is_cygwin() {
 }
 
 /**
+ * Returns whether a mingw CLI is running.
+ *
+ * MinGW sets $_SERVER['TERM'] to cygwin, but it
+ * can not run .bat files; this function may be useful
+ * when we need to output proposed commands to users
+ * using Windows CLI interfaces.
+ *
+ * @link http://sourceforge.net/p/mingw/bugs/1902
+ * @return bool
+ */
+function testing_is_mingw() {
+
+    if (!testing_is_cygwin()) {
+        return false;
+    }
+
+    if (!empty($_SERVER['MSYSTEM'])) {
+        return true;
+    }
+
+    return false;
+}
+
+/**
  * Mark empty dataroot to be used for testing.
  * @param string $dataroot  The dataroot directory
  * @param string $framework The test framework
@@ -126,5 +163,78 @@ function testing_error($errorcode, $text = '') {
 
     // do not write to error stream because we need the error message in PHP exec result from web ui
     echo($text."\n");
+    if (isset($_SERVER['REMOTE_ADDR'])) {
+        header('HTTP/1.1 500 Internal Server Error');
+    }
     exit($errorcode);
+}
+
+/**
+ * Updates the composer installer and the dependencies.
+ *
+ * @return void exit() if something goes wrong
+ */
+function testing_update_composer_dependencies() {
+    // To restore the value after finishing.
+    $cwd = getcwd();
+
+    // Set some paths.
+    $dirroot = dirname(dirname(__DIR__));
+    $composerpath = $dirroot . DIRECTORY_SEPARATOR . 'composer.phar';
+    $composerurl = 'https://getcomposer.org/composer.phar';
+
+    // Switch to Moodle's dirroot for easier path handling.
+    chdir($dirroot);
+
+    // Download or update composer.phar. Unfortunately we can't use the curl
+    // class in filelib.php as we're running within one of the test platforms.
+    if (!file_exists($composerpath)) {
+        $file = @fopen($composerpath, 'w');
+        if ($file === false) {
+            $errordetails = error_get_last();
+            $error = sprintf("Unable to create composer.phar\nPHP error: %s",
+                             $errordetails['message']);
+            testing_error(TESTING_EXITCODE_COMPOSER, $error);
+        }
+        $curl = curl_init();
+
+        curl_setopt($curl, CURLOPT_URL,  $composerurl);
+        curl_setopt($curl, CURLOPT_FILE, $file);
+        $result = curl_exec($curl);
+
+        $curlerrno = curl_errno($curl);
+        $curlerror = curl_error($curl);
+        $curlinfo = curl_getinfo($curl);
+
+        curl_close($curl);
+        fclose($file);
+
+        if (!$result) {
+            $error = sprintf("Unable to download composer.phar\ncURL error (%d): %s",
+                             $curlerrno, $curlerror);
+            testing_error(TESTING_EXITCODE_COMPOSER, $error);
+        } else if ($curlinfo['http_code'] === 404) {
+            if (file_exists($composerpath)) {
+                // Deleting the resource as it would contain HTML.
+                unlink($composerpath);
+            }
+            $error = sprintf("Unable to download composer.phar\n" .
+                                "404 http status code fetching $composerurl");
+            testing_error(TESTING_EXITCODE_COMPOSER, $error);
+        }
+    } else {
+        passthru("php composer.phar self-update", $code);
+        if ($code != 0) {
+            exit($code);
+        }
+    }
+
+    // Update composer dependencies.
+    passthru("php composer.phar install", $code);
+    if ($code != 0) {
+        exit($code);
+    }
+
+    // Return to our original location.
+    chdir($cwd);
 }

@@ -16,8 +16,7 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * @package    mod
- * @subpackage resource
+ * @package    mod_resource
  * @copyright  2009 Petr Skoda  {@link http://skodak.org}
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -34,7 +33,6 @@ function resource_supports($feature) {
         case FEATURE_MOD_ARCHETYPE:           return MOD_ARCHETYPE_RESOURCE;
         case FEATURE_GROUPS:                  return false;
         case FEATURE_GROUPINGS:               return false;
-        case FEATURE_GROUPMEMBERSONLY:        return true;
         case FEATURE_MOD_INTRO:               return true;
         case FEATURE_COMPLETION_TRACKS_VIEWS: return true;
         case FEATURE_GRADE_HAS_GRADE:         return false;
@@ -64,7 +62,13 @@ function resource_reset_userdata($data) {
 }
 
 /**
- * List of view style log actions
+ * List the actions that correspond to a view of this module.
+ * This is used by the participation report.
+ *
+ * Note: This is not used by new logging system. Event with
+ *       crud = 'r' and edulevel = LEVEL_PARTICIPATING will
+ *       be considered as view action.
+ *
  * @return array
  */
 function resource_get_view_actions() {
@@ -72,7 +76,13 @@ function resource_get_view_actions() {
 }
 
 /**
- * List of update style log actions
+ * List the actions that correspond to a post of this module.
+ * This is used by the participation report.
+ *
+ * Note: This is not used by new logging system. Event with
+ *       crud = ('c' || 'u' || 'd') and edulevel = LEVEL_PARTICIPATING
+ *       will be considered as post action.
+ *
  * @return array
  */
 function resource_get_post_actions() {
@@ -136,7 +146,6 @@ function resource_set_display_options($data) {
         $displayoptions['popupheight'] = $data->popupheight;
     }
     if (in_array($data->display, array(RESOURCELIB_DISPLAY_AUTO, RESOURCELIB_DISPLAY_EMBED, RESOURCELIB_DISPLAY_FRAME))) {
-        $displayoptions['printheading'] = (int)!empty($data->printheading);
         $displayoptions['printintro']   = (int)!empty($data->printintro);
     }
     if (!empty($data->showsize)) {
@@ -144,6 +153,9 @@ function resource_set_display_options($data) {
     }
     if (!empty($data->showtype)) {
         $displayoptions['showtype'] = 1;
+    }
+    if (!empty($data->showdate)) {
+        $displayoptions['showdate'] = 1;
     }
     $data->displayoptions = serialize($displayoptions);
 }
@@ -168,64 +180,13 @@ function resource_delete_instance($id) {
 }
 
 /**
- * Return use outline
- * @param object $course
- * @param object $user
- * @param object $mod
- * @param object $resource
- * @return object|null
- */
-function resource_user_outline($course, $user, $mod, $resource) {
-    global $DB;
-
-    if ($logs = $DB->get_records('log', array('userid'=>$user->id, 'module'=>'resource',
-                                              'action'=>'view', 'info'=>$resource->id), 'time ASC')) {
-
-        $numviews = count($logs);
-        $lastlog = array_pop($logs);
-
-        $result = new stdClass();
-        $result->info = get_string('numviews', '', $numviews);
-        $result->time = $lastlog->time;
-
-        return $result;
-    }
-    return NULL;
-}
-
-/**
- * Return use complete
- * @param object $course
- * @param object $user
- * @param object $mod
- * @param object $resource
- */
-function resource_user_complete($course, $user, $mod, $resource) {
-    global $CFG, $DB;
-
-    if ($logs = $DB->get_records('log', array('userid'=>$user->id, 'module'=>'resource',
-                                              'action'=>'view', 'info'=>$resource->id), 'time ASC')) {
-        $numviews = count($logs);
-        $lastlog = array_pop($logs);
-
-        $strmostrecently = get_string('mostrecently');
-        $strnumviews = get_string('numviews', '', $numviews);
-
-        echo "$strnumviews - $strmostrecently ".userdate($lastlog->time);
-
-    } else {
-        print_string('neverseen', 'resource');
-    }
-}
-
-/**
  * Given a course_module object, this function returns any
  * "extra" information that may be needed when printing
  * this activity in a course listing.
  *
  * See {@link get_array_of_activities()} in course/lib.php
  *
- * @param cm_info $coursemodule
+ * @param stdClass $coursemodule
  * @return cached_cm_info info
  */
 function resource_get_coursemodule_info($coursemodule) {
@@ -276,8 +237,16 @@ function resource_get_coursemodule_info($coursemodule) {
 
     }
 
-    // If any optional extra details are turned on, store in custom data
-    $info->customdata = resource_get_optional_details($resource, $coursemodule);
+    // If any optional extra details are turned on, store in custom data,
+    // add some file details as well to be used later by resource_get_optional_details() without retriving.
+    // Do not store filedetails if this is a reference - they will still need to be retrieved every time.
+    if (($filedetails = resource_get_file_details($resource, $coursemodule)) && empty($filedetails['isref'])) {
+        $displayoptions = @unserialize($resource->displayoptions);
+        $displayoptions['filedetails'] = $filedetails;
+        $info->customdata = serialize($displayoptions);
+    } else {
+        $info->customdata = $resource->displayoptions;
+    }
 
     return $info;
 }
@@ -289,7 +258,11 @@ function resource_get_coursemodule_info($coursemodule) {
  * @param cm_info $cm Course module information
  */
 function resource_cm_info_view(cm_info $cm) {
-    $details = $cm->get_custom_data();
+    global $CFG;
+    require_once($CFG->dirroot . '/mod/resource/locallib.php');
+
+    $resource = (object)array('displayoptions' => $cm->customdata);
+    $details = resource_get_optional_details($resource, $cm);
     if ($details) {
         $cm->set_after_link(' ' . html_writer::tag('span', $details,
                 array('class' => 'resourcelinkdetails')));
@@ -425,7 +398,7 @@ function resource_pluginfile($course, $cm, $context, $filearea, $args, $forcedow
 
     // should we apply filters?
     $mimetype = $file->get_mimetype();
-    if ($mimetype === 'text/html' or $mimetype === 'text/plain') {
+    if ($mimetype === 'text/html' or $mimetype === 'text/plain' or $mimetype === 'application/xhtml+xml') {
         $filter = $DB->get_field('resource', 'filterfiles', array('id'=>$cm->instance));
         $CFG->embeddedsoforcelinktarget = true;
     } else {
@@ -433,7 +406,7 @@ function resource_pluginfile($course, $cm, $context, $filearea, $args, $forcedow
     }
 
     // finally send the file
-    send_stored_file($file, 86400, $filter, $forcedownload, $options);
+    send_stored_file($file, null, $filter, $forcedownload, $options);
 }
 
 /**
@@ -510,11 +483,39 @@ function resource_dndupload_handle($uploadinfo) {
     $data->display = $config->display;
     $data->popupheight = $config->popupheight;
     $data->popupwidth = $config->popupwidth;
-    $data->printheading = $config->printheading;
     $data->printintro = $config->printintro;
     $data->showsize = (isset($config->showsize)) ? $config->showsize : 0;
     $data->showtype = (isset($config->showtype)) ? $config->showtype : 0;
+    $data->showdate = (isset($config->showdate)) ? $config->showdate : 0;
     $data->filterfiles = $config->filterfiles;
 
     return resource_add_instance($data, null);
+}
+
+/**
+ * Mark the activity completed (if required) and trigger the course_module_viewed event.
+ *
+ * @param  stdClass $resource   resource object
+ * @param  stdClass $course     course object
+ * @param  stdClass $cm         course module object
+ * @param  stdClass $context    context object
+ * @since Moodle 3.0
+ */
+function resource_view($resource, $course, $cm, $context) {
+
+    // Trigger course_module_viewed event.
+    $params = array(
+        'context' => $context,
+        'objectid' => $resource->id
+    );
+
+    $event = \mod_resource\event\course_module_viewed::create($params);
+    $event->add_record_snapshot('course_modules', $cm);
+    $event->add_record_snapshot('course', $course);
+    $event->add_record_snapshot('resource', $resource);
+    $event->trigger();
+
+    // Completion.
+    $completion = new completion_info($course);
+    $completion->set_module_viewed($cm);
 }

@@ -1,5 +1,4 @@
 <?php
-
 // This file is part of Moodle - http://moodle.org/
 //
 // Moodle is free software: you can redistribute it and/or modify
@@ -18,7 +17,7 @@
 /**
  * Strings for component 'error', language 'en', branch 'MOODLE_20_STABLE'
  *
- * @package   error
+ * @package   core
  * @copyright 1999 onwards Martin Dougiamas  {@link http://moodle.com}
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -46,6 +45,9 @@ $string['cannotcallscript'] = 'You cannot call this script in that way';
 $string['cannotcallusgetselecteduser'] = 'You cannot call user_selector::get_selected_user if multi select is true.';
 $string['cannotcreatebackupdir'] = 'Could not create backupdata folder.  The site administrator needs to fix the file permissions';
 $string['cannotcreatecategory'] = 'The category was not inserted';
+$string['cannotcreatedboninstall'] = '<p>Cannot create the database.</p>
+<p>The specified database does not exist and the given user does not have permission to create the database.</p>
+<p>The site administrator should verify database configuration.</p>';
 $string['cannotcreategroup'] = 'Error creating group';
 $string['cannotcreatelangbase'] = 'Error: Could not create base lang directory';
 $string['cannotcreatelangdir'] = 'Cannot create lang directory';
@@ -73,7 +75,9 @@ $string['cannoteditcomment'] = 'This comment is not yours to edit!';
 $string['cannoteditcommentexpired'] = 'You can\'t edit this. The time has expired!';
 $string['cannoteditpostorblog'] = 'You cannot post or edit blogs';
 $string['cannoteditsiteform'] = 'You cannot edit the site course using this form';
+$string['cannotedituserpreferences'] = 'Cannot edit this user\'s preferences';
 $string['cannotedityourprofile'] = 'Sorry, you cannot edit own profile';
+$string['cannotexecduringupgrade'] = 'Cannot be executed during upgrade';
 $string['cannotfindcategory'] = 'Cannot find category record from database by ID - {$a}';
 $string['cannotfindcomponent'] = 'Cannot find component';
 $string['cannotfindcontext'] = 'Could not find context';
@@ -105,6 +109,8 @@ $string['cannotmarktopic'] = 'Could not mark that topic for this course';
 $string['cannotmigratedatacomments'] = 'Cannot migrate data module comments';
 $string['cannotmodulename'] = 'Cannot get the module name in build navigation';
 $string['cannotmoduletype'] = 'Cannot get the module type in build navigation';
+$string['cannotmovecategory'] = 'Cannot move category';
+$string['cannotmovecourses'] = 'Cannot move courses from the category they are in to another.';
 $string['cannotmoverolewithid'] = 'Cannot move role with ID {$a}';
 $string['cannotopencsv'] = 'Cannot open CSV file';
 $string['cannotopenfile'] = 'Cannot open file ({$a})';
@@ -139,6 +145,7 @@ $string['cannotsetupblock'] = 'Blocks tables could NOT be set up successfully!';
 $string['cannotsetupcapformod'] = 'Could not set up the capabilities for {$a}';
 $string['cannotsetupcapforplugin'] = 'Could not set up the capabilities for {$a}';
 $string['cannotshowhidecoursesincategory'] = 'Cannot show/hide the courses in category {$a}.';
+$string['cannotsignup'] = 'You cannot create a new account because you are already logged in as {$a}.';
 $string['cannotunassigncap'] = 'Could not unassign deprecated capability {$a->cap} from role {$a->role}';
 $string['cannotunassignrolefrom'] = 'Cannot unassign this user from role id: {$a}';
 $string['cannotunzipfile'] = 'Cannot unzip file';
@@ -159,7 +166,9 @@ $string['cannotviewprofile'] = 'You cannot view the profile of this user';
 $string['cannotviewreport'] = 'You cannot view this report';
 $string['cannotwritefile'] = 'Cannot write to file ({$a})';
 $string['categoryerror'] = 'Category error';
+$string['categorynamerequired'] = 'Category name is required';
 $string['categorytoolong'] = 'Category name too long';
+$string['categoryidnumbertaken'] = 'ID number is already used for another category';
 $string['commentmisconf'] = 'Comment ID is misconfigured';
 $string['componentisuptodate'] = 'Component is up-to-date';
 $string['confirmsesskeybad'] = 'Sorry, but your session key could not be confirmed to carry out this action.  This security feature prevents against accidental or malicious execution of important functions in your name.  Please make sure you really wanted to execute this function.';
@@ -170,14 +179,15 @@ $string['coursedoesnotbelongtocategory'] = 'The course doesn\'t belong to this c
 $string['courseformatnotfound'] = 'The course format \'{$a}\' doesn\'t exist or is not recognized';
 $string['coursegroupunknown'] = 'Course corresponding to group {$a} not specified';
 $string['courseidnotfound'] = 'Course id doesn\'t exist';
+$string['courseidnumbertaken'] = 'ID number is already used for another course ({$a})';
 $string['coursemisconf'] = 'Course is misconfigured';
-$string['courserequestdisabled'] = 'Sorry, but requesting courses has been disabled by the administrator';
+$string['courserequestdisabled'] = 'Sorry, but course requests have been disabled by the administrator.';
 $string['csvcolumnduplicates'] = 'Duplicate columns detected';
 $string['csvemptyfile'] = 'The CSV file is empty';
 $string['csvfewcolumns'] = 'Not enough columns, please verify the delimiter setting';
 $string['csvinvalidcols'] = '<b>Invalid CSV file:</b> First line must include "Header Fields" and the file must be type of <br />"Expanded Fields/Comma Separated"<br />or<br /> "Expanded Fields with CAVV Result Code/Comma Separated"';
 $string['csvinvalidcolsnum'] = 'Invalid CSV file - each line must include 49 or 70 fields';
-$string['csvloaderror'] = 'Error occur during loading CSV file!';
+$string['csvloaderror'] = 'An error occurred while loading the CSV file: {$a}';
 $string['csvweirdcolumns'] = 'Invalid CSV file format - number of columns is not constant!';
 $string['dbconnectionfailed'] = '<p>Error: Database connection failed</p>
 <p>It is possible that the database is overloaded or otherwise not running properly.</p>
@@ -185,8 +195,8 @@ $string['dbconnectionfailed'] = '<p>Error: Database connection failed</p>
 $string['dbdriverproblem'] = '<p>Error: database driver problem detected</p>
 <p>The site administrator should verify server configuration</p><p>{$a}</p>';
 $string['dbsessionbroken'] = 'Serious database session problem detected.<br /><br />Please notify server administrator.';
-$string['dbsessionhandlerproblem'] = 'Setting up of database session failed.<br /><br />Please notify server administrator.';
-$string['dbsessionmysqlpacketsize'] = 'Serious session error detected.<br /><br />Please notify administrator, this problem is most probably caused by small value in max_allowed_packet MySQL setting.';
+$string['dbsessionhandlerproblem'] = 'Setting up of database session failed. Please notify the server administrator.';
+$string['dbsessionmysqlpacketsize'] = 'A serious session error was detected. Please notify the site administrator. The problem is most probably caused by small value in max_allowed_packet MySQL setting.';
 $string['dbupdatefailed'] = 'Database update failed';
 $string['ddldependencyerror'] = '{$a->targettype} "{$a->targetname}" cannot be modified. Dependency found with {$a->offendingtype} "{$a->offendingname}"';
 $string['ddlexecuteerror'] = 'DDL sql execution error';
@@ -199,6 +209,7 @@ $string['ddlunknownerror'] = 'Unknown DDL library error';
 $string['ddlxmlfileerror'] = 'XML database file errors found';
 $string['destinationcmnotexit'] = 'The destination course module does not exist';
 $string['detectedbrokenplugin'] = 'Plugin "{$a}" is defective or outdated, can not continue, sorry.';
+$string['dmlexceptiononinstall'] = '<p>A database error has occurred [{$a->errorcode}].<br />{$a->debuginfo}</p>';
 $string['dmlreadexception'] = 'Error reading from database';
 $string['dmltransactionexception'] = 'Database transaction error';
 $string['dmlwriteexception'] = 'Error writing to database';
@@ -211,7 +222,8 @@ $string['duplicaterolename'] = 'There is already a role with this name!';
 $string['duplicateroleshortname'] = 'There is already a role with this short name!';
 $string['duplicateusername'] = 'Duplicate username - skipping record';
 $string['emailfail'] = 'Emailing failed';
-$string['error'] = 'Error occured';
+$string['error'] = 'Error occurred';
+$string['errorprocessingarchive'] = 'Error processing archive file';
 $string['errorcleaningdirectory'] = 'Error cleaning directory "{$a}"';
 $string['errorcopyingfiles'] = 'Error copying files';
 $string['errorcreatingdirectory'] = 'Error creating directory "{$a}"';
@@ -219,6 +231,7 @@ $string['errorcreatingfile'] = 'Error creating file "{$a}"';
 $string['errorcreatingrole'] = 'Error creating role';
 $string['errorfetchingrssfeed'] = 'Error fetching RSS feed.';
 $string['erroronline'] = 'Error on line {$a}';
+$string['erroroutput'] = 'Error output, so disabling automatic redirect.';
 $string['errorparsingxml'] = 'Error parsing XML: {$a->errorstring} at line {$a->errorline}, char {$a->errorchar}';
 $string['errorreadingfile'] = 'Error reading file "{$a}"';
 $string['errorsavingrequest'] = 'An error occurred when trying to save your request.';
@@ -240,6 +253,7 @@ $string['filternotinstalled'] = 'Filter {$a} is not currently installed';
 $string['forumblockingtoomanyposts'] = 'You have exceeded the posting threshold set for this forum';
 $string['generalexceptionmessage'] = 'Exception - {$a}';
 $string['gradepubdisable'] = 'Grade publishing disabled';
+$string['gradecantregrade'] = 'An error occurred during grade calculation: {$a}';
 $string['groupalready'] = 'User already belongs to group {$a}';
 $string['groupexistforcourse'] = 'Group "{$a}" already exists for this course';
 $string['groupexistforcoursewithidnumber'] = '{$a->problemgroup}: Group "{$a->name}" with an idnumber of "{$a->idnumber}" already exists for this course';
@@ -250,6 +264,7 @@ $string['groupnotaddedtogroupingerror'] = 'Group "{$a->groupname}" not added to 
 $string['groupingnotaddederror'] = 'Grouping "{$a}" not added';
 $string['groupunknown'] = 'Group {$a} not associated to specified course';
 $string['groupusernotmember'] = 'User is not member of this group.';
+$string['guestcantaccessprofiles'] = 'Guests cannot access user profiles. Log in with a full user account to continue.';
 $string['guestnocomment'] = 'Guests are not allowed to post comments!';
 $string['guestnoeditprofile'] = 'The guest user cannot edit their profile';
 $string['guestnoeditprofileother'] = 'The guest user profile cannot be edited';
@@ -258,7 +273,7 @@ $string['guestsarenotallowed'] = 'The guest user is not allowed to do this';
 $string['hackdetected'] = 'Hack attack detected!';
 $string['hashpoolproblem'] = 'Incorrect pool file content {$a}.';
 $string['headersent'] = 'Headers already sent';
-$string['idnumbertaken'] = 'ID number is already used for another course';
+$string['idnumbertaken'] = 'This ID number is already in use';
 $string['idnumbertoolong'] = 'ID number is too long';
 $string['importformatnotimplement'] = 'Sorry, importing this format is not yet implemented!';
 $string['incorrectext'] = 'File has an incorrect extension';
@@ -289,7 +304,7 @@ $string['invalidcourselevel'] = 'Incorrect context level';
 $string['invalidcoursemodule'] = 'Invalid course module ID';
 $string['invalidcoursenameshort'] = 'Invalid short course name';
 $string['invaliddata'] = 'Data submitted is invalid';
-$string['invaliddatarootpermissions'] = 'Invalid permissions detected in $CFG->dataroot directory, administrator has to fix permissions.';
+$string['invaliddatarootpermissions'] = 'Invalid permissions detected when trying to create a directory. Turn debugging on for further details.';
 $string['invaliddevicetype'] = 'Invalid device type';
 $string['invalidelementid'] = 'Incorrect element id!';
 $string['invalidentry'] = 'This is not valid entry!';
@@ -364,12 +379,16 @@ $string['missingvarname'] = 'Required variable name is missing!';
 $string['missing_moodle_backup_xml_file'] = 'Backup is missing XML file: {$a}';
 $string['mixedtypesqlparam'] = 'ERROR: Mixed types of sql query parameters!!';
 $string['mnetdisable'] = 'MNET is disabled';
-$string['mnetlocal'] = 'Remote MNET users cannot login locally';
+$string['mnetlocal'] = 'Remote MNET users cannot log in locally';
 $string['moduledisable'] = 'This module ({$a}) has been disabled for this particular course';
 $string['moduledoesnotexist'] = 'This module does not exist';
 $string['moduleinstancedoesnotexist'] = 'The instance of this module does not exist';
 $string['modulemissingcode'] = 'Module {$a} is missing the code needed to perform this function';
 $string['movecatcontentstoroot'] = 'Moving the category content to root is not allowed. You must move the contents to an existant category!';
+$string['movecategorynotpossible'] = 'You cannot move category \'{$a}\' into the selected category.';
+$string['movecategoryownparent'] = 'You cannot make category \'{$a}\' a parent of itself.';
+$string['movecategoryparentconflict'] = 'You cannot make category \'{$a}\' a subcategory of one of its own subcategories.';
+$string['mssqlrcsmodemissing'] = 'The database is not using the expected READ_COMMITTED_SNAPSHOT mode which can lead to wrong results, especially under high concurrency scenarios. Please enable it for correct behaviour. For further information, see the documentation <a href="https://docs.moodle.org/en/Installing_MSSQL_for_PHP">Installing MSSQL for PHP</a>.';
 $string['multiplerecordsfound'] = 'Multiple records found, only one record expected.';
 $string['multiplerestorenotallow'] = 'Multiple restore execution not allowed!';
 $string['mustbeloggedin'] = 'You must be logged in to do this';
@@ -391,7 +410,7 @@ $string['nofolder'] = 'Requested directory does not exist';
 $string['noformdesc'] = 'No formslib form description file found for this activity.';
 $string['noguest'] = 'No guests here!';
 $string['noinstances'] = 'There are no instances of {$a} in this course!';
-$string['nologinas'] = 'You are not allowed to login as that user';
+$string['nologinas'] = 'You are not allowed to log in as that user';
 $string['nonmeaningfulcontent'] = 'Non meaningful content';
 $string['noparticipants'] = 'No participants found for this course';
 $string['noparticipatorycms'] = 'Sorry, but you have no participatory course modules to report on';
@@ -436,7 +455,8 @@ $string['querystringcannotbeempty'] = 'The query string cannot be empty.';
 $string['redirecterrordetected'] = 'Unsupported redirect detected, script execution terminated';
 $string['refoundto'] = 'Can be refunded to {$a}';
 $string['refoundtoorigi'] = 'Refunded to original amount: {$a}';
-$string['remotedownloaderror'] = 'Download of component to your server failed, please verify proxy settings, PHP cURL extension is highly recommended.<br /><br />You must download the <a href="{$a->url}">{$a->url}</a> file manually, copy it to "{$a->dest}" in your server and unzip it there.';
+$string['remotedownloaderror'] = '<p>The download of the component to your server failed. Please verify proxy settings; the PHP cURL extension is highly recommended.</p>
+<p>You must download the <a href="{$a->url}">{$a->url}</a> file manually, copy it to "{$a->dest}" in your server and unzip it there.</p>';
 $string['remotedownloadnotallowed'] = 'Download of components to your server isn\'t allowed (allow_url_fopen is disabled).<br /><br />You must download the <a href="{$a->url}">{$a->url}</a> file manually, copy it to "{$a->dest}" in your server and unzip it there.';
 $string['reportnotavailable'] = 'This type of report is only available for the site course';
 $string['requirecorrectaccess'] = 'Invalid url or port.';
@@ -455,12 +475,14 @@ $string['serverconnection'] = 'Error connecting to the server';
 $string['servicedonotexist'] = 'The service does not exist';
 $string['sessionwaiterr'] = 'Timed out while waiting for session lock.<br />Wait for your current requests to finish and try again later.';
 $string['sessioncookiesdisable'] = 'Incorrect use of require_key_login() - session cookies must be disabled!';
-$string['sessiondiskfull'] = 'The session partition is full. It is not possible to login at this time.<br /><br />Please notify server administrator.';
-$string['sessionerroruser'] = 'Your session has timed out.  Please login again.';
-$string['sessionerroruser2'] = 'A server error that affects your login session was detected. Please login again or restart your browser.';
+$string['sessiondiskfull'] = 'The session partition is full. It is not possible to log in at this time. Please notify the server administrator.';
+$string['sessionhandlerproblem'] = 'Session handler is misconfigured';
+$string['sessionerroruser'] = 'Your session has timed out. Please log in again.';
+$string['sessionerroruser2'] = 'A server error that affects your login session was detected. Please log in again or restart your browser.';
 $string['sessionipnomatch'] = 'Sorry, but your IP number seems to have changed from when you first logged in.  This security feature prevents crackers stealing your identity while logged in to this site.  Normal users should not be seeing this message - please ask the site administrator for help.';
-$string['sessionipnomatch2'] = 'Sorry, but your IP number seems to have changed from when you first logged in.  This security feature prevents crackers stealing your identity while logged in to this site. You may see this error if you use wireless networks or if you are roaming between different networks. Please ask the site administrator for more help.<br /><br />If you want to continue please press F5 key to refresh this page.';
-$string['shortnametaken'] = 'Short name is already used for another course';
+$string['sessionipnomatch2'] = '<p>Sorry, but your IP number seems to have changed from when you first logged in. This security feature prevents crackers stealing your identity while logged in to this site. You may see this error if you use wireless networks or if you are roaming between different networks. Please ask the site administrator for more help.</p>
+<p>If you want to continue please press F5 key to refresh this page.</p>';
+$string['shortnametaken'] = 'Short name is already used for another course ({$a})';
 $string['scheduledbackupsdisabled'] = 'Scheduled backups have been disabled by the server admin';
 $string['socksnotsupported'] = 'SOCKS5 proxy is not supported in PHP4';
 $string['spellcheckernotconf'] = 'Spellchecker not configured';
@@ -468,9 +490,10 @@ $string['sslonlyaccess'] = 'For security reasons only https connections are allo
 $string['statscatchupmode'] = 'Statistics is currently in catchup mode. So far {$a->daysdone} day(s) have been processed and {$a->dayspending} are pending. Check back soon!';
 $string['statsdisable'] = 'Statistics are not enabled.';
 $string['statsnodata'] = 'There is no available data for that combination of course and time period';
+$string['storedfilecannotcreatefile'] = 'Can not create local file pool file, please verify permissions in dataroot and available disk space.';
 $string['storedfilecannotcreatefiledirs'] = 'Can not create local file pool directories, please verify permissions in dataroot.';
 $string['storedfilecannotread'] = 'Can not read file, either file does not exist or there are permission problems';
-$string['storedfilenotcreated'] = 'Can not create file "{$a->contextid}/{$a->component}/{$a->filearea}/{$a->itemid}/{$a->filepath}/{$a->filename}"';
+$string['storedfilenotcreated'] = 'Can not create file "{$a->contextid}/{$a->component}/{$a->filearea}/{$a->itemid}{$a->filepath}{$a->filename}"';
 $string['storedfileproblem'] = 'Unknown exception related to local files ({$a})';
 $string['tagdisabled'] = 'Tags are disabled!';
 $string['tagnotfound'] = 'The specified tag was not found in the database';
@@ -493,6 +516,7 @@ $string['unknowncourse'] = 'Unknown course named "{$a}"';
 $string['unknowncourseidnumber'] = 'Unknown course ID "{$a}"';
 $string['unknowncoursesection'] = 'Unknown course section in course "{$a}"';
 $string['unknowncourserequest'] = 'Unknown course request';
+$string['unknownevent'] = 'Unknown event';
 $string['unknownfiletype'] = 'Error unknown filtertype';
 $string['unknowngroup'] = 'Unknown group "{$a}"';
 $string['unknownhelp'] = 'Unknown help topic {$a}';

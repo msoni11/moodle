@@ -31,11 +31,11 @@
 defined('MOODLE_INTERNAL') || die();
 
 $string['admindirname'] = 'Pasta de administração';
-$string['availablelangs'] = 'Idiomas disponíveis';
+$string['availablelangs'] = 'Pacotes linguísticos disponíveis';
 $string['chooselanguagehead'] = 'Selecione um idioma';
 $string['chooselanguagesub'] = 'Selecione o idioma a utilizar durante a instalação. Poderá depois selecionar um outro idioma para o site e para os utilizadores.';
-$string['clialreadyconfigured'] = 'O ficheiro config.php já existe, use admin/cli/install_database.php se desejar instalar este site.';
-$string['clialreadyinstalled'] = 'O ficheiro <b>config.php</b> já se encontra no servidor, o que indica que já existe uma instalação prévia do Moodle. Se pretender realizar uma atualização do Moodle existente, deve usar o <i>script</i> <b>admin/cli/upgrade.php</b>';
+$string['clialreadyconfigured'] = 'O ficheiro config.php já existe, use admin/cli/install_database.php para instalar o Moodle para este site.';
+$string['clialreadyinstalled'] = 'O ficheiro config.php já existe, use admin/cli/install_database.php para atualizar o Moodle para este site.';
 $string['cliinstallheader'] = 'Programa para instalação do Moodle <b>{$a}</b> através da linha de comandos';
 $string['databasehost'] = 'Servidor da base de dados';
 $string['databasename'] = 'Nome da base de dados';
@@ -48,7 +48,7 @@ $string['environmenthead'] = 'A verificar sistema...';
 $string['environmentsub2'] = 'Cada nova versão do Moodle tem pré-requisitos mínimos relativamente à versão do PHP e extensões necessárias para o seu correto funcionamento. Estes pré-requisitos são verificados sempre que o Moodle é instalado ou atualizado. Contacte o administrador do servidor caso seja necessário atualizar a versão do PHP ou instalar novas extensões.';
 $string['errorsinenvironment'] = 'A verificação do sistema falhou!';
 $string['installation'] = 'Instalação';
-$string['langdownloaderror'] = 'Não foi possível instalar o idioma <b>{$a}</b> por falha na descarga. O processo de instalação continuará em Inglês.';
+$string['langdownloaderror'] = 'Não foi possível instalar o idioma <b>{$a}</b> por falha no download. O processo de instalação continuará em Inglês.';
 $string['memorylimithelp'] = '<p>O limite de memória para o PHP definido atualmente no servidor é <b>{$a}</b>.</p><p>Um número elevado de módulos em utilização ou de utilizadores registados pode fazer com que o Moodle apresente problemas de falta de memória.</p><p>É recomendado que o PHP seja configurado com um limite de memória de pelo menos 40MB. Esta configuração pode ser definida de diversas formas:</p><ol><li>Compilação do PHP com o parâmetro <b>--enable-memory-limit</b>. Esta definição permitirá ao próprio Moodle definir o valor a utilizar.</li><li>Alteração do parâmetro <b>memory_limit</b> no ficheiro de configuração do PHP para um valor igual ou superior a 40MB.</li><li>Criação de um ficheiro <b>.htaccess</b> na raiz da pasta do Moodle com a linha <b>php_value memory_limit 40M</b><p>ATENÇÃO: Em alguns servidores esta configuração impedirá o funcionamento de <b>todas</b> as páginas PHP. Nestes casos, não poderá ser utilizado o ficheiro <b>.htaccess</b>.</p></li></ol>';
 $string['paths'] = 'Caminhos';
 $string['pathserrcreatedataroot'] = 'O programa de instalação não conseguiu criar a pasta de dados <b>{$a->dataroot}</b>.';
@@ -56,9 +56,12 @@ $string['pathshead'] = 'Confirmar caminhos';
 $string['pathsrodataroot'] = 'A pasta de dados não tem permissões de escrita.';
 $string['pathsroparentdataroot'] = 'A pasta pai <b>{$a->parent}</b> não tem permissões de escrita. O programa de instalação não conseguiu criar a pasta <b>{$a->dataroot}</b>.';
 $string['pathssubadmindir'] = 'Alguns servidores Web utilizam a pasta <strong>admin</strong> em URLs especiais de acesso a funcionalidades especiais, como é o caso de painéis de controlo. Algumas situações podem criar conflitos com a localização normal das páginas de administração do Moodle. Estes problemas podem ser resolvidos renomeando a pasta <strong>admin</strong> na instalação do Moodle e indicando aqui o novo nome a utilizar. Por exemplo:<br /><br /><b>moodleadmin</b><br /><br />Esta ação resolverá os problemas de acesso dos links para as funcionalidades de administração do Moodle.';
-$string['pathssubdataroot'] = 'É necessária uma pasta onde o Moodle possa gravar os ficheiros enviados para a plataforma. Esta pasta deve ter permissão de <b>leitura</b> e <b>escrita</b> pelo utilizador do web server (normalmente <b>nobody</b> ou <b>apache</b>). Por razões de segurança esta pasta não deve estar diretamente acessível através da Internet.';
-$string['pathssubdirroot'] = 'Caminho completo para a pasta de instalação do Moodle.';
-$string['pathssubwwwroot'] = 'Endereço web completo de acesso ao Moodle. Não é possível aceder ao Moodle usando mais do que um endereço. Se o site tiver mais do que um endereço público, devem ser configurados redireccionamentos permanentes em todos eles, à exceção deste. Se o site pode ser acedido a partir da Internet e de Intranets, então este endereço deve ser configurado no DNS de forma a que os utilizadores das Intranets possam usar este endereço público para aceder ao Moodle. Se o endereço não está correto, então altere o endereço indicado no browser para reiniciar a instalação com o URL correto.';
+$string['pathssubdataroot'] = '<p>Uma diretoria em que o Moodle irá armazenar todo o conteúdo de ficheiros enviados pelos utilizadores.</p>
+<p>Esta diretoria deve ser legível e gravável pelo utilizador do servidor web (geralmente \'www-data\', \'nobody\', ou \'apache\').</p>
+<p>Não deve ser diretamente acessível através da web.</p>
+<p> Se a diretoria não existir atualmente, o processo de instalação tentará criá-la.</p>';
+$string['pathssubdirroot'] = 'Caminho completo para a diretoria que contém o código Moodle.';
+$string['pathssubwwwroot'] = 'Endereço web completo de acesso ao Moodle. Não é possível aceder ao Moodle usando mais do que um endereço. Se o site tiver mais do que um endereço público, devem ser configurados redirecionamentos permanentes em todos eles, à exceção deste. Se o site pode ser acedido a partir da Internet e de Intranet, então use o endereço público aqui. Se o endereço atual não está correto, então altere o endereço indicado na barra de endereço do seu navegador e reinicie a instalação.';
 $string['pathsunsecuredataroot'] = 'A localização da pasta de dados não é segura';
 $string['pathswrongadmindir'] = 'A pasta <b>admin</b> não existe';
 $string['phpextension'] = 'Extensão <b>{$a}</b> do PHP';

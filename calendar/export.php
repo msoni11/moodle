@@ -56,10 +56,25 @@ if (empty($CFG->enablecalendarexport)) {
 
 $courseid = optional_param('course', SITEID, PARAM_INT);
 $action = optional_param('action', '', PARAM_ALPHA);
-$day  = optional_param('cal_d', 0, PARAM_INT);
-$mon  = optional_param('cal_m', 0, PARAM_INT);
-$yr   = optional_param('cal_y', 0, PARAM_INT);
+$day = optional_param('cal_d', 0, PARAM_INT);
+$mon = optional_param('cal_m', 0, PARAM_INT);
+$year = optional_param('cal_y', 0, PARAM_INT);
+$time = optional_param('time', 0, PARAM_INT);
 $generateurl = optional_param('generateurl', 0, PARAM_BOOL);
+
+
+// If a day, month and year were passed then convert it to a timestamp. If these were passed
+// then we can assume the day, month and year are passed as Gregorian, as no where in core
+// should we be passing these values rather than the time. This is done for BC.
+if (!empty($day) && !empty($mon) && !empty($year)) {
+    if (checkdate($mon, $day, $year)) {
+        $time = make_timestamp($year, $mon, $day);
+    } else {
+        $time = time();
+    }
+} else if (empty($time)) {
+    $time = time();
+}
 
 if ($courseid != SITEID && !empty($courseid)) {
     $course = $DB->get_record('course', array('id' => $courseid));
@@ -72,80 +87,87 @@ if ($courseid != SITEID && !empty($courseid)) {
 }
 require_course_login($course);
 
-$url = new moodle_url('/calendar/export.php');
+$url = new moodle_url('/calendar/export.php', array('time' => $time));
+
 if ($action !== '') {
     $url->param('action', $action);
 }
-if ($day !== 0) {
-    $url->param('cal_d', $day);
-}
-if ($mon !== 0) {
-    $url->param('cal_m', $mon);
-}
-if ($yr !== 0) {
-    $url->param('cal_y', $yr);
-}
+
 if ($course !== NULL) {
     $url->param('course', $course->id);
 }
 $PAGE->set_url($url);
 
-$calendar = new calendar_information($day, $mon, $yr);
+$calendar = new calendar_information(0, 0, 0, $time);
 $calendar->prepare_for_view($course, $courses);
 
 $pagetitle = get_string('export', 'calendar');
-$now = usergetdate(time());
 
 // Print title and header
 if ($issite) {
     $PAGE->navbar->add($course->shortname, new moodle_url('/course/view.php', array('id'=>$course->id)));
 }
 $link = new moodle_url(CALENDAR_URL.'view.php', array('view'=>'upcoming', 'course'=>$calendar->courseid));
-$PAGE->navbar->add(get_string('calendar', 'calendar'), calendar_get_link_href($link, $now['mday'], $now['mon'], $now['year']));
+$PAGE->navbar->add(get_string('calendar', 'calendar'), calendar_get_link_href($link, 0, 0, 0, $time));
 $PAGE->navbar->add($pagetitle);
 
 $PAGE->set_title($course->shortname.': '.get_string('calendar', 'calendar').': '.$pagetitle);
 $PAGE->set_heading($course->fullname);
-$PAGE->set_button(calendar_preferences_button($course));
 $PAGE->set_pagelayout('standard');
+$PAGE->set_button(calendar_preferences_button($course));
 
 $renderer = $PAGE->get_renderer('core_calendar');
 $calendar->add_sidecalendar_blocks($renderer);
 
-echo $OUTPUT->header();
-echo $renderer->start_layout();
-switch($action) {
-    case 'advanced':
-        // Why nothing?
-        break;
-    case '':
-    default:
-        $weekend = CALENDAR_DEFAULT_WEEKEND;
-        if (isset($CFG->calendar_weekend)) {
-            $weekend = intval($CFG->calendar_weekend);
-        }
+// Get the calendar type we are using.
+$calendartype = \core_calendar\type_factory::get_calendar_instance();
+$now = $calendartype->timestamp_to_date_array($time);
 
-        $authtoken = sha1($USER->id . $USER->password . $CFG->calendar_exportsalt);
-        // Let's populate some vars to let "common tasks" be somewhat smart...
-        // If today it's weekend, give the "next week" option
-        $allownextweek  = $weekend & (1 << $now['wday']);
-        // If it's the last week of the month, give the "next month" option
-        $allownextmonth = calendar_days_in_month($now['mon'], $now['year']) - $now['mday'] < 7;
-        // If today it's weekend but tomorrow it isn't, do NOT give the "this week" option
-        $allowthisweek  = !(($weekend & (1 << $now['wday'])) && !($weekend & (1 << (($now['wday'] + 1) % 7))));
-        echo $renderer->basic_export_form($allowthisweek, $allownextweek, $allownextmonth, $USER->id, $authtoken);
-        break;
+$weekend = CALENDAR_DEFAULT_WEEKEND;
+if (isset($CFG->calendar_weekend)) {
+    $weekend = intval($CFG->calendar_weekend);
 }
+$numberofdaysinweek = $calendartype->get_num_weekdays();
 
-if (!empty($generateurl)) {
-    $params['userid']      = optional_param('userid', 0, PARAM_INT);
-    $params['authtoken']   = optional_param('authtoken', '', PARAM_ALPHANUM);
-    $params['preset_what'] = optional_param('preset_what', 'all', PARAM_ALPHA);
-    $params['preset_time'] = optional_param('preset_time', 'weeknow', PARAM_ALPHA);
+$formdata = array(
+    // Let's populate some vars to let "common tasks" be somewhat smart...
+    // If today it's weekend, give the "next week" option.
+    'allownextweek' => $weekend & (1 << $now['wday']),
+    // If it's the last week of the month, give the "next month" option.
+    'allownextmonth' => calendar_days_in_month($now['mon'], $now['year']) - $now['mday'] < $numberofdaysinweek,
+    // If today it's weekend but tomorrow it isn't, do NOT give the "this week" option.
+    'allowthisweek' => !(($weekend & (1 << $now['wday'])) && !($weekend & (1 << (($now['wday'] + 1) % $numberofdaysinweek))))
+);
+$exportform = new core_calendar_export_form(null, $formdata);
+$calendarurl = '';
+if ($data = $exportform->get_data()) {
+    $password = $DB->get_record('user', array('id' => $USER->id), 'password');
+    $params = array();
+    $params['userid']      = $USER->id;
+    $params['authtoken']   = sha1($USER->id . (isset($password->password) ? $password->password : '') . $CFG->calendar_exportsalt);
+    $params['preset_what'] = $data->events['exportevents'];
+    $params['preset_time'] = $data->period['timeperiod'];
 
     $link = new moodle_url('/calendar/export_execute.php', $params);
-    print html_writer::tag('div', get_string('calendarurl', 'calendar', $link->out()), array('class' => 'generalbox calendarurl'));
+    if (!empty($data->generateurl)) {
+        $urlclasses = array('class' => 'generalbox calendarurl');
+        $calendarurl = html_writer::tag( 'div', get_string('calendarurl', 'calendar', $link->out()), $urlclasses);
+    }
+
+    if (!empty($data->export)) {
+        redirect($link);
+    }
 }
+
+echo $OUTPUT->header();
+echo $renderer->start_layout();
+echo $OUTPUT->heading(get_string('exportcalendar', 'calendar'));
+
+if ($action != 'advanced') {
+    $exportform->display();
+}
+
+echo $calendarurl;
 
 echo $renderer->complete_layout();
 echo $OUTPUT->footer();

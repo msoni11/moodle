@@ -17,8 +17,7 @@
 /**
  * Provides support for the conversion of moodle1 backup to the moodle2 format
  *
- * @package    mod
- * @subpackage scorm
+ * @package    mod_scorm
  * @copyright  2011 Aparup Banerjee <nebgor@gmail.com>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -58,11 +57,11 @@ class moodle1_mod_scorm_handler extends moodle1_mod_handler {
                         'scormtype' => 'local',
                         'sha1hash' => null,
                         'revision' => '0',
-                        'forcecompleted' => 1,
+                        'forcecompleted' => 0,
                         'forcenewattempt' => 0,
                         'lastattemptlock' => 0,
                         'displayattemptstatus' => 1,
-                        'displaycoursestructure' => 1,
+                        'displaycoursestructure' => 0,
                         'timeopen' => '0',
                         'timeclose' => '0',
                         'introformat' => '0',

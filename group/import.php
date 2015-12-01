@@ -45,7 +45,7 @@ $PAGE->navbar->add($strimportgroups);
 navigation_node::override_active_url(new moodle_url('/group/index.php', array('id' => $course->id)));
 $PAGE->set_title("$course->shortname: $strimportgroups");
 $PAGE->set_heading($course->fullname);
-$PAGE->set_pagelayout('standard');
+$PAGE->set_pagelayout('admin');
 
 $returnurl = new moodle_url('/group/index.php', array('id'=>$id));
 
@@ -196,16 +196,16 @@ if ($mform_post->is_cancelled()) {
                     }
 
                     // Add group to grouping
-                    if (isset($newgroup->groupingname)) {
+                    if (!empty($newgroup->groupingname) || is_numeric($newgroup->groupingname)) {
                         $groupingname = $newgroup->groupingname;
                         if (! $groupingid = groups_get_grouping_by_name($newgroup->courseid, $groupingname)) {
                             $data = new stdClass();
                             $data->courseid = $newgroup->courseid;
                             $data->name = $groupingname;
                             if ($groupingid = groups_create_grouping($data)) {
-                                echo $OUTPUT->notification(get_string('groupingaddedsuccesfully', 'group', $groupname), 'notifysuccess');
+                                echo $OUTPUT->notification(get_string('groupingaddedsuccesfully', 'group', $groupingname), 'notifysuccess');
                             } else {
-                                echo $OUTPUT->notification(get_string('groupingnotaddederror', 'error', $groupname));
+                                echo $OUTPUT->notification(get_string('groupingnotaddederror', 'error', $groupingname));
                                 continue;
                             }
                         }

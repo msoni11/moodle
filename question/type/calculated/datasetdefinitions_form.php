@@ -71,7 +71,10 @@ class question_dataset_dependent_definitions_form extends question_wizard_form {
 
     protected function definition() {
         global $SESSION;
+
         $mform = $this->_form;
+        $mform->setDisableShortforms();
+
         $possibledatasets = $this->qtypeobj->find_dataset_names($this->question->questiontext);
         $mandatorydatasets = array();
         if (isset($this->question->options->answers)) {
@@ -89,7 +92,7 @@ class question_dataset_dependent_definitions_form extends question_wizard_form {
         $datadefscat  = $this->qtypeobj->get_dataset_definitions_category($this->question);
         $datasetmenus = array();
         $label = "<div class='mdl-align'>".get_string('datasetrole', 'qtype_calculated')."</div>";
-        // explaining the role of datasets so other strings can be shortened
+        // Explaining the role of datasets so other strings can be shortened.
         $mform->addElement('html', $label);
         $mform->addElement('header', 'mandatoryhdr',
                 get_string('mandatoryhdr', 'qtype_calculated'));
@@ -101,14 +104,14 @@ class question_dataset_dependent_definitions_form extends question_wizard_form {
                         $this->qtypeobj->dataset_options($this->question, $datasetname);
                 unset($options['0']); // Mandatory...
                 $label = get_string('wildcard', 'qtype_calculated', $datasetname);
-                $mform->addElement('select', "dataset[$key]", $label, $options);
+                $mform->addElement('select', "dataset[{$key}]", $label, $options);
                 if (isset($datadefscat[$datasetname])) {
                     $mform->addElement('static', "there is a category",
                             get_string('sharedwildcard', 'qtype_calculated', $datasetname),
                             get_string('dataitemdefined', 'qtype_calculated',
                             $datadefscat[$datasetname]));
                 }
-                $mform->setDefault("dataset[$key]", $selected);
+                $mform->setDefault("dataset[{$key}]", $selected);
                 $datasetmenus[$datasetname] = '';
                 $key++;
             }
@@ -120,7 +123,7 @@ class question_dataset_dependent_definitions_form extends question_wizard_form {
                 list($options, $selected) = $this->qtypeobj->dataset_options(
                         $this->question, $datasetname, false);
                 $label = get_string('wildcard', 'qtype_calculated', $datasetname);
-                $mform->addElement('select', "dataset[$key]", $label, $options);
+                $mform->addElement('select', "dataset[{$key}]", $label, $options);
                 if (isset($datadefscat[$datasetname])) {
                     $mform->addElement('static', "there is a category",
                             get_string('sharedwildcard', 'qtype_calculated', $datasetname),
@@ -128,12 +131,12 @@ class question_dataset_dependent_definitions_form extends question_wizard_form {
                                     $datadefscat[$datasetname]));
                 }
 
-                $mform->setDefault("dataset[$key]", $selected);
+                $mform->setDefault("dataset[{$key}]", $selected);
                 $datasetmenus[$datasetname] = '';
                 $key++;
             }
         }
-        // temporary strings
+        // Temporary strings.
         $mform->addElement('header', 'synchronizehdr',
                 get_string('synchronize', 'qtype_calculated'));
         $mform->addElement('radio', 'synchronize', '',

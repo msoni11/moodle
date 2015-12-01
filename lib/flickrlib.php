@@ -38,9 +38,9 @@
 class phpFlickr {
     var $api_key;
     var $secret;
-    var $REST = 'http://api.flickr.com/services/rest/';
-    var $Upload = 'http://api.flickr.com/services/upload/';
-    var $Replace = 'http://api.flickr.com/services/replace/';
+    var $REST = 'https://api.flickr.com/services/rest/';
+    var $Upload = 'https://api.flickr.com/services/upload/';
+    var $Replace = 'https://api.flickr.com/services/replace/';
     var $req;
     var $response;
     var $parsed_response;
@@ -1113,7 +1113,9 @@ class phpFlickr {
         $args['content_type']   = isset($meta['content_type']) ? $meta['content_type'] : 1; // photo by default
         $args['hidden']         = isset($meta['hidden']) ? $meta['hidden'] : 2;             // hide from public searches by default
 
-        $args['async'] = 1;
+        // Do not enable the asynchronous more because then the query does not return a photo ID,
+        // and we need a photo ID to add the photo to a set later on.
+        // $args['async'] = 1;
         $args['api_key'] = $this->api_key;
 
         if (!empty($this->email)) {
@@ -1144,8 +1146,17 @@ class phpFlickr {
         $args['photo'] = $photo; // $this->curl will process it correctly
 
         if ($response = $this->curl->post($this->Upload, $args)) {
+            $xml = simplexml_load_string($response);
+            if ($xml['stat'] == 'fail') {
+                $this->parsed_response = array('stat' => (string) $xml['stat'], 'code' => (int) $xml->err['code'],
+                    'message' => (string) $xml->err['msg']);
+            } elseif ($xml['stat'] == 'ok') {
+                $this->parsed_response = array('stat' => (string) $xml['stat'], 'photoid' => (int) $xml->photoid);
+            }
             return true;
         } else {
+            $this->parsed_response = array('stat' => 'fail', 'code' => $this->curl->get_errno(),
+                'message' => $this->curl->error);
             return false;
         }
     }

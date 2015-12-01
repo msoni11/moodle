@@ -1,5 +1,4 @@
 <?php
-
 // This file is part of Moodle - http://moodle.org/
 //
 // Moodle is free software: you can redistribute it and/or modify
@@ -18,15 +17,16 @@
 /**
  * Strings for component 'chat', language 'en', branch 'MOODLE_20_STABLE'
  *
- * @package   chat
+ * @package   mod_chat
  * @copyright 1999 onwards Martin Dougiamas  {@link http://moodle.com}
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
-$string['activityoverview'] = 'You have upcoming chat';
+$string['activityoverview'] = 'You have upcoming chat sessions';
 $string['ajax'] = 'Version using Ajax';
 $string['autoscroll'] = 'Auto scroll';
 $string['beep'] = 'Beep';
+$string['bubble'] = 'Bubble';
 $string['cantlogin'] = 'Could not log in to chat room!!';
 $string['composemessage'] = 'Compose a message';
 $string['configmethod'] = 'The ajax chat method provide an ajax based chat interface, it contacts server regularly for update. The normal chat method involves the clients regularly contacting the server for updates. It requires no configuration and works everywhere, but it can create a large load on the server with many chatters.  Using a server daemon requires shell access to Unix, but it results in a fast scalable chat environment.';
@@ -38,6 +38,8 @@ $string['configserverhost'] = 'The hostname of the computer where the server dae
 $string['configserverip'] = 'The numerical IP address that matches the above hostname';
 $string['configservermax'] = 'Max number of clients allowed';
 $string['configserverport'] = 'Port to use on the server for the daemon';
+$string['compact'] = 'Compact';
+$string['coursetheme'] = 'Course theme';
 $string['currentchats'] = 'Active chat sessions';
 $string['currentusers'] = 'Current users';
 $string['deletesession'] = 'Delete this session';
@@ -56,11 +58,13 @@ $string['chat:exportsession'] = 'Export any chat session';
 $string['chat:chat'] = 'Access a chat room';
 $string['chatintro'] = 'Description';
 $string['chatname'] = 'Name of this chat room';
-$string['chat:readlog'] = 'Read chat logs';
+$string['chat:readlog'] = 'View chat logs';
 $string['chatreport'] = 'Chat sessions';
 $string['chat:talk'] = 'Talk in a chat';
 $string['chattime'] = 'Next chat time';
 $string['entermessage'] = "Enter your message";
+$string['eventmessagesent'] = 'Message sent';
+$string['eventsessionsviewed'] = 'Sessions viewed';
 $string['idle'] = 'Idle';
 $string['inputarea'] = 'Input area';
 $string['invalidid'] = 'Could not find that chat room!';
@@ -114,7 +118,7 @@ $string['refreshuserlist'] = 'Refresh user list';
 $string['removemessages'] = 'Remove all messages';
 $string['repeatdaily'] = 'At the same time every day';
 $string['repeatnone'] = 'No repeats - publish the specified time only';
-$string['repeattimes'] = 'Repeat sessions';
+$string['repeattimes'] = 'Repeat/publish session times';
 $string['repeatweekly'] = 'At the same time every week';
 $string['saidto'] = 'said to';
 $string['savemessages'] = 'Save past sessions';

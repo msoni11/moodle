@@ -77,13 +77,19 @@ class mod_assign_grade_form extends moodleform {
         global $DB;
         $errors = parent::validation($data, $files);
         $instance = $this->assignment->get_instance();
+
+        if ($instance->markingworkflow && !empty($data['sendstudentnotifications']) &&
+                $data['workflowstate'] != ASSIGN_MARKING_WORKFLOW_STATE_RELEASED) {
+            $errors['sendstudentnotifications'] = get_string('studentnotificationworkflowstateerror', 'assign');
+        }
+
         // Advanced grading.
         if (!array_key_exists('grade', $data)) {
             return $errors;
         }
 
         if ($instance->grade > 0) {
-            if (unformat_float($data['grade']) === null && (!empty($data['grade']))) {
+            if (unformat_float($data['grade'], true) === false && (!empty($data['grade']))) {
                 $errors['grade'] = get_string('invalidfloatforgrade', 'assign', $data['grade']);
             } else if (unformat_float($data['grade']) > $instance->grade) {
                 $errors['grade'] = get_string('gradeabovemaximum', 'assign', $instance->grade);
@@ -94,7 +100,7 @@ class mod_assign_grade_form extends moodleform {
             // This is a scale.
             if ($scale = $DB->get_record('scale', array('id'=>-($instance->grade)))) {
                 $scaleoptions = make_menu_from_list($scale->scale);
-                if (!array_key_exists((int)$data['grade'], $scaleoptions)) {
+                if ((int)$data['grade'] !== -1 && !array_key_exists((int)$data['grade'], $scaleoptions)) {
                     $errors['grade'] = get_string('invalidgradeforscale', 'assign');
                 }
             }

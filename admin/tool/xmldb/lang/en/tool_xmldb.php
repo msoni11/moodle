@@ -33,24 +33,38 @@ $string['confirmdeleteindex'] = 'Are you absolutely sure that you want to delete
 $string['confirmdeletekey'] = 'Are you absolutely sure that you want to delete the key:';
 $string['confirmdeletetable'] = 'Are you absolutely sure that you want to delete the table:';
 $string['confirmdeletexmlfile'] = 'Are you absolutely sure that you want to delete the file:';
-$string['confirmcheckbigints'] = 'This functionality will search for <a href="http://tracker.moodle.org/browse/MDL-11038">potential wrong integer fields</a> in your Moodle server, generating (but not executing!) automatically the needed SQL statements to have all the integers in your DB properly defined.<br /><br />
-Once generated you can copy such statements and execute them safely with your favourite SQL interface (don\'t forget to backup your data before doing that).<br /><br />
-It\'s highly recommended to be running the latest (+ version) available of your Moodle release (1.8, 1.9, 2.x ...) before executing the search of wrong integers.<br /><br />
+$string['confirmcheckbigints'] = 'This functionality will search for <a href="http://tracker.moodle.org/browse/MDL-11038">potential wrong integer fields</a> in your Moodle server, generating (but not executing!) automatically the needed SQL statements to have all the integers in your DB properly defined.
+
+Once generated you can copy such statements and execute them safely with your favourite SQL interface (don\'t forget to backup your data before doing that).
+
+It\'s highly recommended to be running the latest (+ version) available of your Moodle release before executing the search of wrong integers.
+
 This functionality doesn\'t perform any action against the DB (just reads from it), so can be safely executed at any moment.';
-$string['confirmcheckdefaults'] = 'This functionality will search for inconsistent default values in your Moodle server, generating (but not executing!) the needed SQL statements to have all the default values properly defined.<br /><br />
-Once generated you can copy such statements and execute them safely with your favourite SQL interface (don\'t forget to backup your data before doing that).<br /><br />
-It\'s highly recommended to be running the latest (+ version) available of your Moodle release (1.8, 1.9, 2.x ...) before executing the search of inconsistent default values.<br /><br />
+$string['confirmcheckdefaults'] = 'This functionality will search for inconsistent default values in your Moodle server, generating (but not executing!) the needed SQL statements to have all the default values properly defined.
+
+Once generated you can copy such statements and execute them safely with your favourite SQL interface (don\'t forget to backup your data before doing that).
+
+It\'s highly recommended to be running the latest (+ version) available of your Moodle release before executing the search of inconsistent default values.
+
 This functionality doesn\'t perform any action against the DB (just reads from it), so can be safely executed at any moment.';
-$string['confirmcheckforeignkeys'] = 'This functionality will search for potential violations of the foreign keys defined in the install.xml definitions. (Moodle does not currently generate actual foreign key constraints in the database, which is why invalid data may be present.)<br /><br />
-It\'s highly recommended to be running the latest (+ version) available of your Moodle release (1.8, 1.9, 2.x ...) before executing the search of missing indexes.<br /><br />
+$string['confirmcheckforeignkeys'] = 'This functionality will search for potential violations of the foreign keys defined in the install.xml definitions. (Moodle does not currently generate actual foreign key constraints in the database, which is why invalid data may be present.)
+
+It\'s highly recommended to be running the latest (+ version) available of your Moodle release before executing the search of missing indexes.
+
 This functionality doesn\'t perform any action against the DB (just reads from it), so can be safely executed at any moment.';
-$string['confirmcheckindexes'] = 'This functionality will search for potential missing indexes in your Moodle server, generating (but not executing!) automatically the needed SQL statements to keep everything updated.<br /><br />
-Once generated you can copy such statements and execute them safely with your favourite SQL interface (don\'t forget to backup your data before doing that).<br /><br />
-It\'s highly recommended to be running the latest (+ version) available of your Moodle release (1.8, 1.9, 2.x ...) before executing the search of missing indexes.<br /><br />
+$string['confirmcheckindexes'] = 'This functionality will search for potential missing indexes in your Moodle server, generating (but not executing!) automatically the needed SQL statements to keep everything updated.
+
+Once generated you can copy such statements and execute them safely with your favourite SQL interface (don\'t forget to backup your data before doing that).
+
+It\'s highly recommended to be running the latest (+ version) available of your Moodle release before executing the search of missing indexes.
+
 This functionality doesn\'t perform any action against the DB (just reads from it), so can be safely executed at any moment.';
-$string['confirmcheckoraclesemantics'] = 'This functionality will search for <a href="http://tracker.moodle.org/browse/MDL-29322">Oracle varchar2 columns using BYTE semantics</a> in your Moodle server, generating (but not executing!) automatically the needed SQL statements to have all the columns converted to use CHAR semantics instead (better for cross-db compatibility and increased contents max. length).<br /><br />
-Once generated you can copy such statements and execute them safely with your favourite SQL interface (don\'t forget to backup your data before doing that).<br /><br />
-It\'s highly recommended to be running the latest (+ version) available of your Moodle release (2.2, 2.3, 2.x ...) before executing the search of BYTE semantics.<br /><br />
+$string['confirmcheckoraclesemantics'] = 'This functionality will search for <a href="http://tracker.moodle.org/browse/MDL-29322">Oracle varchar2 columns using BYTE semantics</a> in your Moodle server, generating (but not executing!) automatically the needed SQL statements to have all the columns converted to use CHAR semantics instead (better for cross-db compatibility and increased contents max. length).
+
+Once generated you can copy such statements and execute them safely with your favourite SQL interface (don\'t forget to backup your data before doing that).
+
+It\'s highly recommended to be running the latest (+ version) available of your Moodle release before executing the search of BYTE semantics.
+
 This functionality doesn\'t perform any action against the DB (just reads from it), so can be safely executed at any moment.';
 $string['confirmrevertchanges'] = 'Are you absolutely sure that you want to revert changes performed over:';
 $string['create'] = 'Create';
@@ -92,6 +106,8 @@ $string['fieldsusedinindex'] = 'This field is used as index';
 $string['fieldsusedinkey'] = 'This field is used as key.';
 $string['filemodifiedoutfromeditor'] = 'Warning: File locally modified while using the XMLDB Editor. Saving will overwrite local changes.';
 $string['filenotwriteable'] = 'File not writeable';
+$string['fkunknownfield'] = 'Foreign key {$a->keyname} on table {$a->tablename} points to a non-existent field {$a->reffield} in referenced table {$a->reftable}.';
+$string['fkunknowntable'] = 'Foreign key {$a->keyname} on table {$a->tablename} points to a non-existent table {$a->reftable}.';
 $string['fkviolationdetails'] = 'Foreign key {$a->keyname} on table {$a->tablename} is violated by {$a->numviolations} out of {$a->numrows} rows.';
 $string['floatincorrectdecimals'] = 'Incorrect number of decimals for float field';
 $string['floatincorrectlength'] = 'Incorrect length for float field';
@@ -169,6 +185,8 @@ $string['selecttable'] = 'Select table:';
 $string['table'] = 'Table';
 $string['tablenameempty'] = 'The table name cannot be empty';
 $string['tables'] = 'Tables';
+$string['unknownfield'] = 'Refers to an unknown field';
+$string['unknowntable'] = 'Refers to an unknown table';
 $string['unload'] = 'Unload';
 $string['up'] = 'Up';
 $string['view'] = 'View';
@@ -192,7 +210,11 @@ $string['wronglengthforenum'] = 'Incorrect length for enum field';
 $string['wrongnumberofreffields'] = 'Wrong number of reference fields';
 $string['wrongreservedwords'] = 'Currently used reserved words<br />(note that table names aren\'t important if using $CFG->prefix)';
 $string['wrongoraclesemantics'] = 'Wrong Oracle BYTE semantics found';
-$string['yesmissingindexesfound'] = 'Some missing indexes have been found in your DB. Here are their details and the needed SQL statements to be executed with your favourite SQL interface to create all them (don\'t forget to backup your data before doing that).<br /><br />After doing that, it\'s highly recommended to execute this utility again to check that no more missing indexes are found.';
-$string['yeswrongdefaultsfound'] = 'Some inconsistent defaults have been found in your DB. Here are their details and the needed SQL statements to be executed with your favourite SQL interface to fix them all (don\'t forget to backup your data before doing that).<br /><br />After doing that, it\'s highly recommended to execute this utility again to check that no more inconsistent defaults are found.';
-$string['yeswrongintsfound'] = 'Some wrong integers have been found in your DB. Here are their details and the needed SQL statements to be executed with your favourite SQL interface to create all them (don\'t forget to backup your data before doing that).<br /><br />After doing that, it\'s highly recommended to execute this utility again to check that no more wrong integers are found.';
-$string['yeswrongoraclesemanticsfound'] = 'Some Oracle columns using BYTE semantics have been found in your DB. Here are their details and the needed SQL statements to be executed with your favourite SQL interface to create all them (don\'t forget to backup your data before doing that).<br /><br />After doing that, it\'s highly recommended to execute this utility again to check that no more wrong semantics are found.';
+$string['yesmissingindexesfound'] = '<p>Some missing indexes have been found in your DB. Here are their details and the needed SQL statements to be executed with your favourite SQL interface to create all of them. Remember to backup your data first!</p>
+<p>After doing that, it\'s highly recommended to execute this utility again to check that no more missing indexes are found.</p>';
+$string['yeswrongdefaultsfound'] = '<p>Some inconsistent defaults have been found in your DB. Here are their details and the needed SQL statements to be executed with your favourite SQL interface to fix them all. Remember to backup your data first!</p>
+<p>After doing that, it\'s highly recommended to execute this utility again to check that no more inconsistent defaults are found.</p>';
+$string['yeswrongintsfound'] = '<p>Some wrong integers have been found in your DB. Here are their details and the needed SQL statements to be executed with your favourite SQL interface to create all them. Remember to backup your data first!</p>
+<p>After doing that, it\'s highly recommended to execute this utility again to check that no more wrong integers are found.</p>';
+$string['yeswrongoraclesemanticsfound'] = '<p>Some Oracle columns using BYTE semantics have been found in your DB. Here are their details and the needed SQL statements to be executed with your favourite SQL interface to create all them. Remember to backup your data first!</p>
+<p>After doing that, it\'s highly recommended to execute this utility again to check that no more wrong semantics are found.</p>';

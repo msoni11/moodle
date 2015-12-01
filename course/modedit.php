@@ -28,7 +28,6 @@ require_once("lib.php");
 require_once($CFG->libdir.'/filelib.php');
 require_once($CFG->libdir.'/gradelib.php');
 require_once($CFG->libdir.'/completionlib.php');
-require_once($CFG->libdir.'/conditionlib.php');
 require_once($CFG->libdir.'/plagiarismlib.php');
 require_once($CFG->dirroot . '/course/modlib.php');
 
@@ -56,6 +55,11 @@ if (!empty($add)) {
     $course = $DB->get_record('course', array('id'=>$course), '*', MUST_EXIST);
     require_login($course);
 
+    // There is no page for this in the navigation. The closest we'll have is the course section.
+    // If the course section isn't displayed on the navigation this will fall back to the course which
+    // will be the closest match we have.
+    navigation_node::override_active_url(course_get_url($course, $section));
+
     list($module, $context, $cw) = can_add_moduleinfo($course, $add, $section);
 
     $cm = null;
@@ -68,7 +72,6 @@ if (!empty($add)) {
     $data->modulename       = $module->name;
     $data->groupmode        = $course->groupmode;
     $data->groupingid       = $course->defaultgroupingid;
-    $data->groupmembersonly = 0;
     $data->id               = '';
     $data->instance         = '';
     $data->coursemodule     = '';
@@ -78,7 +81,7 @@ if (!empty($add)) {
 
     if (plugin_supports('mod', $data->modulename, FEATURE_MOD_INTRO, true)) {
         $draftid_editor = file_get_submitted_draft_itemid('introeditor');
-        file_prepare_draft_area($draftid_editor, null, null, null, null);
+        file_prepare_draft_area($draftid_editor, null, null, null, null, array('subdirs'=>true));
         $data->introeditor = array('text'=>'', 'format'=>FORMAT_HTML, 'itemid'=>$draftid_editor); // TODO: add better default
     }
 
@@ -114,11 +117,15 @@ if (!empty($add)) {
     } else {
         $pageheading = get_string('addinganew', 'moodle', $fullmodulename);
     }
+    $navbaraddition = $pageheading;
 
 } else if (!empty($update)) {
 
     $url->param('update', $update);
     $PAGE->set_url($url);
+
+    // Select the "Edit settings" from navigation.
+    navigation_node::override_active_url(new moodle_url('/course/modedit.php', array('update'=>$update, 'return'=>1)));
 
     // Check the course module exists.
     $cm = get_coursemodule_from_id('', $update, 0, false, MUST_EXIST);
@@ -137,7 +144,6 @@ if (!empty($add)) {
     $data->cmidnumber         = $cm->idnumber;          // The cm IDnumber
     $data->groupmode          = groups_get_activity_groupmode($cm); // locked later if forced
     $data->groupingid         = $cm->groupingid;
-    $data->groupmembersonly   = $cm->groupmembersonly;
     $data->course             = $course->id;
     $data->module             = $module->id;
     $data->modulename         = $module->name;
@@ -151,9 +157,7 @@ if (!empty($add)) {
     $data->completionusegrade = is_null($cm->completiongradeitemnumber) ? 0 : 1;
     $data->showdescription    = $cm->showdescription;
     if (!empty($CFG->enableavailability)) {
-        $data->availablefrom      = $cm->availablefrom;
-        $data->availableuntil     = $cm->availableuntil;
-        $data->showavailability   = $cm->showavailability;
+        $data->availabilityconditionsjson = $cm->availability;
     }
 
     if (plugin_supports('mod', $data->modulename, FEATURE_MOD_INTRO, true)) {
@@ -185,6 +189,10 @@ if (!empty($add)) {
                                              'iteminstance'=>$data->instance, 'courseid'=>$course->id))) {
         // add existing outcomes
         foreach ($items as $item) {
+            if (!empty($item->gradepass)) {
+                $decimalpoints = $item->get_decimals();
+                $data->gradepass = format_float($item->gradepass, $decimalpoints);
+            }
             if (!empty($item->outcomeid)) {
                 $data->{'outcome_'.$item->outcomeid} = 1;
             }
@@ -220,6 +228,7 @@ if (!empty($add)) {
     } else {
         $pageheading = get_string('updatinga', 'moodle', $fullmodulename);
     }
+    $navbaraddition = null;
 
 } else {
     require_login();
@@ -242,8 +251,6 @@ if (file_exists($modmoodleform)) {
     print_error('noformdesc');
 }
 
-include_modulelib($module->name);
-
 $mformclassname = 'mod_'.$module->name.'_mod_form';
 $mform = new $mformclassname($data, $cw->section, $cm, $course);
 $mform->set_data($data);
@@ -255,6 +262,12 @@ if ($mform->is_cancelled()) {
         redirect(course_get_url($course, $cw->section, array('sr' => $sectionreturn)));
     }
 } else if ($fromform = $mform->get_data()) {
+    // Convert the grade pass value - we may be using a language which uses commas,
+    // rather than decimal points, in numbers. These need to be converted so that
+    // they can be added to the DB.
+    if (isset($fromform->gradepass)) {
+        $fromform->gradepass = unformat_float($fromform->gradepass);
+    }
 
     if (!empty($fromform->update)) {
         list($cm, $fromform) = update_moduleinfo($cm, $fromform, $course, $mform);
@@ -290,6 +303,11 @@ if ($mform->is_cancelled()) {
     $PAGE->set_heading($course->fullname);
     $PAGE->set_title($streditinga);
     $PAGE->set_cacheable(false);
+
+    if (isset($navbaraddition)) {
+        $PAGE->navbar->add($navbaraddition);
+    }
+
     echo $OUTPUT->header();
 
     if (get_string_manager()->string_exists('modulename_help', $module->name)) {

@@ -18,7 +18,7 @@
 /**
  * This file contains functions used by the admin pages
  *
- * @since 2.1
+ * @since Moodle 2.1
  * @package admin
  * @copyright 2011 Andrew Davis
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
@@ -35,16 +35,5 @@ function admin_page_type_list($pagetype, $parentcontext, $currentcontext) {
         'admin-*' => get_string('page-admin-x', 'pagetype'),
         $pagetype => get_string('page-admin-current', 'pagetype')
     );
-    // Add the missing * (any page) option for them. MDL-30340
-    // TODO: These pages are really 'pagetype-varying' - MDL-30564 -
-    // and some day we should stop behaving that way, so proper pagetypes
-    // can be specified for it (like course-category-* or so).
-    // Luckly... the option we are introducing '*' is independent
-    // of that varying behavior, so will work.
-    if ($pagetype == 'admin-course-category') {
-        $array += array(
-            '*' => get_string('page-x', 'pagetype')
-        );
-    }
     return $array;
 }

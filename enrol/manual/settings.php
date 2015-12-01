@@ -33,6 +33,7 @@ if ($ADMIN->fulltree) {
     //       it describes what should happend when users are not supposed to be enerolled any more.
     $options = array(
         ENROL_EXT_REMOVED_KEEP           => get_string('extremovedkeep', 'enrol'),
+        ENROL_EXT_REMOVED_SUSPEND        => get_string('extremovedsuspend', 'enrol'),
         ENROL_EXT_REMOVED_SUSPENDNOROLES => get_string('extremovedsuspendnoroles', 'enrol'),
         ENROL_EXT_REMOVED_UNENROL        => get_string('extremovedunenrol', 'enrol'),
     );
@@ -64,6 +65,11 @@ if ($ADMIN->fulltree) {
         $settings->add(new admin_setting_configselect('enrol_manual/roleid',
             get_string('defaultrole', 'role'), '', $student->id, $options));
     }
+
+    $options = array(2 => get_string('coursestart'), 3 => get_string('today'), 4 => get_string('now', 'enrol_manual'));
+    $settings->add(
+        new admin_setting_configselect('enrol_manual/enrolstart', get_string('defaultstart', 'enrol_manual'), '', 4, $options)
+    );
 
     $settings->add(new admin_setting_configduration('enrol_manual/enrolperiod',
         get_string('defaultperiod', 'enrol_manual'), get_string('defaultperiod_desc', 'enrol_manual'), 0));

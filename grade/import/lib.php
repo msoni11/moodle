@@ -37,14 +37,17 @@ function get_new_importcode() {
  * (grade_import_value and grade_import_newitem)
  * If this function is called, we assume that all data collected
  * up to this point is fine and we can go ahead and commit
- * @param int courseid - id of the course
- * @param string importcode - import batch identifier
- * @param feedback print feedback and continue button
+ * @param int $courseid - ID of the course.
+ * @param int $importcode - Import batch identifier.
+ * @param bool $importfeedback - Whether to import feedback as well.
+ * @param bool $verbose - Print feedback and continue button.
  * @return bool success
  */
 function grade_import_commit($courseid, $importcode, $importfeedback=true, $verbose=true) {
     global $CFG, $USER, $DB, $OUTPUT;
 
+    $failed = false;
+    $executionerrors = false;
     $commitstart = time(); // start time in case we need to roll back
     $newitemids = array(); // array to hold new grade_item ids from grade_import_newitem table, mapping array
 
@@ -57,11 +60,11 @@ function grade_import_commit($courseid, $importcode, $importfeedback=true, $verb
         // instances of the new grade_items created, cached
         // in case grade_update fails, so that we can remove them
         $instances = array();
-        $failed = false;
         foreach ($newitems as $newitem) {
             // get all grades with this item
 
-            if ($grades = $DB->get_records('grade_import_values', array('newgradeitem' => $newitem->id))) {
+            $gradeimportparams = array('newgradeitem' => $newitem->id, 'importcode' => $importcode, 'importer' => $USER->id);
+            if ($grades = $DB->get_records('grade_import_values', $gradeimportparams)) {
                 /// create a new grade item for this - must use false as second param!
                 /// TODO: we need some bounds here too
                 $gradeitem = new grade_item(array('courseid'=>$courseid, 'itemtype'=>'manual', 'itemname'=>$newitem->itemname), false);
@@ -104,15 +107,24 @@ function grade_import_commit($courseid, $importcode, $importfeedback=true, $verb
                 return false;
             }
             // get all grades with this item
-            if ($grades = $DB->get_records('grade_import_values', array('itemid' => $itemid))) {
+            $gradeimportparams = array('itemid' => $itemid, 'importcode' => $importcode, 'importer' => $USER->id);
+            if ($grades = $DB->get_records('grade_import_values', $gradeimportparams)) {
 
                 // make the grades array for update_grade
                 foreach ($grades as $grade) {
                     if (!$importfeedback) {
                         $grade->feedback = false; // ignore it
                     }
+                    if ($grade->importonlyfeedback) {
+                        // False means do not change. See grade_itme::update_final_grade().
+                        $grade->finalgrade = false;
+                    }
                     if (!$gradeitem->update_final_grade($grade->userid, $grade->finalgrade, 'import', $grade->feedback)) {
-                        $failed = 1;
+                        $errordata = new stdClass();
+                        $errordata->itemname = $gradeitem->itemname;
+                        $errordata->userid = $grade->userid;
+                        $executionerrors[] = get_string('errorsettinggrade', 'grades', $errordata);
+                        $failed = true;
                         break 2;
                     }
                 }
@@ -120,11 +132,17 @@ function grade_import_commit($courseid, $importcode, $importfeedback=true, $verb
                 $modifieditems[] = $itemid;
 
             }
+        }
 
-            if (!empty($failed)) {
-                import_cleanup($importcode);
-                return false;
+        if ($failed) {
+            if ($executionerrors && $verbose) {
+                echo $OUTPUT->notification(get_string('gradeimportfailed', 'grades'));
+                foreach ($executionerrors as $errorstr) {
+                    echo $OUTPUT->notification($errorstr);
+                }
             }
+            import_cleanup($importcode);
+            return false;
         }
     }
 
@@ -161,12 +179,16 @@ function grade_import_commit($courseid, $importcode, $importfeedback=true, $verb
  */
 function get_unenrolled_users_in_import($importcode, $courseid) {
     global $CFG, $DB;
-    $relatedctxcondition = get_related_contexts_string(context_course::instance($courseid));
 
-    //users with a gradeable role
+    $coursecontext = context_course::instance($courseid);
+
+    // We want to query both the current context and parent contexts.
+    list($relatedctxsql, $relatedctxparams) = $DB->get_in_or_equal($coursecontext->get_parent_context_ids(true), SQL_PARAMS_NAMED, 'relatedctx');
+
+    // Users with a gradeable role.
     list($gradebookrolessql, $gradebookrolesparams) = $DB->get_in_or_equal(explode(',', $CFG->gradebookroles), SQL_PARAMS_NAMED, 'grbr');
 
-    //enrolled users
+    // Enrolled users.
     $context = context_course::instance($courseid);
     list($enrolledsql, $enrolledparams) = get_enrolled_sql($context);
     list($sort, $sortparams) = users_order_by_sql('u');
@@ -183,11 +205,11 @@ function get_unenrolled_users_in_import($importcode, $courseid) {
               LEFT JOIN ($enrolledsql) je
                         ON je.id = u.id
               LEFT JOIN {role_assignments} ra
-                        ON (giv.userid = ra.userid AND ra.roleid $gradebookrolessql AND ra.contextid $relatedctxcondition)
+                        ON (giv.userid = ra.userid AND ra.roleid $gradebookrolessql AND ra.contextid $relatedctxsql)
              WHERE giv.importcode = :importcode
                    AND (ra.id IS NULL OR je.id IS NULL)
           ORDER BY gradeidnumber, $sort";
-    $params = array_merge($gradebookrolesparams, $enrolledparams, $sortparams);
+    $params = array_merge($gradebookrolesparams, $enrolledparams, $sortparams, $relatedctxparams);
     $params['importcode'] = $importcode;
 
     return $DB->get_records_sql($sql, $params);

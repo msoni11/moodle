@@ -1,5 +1,4 @@
 <?php
-
 // This file is part of Moodle - http://moodle.org/
 //
 // Moodle is free software: you can redistribute it and/or modify
@@ -18,7 +17,7 @@
 /**
  * Strings for component 'editor', language 'en', branch 'MOODLE_20_STABLE'
  *
- * @package   editor
+ * @package   core_editor
  * @copyright 1999 onwards Martin Dougiamas  {@link http://moodle.com}
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -52,7 +51,6 @@ $string['createlink'] = 'Insert Web Link';
 $string['cut'] = 'Cut selection';
 $string['cutpastemozilla'] = 'Unfortunately, you cannot currently use normal keyboard shortcuts (or even the Paste button) for pasting text into this online editor.  This is because of a security feature that is built into some versions of Mozilla and Firefox browsers.<br /><br />There are three known workarounds you can try: <br /> (1) Instead of CTRL-v, use SHIFT-Insert <br /> (2) Use the Edit->Paste menu in your browser <br /> (3) Change the preferences in your browser by editing the user.js file. <br /><br />Click the OK button below for more help, or Cancel to return to the editor';
 $string['delete'] = 'Delete';
-$string['editordeleteconfirm'] = 'You are about to completely delete the editor plugin \'{$a}\'. This will completely delete everything in the database associated with this plugin. Are you SURE you want to continue?';
 $string['editors'] = 'Text editors';
 $string['editorsettings'] = 'Manage editors';
 $string['enterurlfirst'] = 'You have to enter an URL first';

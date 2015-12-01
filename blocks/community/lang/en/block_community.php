@@ -1,5 +1,4 @@
 <?php
-
 // This file is part of Moodle - http://moodle.org/
 //
 // Moodle is free software: you can redistribute it and/or modify
@@ -38,7 +37,7 @@ $string['blocks'] = 'Blocks';
 $string['cannotselecttopsubject'] = 'Cannot select a top subject level';
 $string['comments'] = 'Comments ({$a})';
 $string['community:addinstance'] = 'Add a new community finder block';
-$string['community:myaddinstance'] = 'Add a new community finder block to My home';
+$string['community:myaddinstance'] = 'Add a new community finder block to Dashboard';
 $string['contentinfo'] = 'Subject: {$a->subject} - Audience: {$a->audience} - Educational level: {$a->educationallevel}';
 $string['continue'] = 'Continue';
 $string['contributors'] = ' - Contributors: {$a}';

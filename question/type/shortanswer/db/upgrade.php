@@ -36,8 +36,27 @@ function xmldb_qtype_shortanswer_upgrade($oldversion) {
 
     $dbman = $DB->get_manager();
 
-    // Moodle v2.4.0 release upgrade line
-    // Put any upgrade step following this
+    // Moodle v2.4.0 release upgrade line.
+    // Put any upgrade step following this.
+
+    if ($oldversion < 2013011799) {
+        // Find duplicate rows before they break the 2013011803 step below.
+        $problemids = $DB->get_recordset_sql("
+                SELECT question, MIN(id) AS recordidtokeep
+                  FROM {question_shortanswer}
+              GROUP BY question
+                HAVING COUNT(1) > 1
+                ");
+        foreach ($problemids as $problem) {
+            $DB->delete_records_select('question_shortanswer',
+                    'question = ? AND id > ?',
+                    array($problem->question, $problem->recordidtokeep));
+        }
+        $problemids->close();
+
+        // Shortanswer savepoint reached.
+        upgrade_plugin_savepoint(true, 2013011799, 'qtype', 'shortanswer');
+    }
 
     if ($oldversion < 2013011800) {
 
@@ -56,14 +75,14 @@ function xmldb_qtype_shortanswer_upgrade($oldversion) {
 
     if ($oldversion < 2013011801) {
 
-        // Define key question (foreign) to be dropped form question_shortanswer
+        // Define key question (foreign) to be dropped form question_shortanswer.
         $table = new xmldb_table('question_shortanswer');
         $key = new xmldb_key('question', XMLDB_KEY_FOREIGN, array('question'), 'question', array('id'));
 
-        // Launch drop key question
+        // Launch drop key question.
         $dbman->drop_key($table, $key);
 
-        // shortanswer savepoint reached
+        // Shortanswer savepoint reached.
         upgrade_plugin_savepoint(true, 2013011801, 'qtype', 'shortanswer');
     }
 
@@ -82,28 +101,47 @@ function xmldb_qtype_shortanswer_upgrade($oldversion) {
 
     if ($oldversion < 2013011803) {
 
-        // Define key questionid (foreign-unique) to be added to question_shortanswer
+        // Define key questionid (foreign-unique) to be added to question_shortanswer.
         $table = new xmldb_table('question_shortanswer');
         $key = new xmldb_key('questionid', XMLDB_KEY_FOREIGN_UNIQUE, array('questionid'), 'question', array('id'));
 
-        // Launch add key questionid
+        // Launch add key questionid.
         $dbman->add_key($table, $key);
 
-        // shortanswer savepoint reached
+        // Shortanswer savepoint reached.
         upgrade_plugin_savepoint(true, 2013011803, 'qtype', 'shortanswer');
     }
 
     if ($oldversion < 2013011804) {
 
-        // Define table qtype_shortanswer_options to be renamed to qtype_shortanswer_options
+        // Define table qtype_shortanswer_options to be renamed to qtype_shortanswer_options.
         $table = new xmldb_table('question_shortanswer');
 
-        // Launch rename table for qtype_shortanswer_options
+        // Launch rename table for qtype_shortanswer_options.
         $dbman->rename_table($table, 'qtype_shortanswer_options');
 
-        // shortanswer savepoint reached
+        // Shortanswer savepoint reached.
         upgrade_plugin_savepoint(true, 2013011804, 'qtype', 'shortanswer');
     }
+
+    // Moodle v2.5.0 release upgrade line.
+    // Put any upgrade step following this.
+
+
+    // Moodle v2.6.0 release upgrade line.
+    // Put any upgrade step following this.
+
+    // Moodle v2.7.0 release upgrade line.
+    // Put any upgrade step following this.
+
+    // Moodle v2.8.0 release upgrade line.
+    // Put any upgrade step following this.
+
+    // Moodle v2.9.0 release upgrade line.
+    // Put any upgrade step following this.
+
+    // Moodle v3.0.0 release upgrade line.
+    // Put any upgrade step following this.
 
     return true;
 }

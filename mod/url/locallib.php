@@ -18,8 +18,7 @@
 /**
  * Private url module utility functions
  *
- * @package    mod
- * @subpackage url
+ * @package    mod_url
  * @copyright  2009 Petr Skoda  {@link http://skodak.org}
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -164,17 +163,12 @@ function url_print_header($url, $cm, $course) {
  * @param object $url
  * @param object $cm
  * @param object $course
- * @param bool $ignoresettings print even if not specified in modedit
+ * @param bool $notused This variable is no longer used.
  * @return void
  */
-function url_print_heading($url, $cm, $course, $ignoresettings=false) {
+function url_print_heading($url, $cm, $course, $notused = false) {
     global $OUTPUT;
-
-    $options = empty($url->displayoptions) ? array() : unserialize($url->displayoptions);
-
-    if ($ignoresettings or !empty($options['printheading'])) {
-        echo $OUTPUT->heading(format_string($url->name), 2, 'main', 'urlheading');
-    }
+    echo $OUTPUT->heading(format_string($url->name), 2);
 }
 
 /**
@@ -228,7 +222,7 @@ function url_display_frame($url, $cm, $course) {
         $title = strip_tags($courseshortname.': '.format_string($url->name));
         $framesize = $config->framesize;
         $modulename = s(get_string('modulename','url'));
-        $contentframetitle = format_string($url->name);
+        $contentframetitle = s(format_string($url->name));
         $dir = get_string('thisdirection', 'langconfig');
 
         $extframe = <<<EOF
@@ -427,8 +421,8 @@ function url_get_variable_options($config) {
         'userfullname'    => get_string('fullnameuser'),
         'useremail'       => get_string('email'),
         'usericq'         => get_string('icqnumber'),
-        'userphone1'      => get_string('phone').' 1',
-        'userphone2'      => get_string('phone2').' 2',
+        'userphone1'      => get_string('phone1'),
+        'userphone2'      => get_string('phone2'),
         'userinstitution' => get_string('institution'),
         'userdepartment'  => get_string('department'),
         'useraddress'     => get_string('address'),
@@ -496,7 +490,8 @@ function url_get_variable_values($url, $cm, $course, $config) {
         $values['userdepartment']  = $USER->department;
         $values['useraddress']     = $USER->address;
         $values['usercity']        = $USER->city;
-        $values['usertimezone']    = get_user_timezone_offset();
+        $now = new DateTime('now', core_date::get_user_timezone_object());
+        $values['usertimezone']    = $now->getOffset() / 3600.0; // Value in hours for BC.
         $values['userurl']         = $USER->url;
     }
 

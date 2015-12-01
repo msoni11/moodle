@@ -72,6 +72,8 @@ abstract class format_base {
     protected $formatoptions = array();
     /** @var array cached instances */
     private static $instances = array();
+    /** @var array plugin name => class name. */
+    private static $classesforformat = array('site' => 'site');
 
     /**
      * Creates a new instance of class
@@ -94,24 +96,33 @@ abstract class format_base {
      * @return string
      */
     protected static final function get_format_or_default($format) {
-        if ($format === 'site') {
-            return $format;
+        if (array_key_exists($format, self::$classesforformat)) {
+            return self::$classesforformat[$format];
         }
+
         $plugins = get_sorted_course_formats();
-        if (in_array($format, $plugins)) {
+        foreach ($plugins as $plugin) {
+            self::$classesforformat[$plugin] = $plugin;
+        }
+
+        if (array_key_exists($format, self::$classesforformat)) {
+            return self::$classesforformat[$format];
+        }
+
+        if (PHPUNIT_TEST && class_exists('format_' . $format)) {
+            // Allow unittests to use non-existing course formats.
             return $format;
         }
+
         // Else return default format
         $defaultformat = get_config('moodlecourse', 'format');
         if (!in_array($defaultformat, $plugins)) {
             // when default format is not set correctly, use the first available format
             $defaultformat = reset($plugins);
         }
-        static $warningprinted = array();
-        if (empty($warningprinted[$format])) {
-            debugging('Format plugin format_'.$format.' is not found. Using default format_'.$defaultformat, DEBUG_DEVELOPER);
-            $warningprinted[$format] = true;
-        }
+        debugging('Format plugin format_'.$format.' is not found. Using default format_'.$defaultformat, DEBUG_DEVELOPER);
+
+        self::$classesforformat[$format] = $defaultformat;
         return $defaultformat;
     }
 
@@ -128,9 +139,9 @@ abstract class format_base {
         global $CFG;
         static $classnames = array('site' => 'format_site');
         if (!isset($classnames[$format])) {
-            $plugins = get_plugin_list('format');
+            $plugins = core_component::get_plugin_list('format');
             $usedformat = self::get_format_or_default($format);
-            if (file_exists($plugins[$usedformat].'/lib.php')) {
+            if (isset($plugins[$usedformat]) && file_exists($plugins[$usedformat].'/lib.php')) {
                 require_once($plugins[$usedformat].'/lib.php');
             }
             $classnames[$format] = 'format_'. $usedformat;
@@ -229,19 +240,44 @@ abstract class format_base {
             return null;
         }
         if ($this->course === false) {
-            $this->course = $DB->get_record('course', array('id' => $this->courseid));
+            $this->course = get_course($this->courseid);
             $options = $this->get_format_options();
+            $dbcoursecolumns = null;
             foreach ($options as $optionname => $optionvalue) {
-                if (!isset($this->course->$optionname)) {
-                    $this->course->$optionname = $optionvalue;
-                } else {
-                    debugging('The option name '.$optionname.' in course format '.$this->format.
-                        ' is invalid because the field with the same name exists in {course} table',
-                        DEBUG_DEVELOPER);
+                if (isset($this->course->$optionname)) {
+                    // Course format options must not have the same names as existing columns in db table "course".
+                    if (!isset($dbcoursecolumns)) {
+                        $dbcoursecolumns = $DB->get_columns('course');
+                    }
+                    if (isset($dbcoursecolumns[$optionname])) {
+                        debugging('The option name '.$optionname.' in course format '.$this->format.
+                            ' is invalid because the field with the same name exists in {course} table',
+                            DEBUG_DEVELOPER);
+                        continue;
+                    }
                 }
+                $this->course->$optionname = $optionvalue;
             }
         }
         return $this->course;
+    }
+
+    /**
+     * Returns true if the course has a front page.
+     *
+     * This function is called to determine if the course has a view page, whether or not
+     * it contains a listing of activities. It can be useful to set this to false when the course
+     * format has only one activity and ignores the course page. Or if there are multiple
+     * activities but no page to see the centralised information.
+     *
+     * Initially this was created to know if forms should add a button to return to the course page.
+     * So if 'Return to course' does not make sense in your format your should probably return false.
+     *
+     * @return boolean
+     * @since Moodle 2.6
+     */
+    public function has_view_page() {
+        return true;
     }
 
     /**
@@ -314,7 +350,23 @@ abstract class format_base {
         } else {
             $sectionnum = $section;
         }
-        return get_string('sectionname', 'format_'.$this->format) . ' ' . $sectionnum;
+
+        if (get_string_manager()->string_exists('sectionname', 'format_' . $this->format)) {
+            return get_string('sectionname', 'format_' . $this->format) . ' ' . $sectionnum;
+        }
+
+        // Return an empty string if there's no available section name string for the given format.
+        return '';
+    }
+
+    /**
+     * Returns the default section using format_base's implementation of get_section_name.
+     *
+     * @param int|stdClass $section Section object from database or just field course_sections section
+     * @return string The default value for the section name based on the given course format.
+     */
+    public function get_default_section_name($section) {
+        return self::get_section_name($section);
     }
 
     /**
@@ -322,7 +374,6 @@ abstract class format_base {
      *
      * The returned object's property (boolean)capable indicates that
      * the course format supports Moodle course ajax features.
-     * The property (array)testedbrowsers can be used as a parameter for {@link ajaxenabled()}.
      *
      * @return stdClass
      */
@@ -330,7 +381,6 @@ abstract class format_base {
         // no support by default
         $ajaxsupport = new stdClass();
         $ajaxsupport->capable = false;
-        $ajaxsupport->testedbrowsers = array();
         return $ajaxsupport;
     }
 
@@ -361,6 +411,7 @@ abstract class format_base {
      * @return null|moodle_url
      */
     public function get_view_url($section, $options = array()) {
+        global $CFG;
         $course = $this->get_course();
         $url = new moodle_url('/course/view.php', array('id' => $course->id));
 
@@ -371,7 +422,7 @@ abstract class format_base {
         } else {
             $sectionno = $section;
         }
-        if (!empty($options['navigation']) && $sectionno !== null) {
+        if (empty($CFG->linkcoursesections) && !empty($options['navigation']) && $sectionno !== null) {
             // by default assume that sections are never displayed on separate pages
             return null;
         }
@@ -548,7 +599,7 @@ abstract class format_base {
             $sectionid = $section->id;
         } else if ($this->courseid && is_int($section) &&
                 ($sectionobj = $DB->get_record('course_sections',
-                        array('section' => $section, 'courseid' => $this->courseid), 'id'))) {
+                        array('section' => $section, 'course' => $this->courseid), 'id'))) {
             // course section format options will be returned
             $sectionid = $sectionobj->id;
         } else {
@@ -877,6 +928,108 @@ abstract class format_base {
         }
         return ($sectionnum && ($course = $this->get_course()) && $course->marker == $sectionnum);
     }
+
+    /**
+     * Allows to specify for modinfo that section is not available even when it is visible and conditionally available.
+     *
+     * Note: affected user can be retrieved as: $section->modinfo->userid
+     *
+     * Course format plugins can override the method to change the properties $available and $availableinfo that were
+     * calculated by conditional availability.
+     * To make section unavailable set:
+     *     $available = false;
+     * To make unavailable section completely hidden set:
+     *     $availableinfo = '';
+     * To make unavailable section visible with availability message set:
+     *     $availableinfo = get_string('sectionhidden', 'format_xxx');
+     *
+     * @param section_info $section
+     * @param bool $available the 'available' propery of the section_info as it was evaluated by conditional availability.
+     *     Can be changed by the method but 'false' can not be overridden by 'true'.
+     * @param string $availableinfo the 'availableinfo' propery of the section_info as it was evaluated by conditional availability.
+     *     Can be changed by the method
+     */
+    public function section_get_available_hook(section_info $section, &$available, &$availableinfo) {
+    }
+
+    /**
+     * Whether this format allows to delete sections
+     *
+     * If format supports deleting sections it is also recommended to define language string
+     * 'deletesection' inside the format.
+     *
+     * Do not call this function directly, instead use {@link course_can_delete_section()}
+     *
+     * @param int|stdClass|section_info $section
+     * @return bool
+     */
+    public function can_delete_section($section) {
+        return false;
+    }
+
+    /**
+     * Deletes a section
+     *
+     * Do not call this function directly, instead call {@link course_delete_section()}
+     *
+     * @param int|stdClass|section_info $section
+     * @param bool $forcedeleteifnotempty if set to false section will not be deleted if it has modules in it.
+     * @return bool whether section was deleted
+     */
+    public function delete_section($section, $forcedeleteifnotempty = false) {
+        global $DB;
+        if (!$this->uses_sections()) {
+            // Not possible to delete section if sections are not used.
+            return false;
+        }
+        if (!is_object($section)) {
+            $section = $DB->get_record('course_sections', array('course' => $this->get_courseid(), 'section' => $section),
+                'id,section,sequence');
+        }
+        if (!$section || !$section->section) {
+            // Not possible to delete 0-section.
+            return false;
+        }
+
+        if (!$forcedeleteifnotempty && !empty($section->sequence)) {
+            return false;
+        }
+
+        $course = $this->get_course();
+
+        // Remove the marker if it points to this section.
+        if ($section->section == $course->marker) {
+            course_set_marker($course->id, 0);
+        }
+
+        $lastsection = $DB->get_field_sql('SELECT max(section) from {course_sections}
+                            WHERE course = ?', array($course->id));
+
+        // Find out if we need to descrease the 'numsections' property later.
+        $courseformathasnumsections = array_key_exists('numsections',
+            $this->get_format_options());
+        $decreasenumsections = $courseformathasnumsections && ($section->section <= $course->numsections);
+
+        // Move the section to the end.
+        move_section_to($course, $section->section, $lastsection, true);
+
+        // Delete all modules from the section.
+        foreach (preg_split('/,/', $section->sequence, -1, PREG_SPLIT_NO_EMPTY) as $cmid) {
+            course_delete_module($cmid);
+        }
+
+        // Delete section and it's format options.
+        $DB->delete_records('course_format_options', array('sectionid' => $section->id));
+        $DB->delete_records('course_sections', array('id' => $section->id));
+        rebuild_course_cache($course->id, true);
+
+        // Descrease 'numsections' if needed.
+        if ($decreasenumsections) {
+            $this->update_course_format_options(array('numsections' => $course->numsections - 1));
+        }
+
+        return true;
+    }
 }
 
 /**
@@ -907,7 +1060,7 @@ class format_site extends format_base {
      * @return null|moodle_url
      */
     public function get_view_url($section, $options = array()) {
-        return new moodle_url('/');
+        return new moodle_url('/', array('redirect' => 0));
     }
 
     /**

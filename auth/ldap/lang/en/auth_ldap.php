@@ -1,5 +1,4 @@
 <?php
-
 // This file is part of Moodle - http://moodle.org/
 //
 // Moodle is free software: you can redistribute it and/or modify
@@ -16,7 +15,7 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * Strings for component 'auth_ldap', language 'en', branch 'MOODLE_20_STABLE'
+ * Strings for component 'auth_ldap', language 'en'.
  *
  * @package   auth_ldap
  * @copyright 1999 onwards Martin Dougiamas  {@link http://moodle.com}
@@ -48,7 +47,7 @@ $string['auth_ldap_expiration_desc'] = 'Select No to disable expired password ch
 $string['auth_ldap_expiration_key'] = 'Expiration';
 $string['auth_ldap_expiration_warning_desc'] = 'Number of days before password expiration warning is issued.';
 $string['auth_ldap_expiration_warning_key'] = 'Expiration warning';
-$string['auth_ldap_expireattr_desc'] = 'Optional: overrides ldap-attribute that stores password expiration time';
+$string['auth_ldap_expireattr_desc'] = 'Optional: Overrides the LDAP attribute that stores password expiration time.';
 $string['auth_ldap_expireattr_key'] = 'Expiration attribute';
 $string['auth_ldapextrafields'] = 'These fields are optional.  You can choose to pre-fill some Moodle user fields with information from the <b>LDAP fields</b> that you specify here. <p>If you leave these fields blank, then nothing will be transferred from LDAP and Moodle defaults will be used instead.</p><p>In either case, the user will be able to edit all of these fields after they log in.</p>';
 $string['auth_ldap_graceattr_desc'] = 'Optional: Overrides  gracelogin attribute';
@@ -72,7 +71,7 @@ $string['auth_ldap_noconnect_all'] = 'LDAP-module cannot connect to any servers:
 $string['auth_ldap_noextension'] = '<em>The PHP LDAP module does not seem to be present. Please ensure it is installed and enabled if you want to use this authentication plugin.</em>';
 $string['auth_ldap_no_mbstring'] = 'You need the mbstring extension to create users in Active Directory.';
 $string['auth_ldapnotinstalled'] = 'Cannot use LDAP authentication. The PHP LDAP module is not installed.';
-$string['auth_ldap_objectclass'] = 'Optional: Overrides objectClass used to name/search users on ldap_user_type. Usually you dont need to chage this.';
+$string['auth_ldap_objectclass'] = 'Optional: Overrides objectClass used to name/search users on ldap_user_type. Usually you don\'t need to change this.';
 $string['auth_ldap_objectclass_key'] = 'Object class';
 $string['auth_ldap_opt_deref'] = 'Determines how aliases are handled during search. Select one of the following values: "No" (LDAP_DEREF_NEVER) or "Yes" (LDAP_DEREF_ALWAYS)';
 $string['auth_ldap_opt_deref_key'] = 'Dereference aliases';
@@ -80,7 +79,7 @@ $string['auth_ldap_passtype'] = 'Specify the format of new or changed passwords 
 $string['auth_ldap_passtype_key'] = 'Password format';
 $string['auth_ldap_passwdexpire_settings'] = 'LDAP password expiration settings.';
 $string['auth_ldap_preventpassindb'] = 'Select yes to prevent passwords from being stored in Moodle\'s DB.';
-$string['auth_ldap_preventpassindb_key'] = 'Hide passwords';
+$string['auth_ldap_preventpassindb_key'] = 'Don\'t cache passwords';
 $string['auth_ldap_search_sub'] = 'Search users from subcontexts.';
 $string['auth_ldap_search_sub_key'] = 'Search subcontexts';
 $string['auth_ldap_server_settings'] = 'LDAP server settings';
@@ -99,8 +98,11 @@ $string['auth_ldap_version_key'] = 'Version';
 $string['auth_ntlmsso'] = 'NTLM SSO';
 $string['auth_ntlmsso_enabled'] = 'Set to yes to attempt Single Sign On with the NTLM domain. <strong>Note:</strong> this requires additional setup on the webserver to work, see <a href="http://docs.moodle.org/en/NTLM_authentication">http://docs.moodle.org/en/NTLM_authentication</a>';
 $string['auth_ntlmsso_enabled_key'] = 'Enable';
-$string['auth_ntlmsso_ie_fastpath'] = 'Set to yes to enable the NTLM SSO fast path (bypasses certain steps and only works if the client\'s browser is MS Internet Explorer).';
+$string['auth_ntlmsso_ie_fastpath'] = 'Set to enable the NTLM SSO fast path (bypasses certain steps if the client\'s browser is MS Internet Explorer).';
 $string['auth_ntlmsso_ie_fastpath_key'] = 'MS IE fast path?';
+$string['auth_ntlmsso_ie_fastpath_yesform'] = 'Yes, all other browsers use standard login form';
+$string['auth_ntlmsso_ie_fastpath_yesattempt'] = 'Yes, attempt NTLM other browsers';
+$string['auth_ntlmsso_ie_fastpath_attempt'] = 'Attempt NTLM with all browsers';
 $string['auth_ntlmsso_maybeinvalidformat'] = 'Unable to extract the username from the REMOTE_USER header. Is the configured format right?';
 $string['auth_ntlmsso_missing_username'] = 'You need to specify at least %username% in the remote username format';
 $string['auth_ntlmsso_remoteuserformat_key'] = 'Remote username format';
@@ -123,7 +125,7 @@ $string['notcalledfromserver'] = 'Should not be called from the web server!';
 $string['noupdatestobedone'] = "No updates to be done\n";
 $string['nouserentriestoremove'] = "No user entries to be removed\n";
 $string['nouserentriestorevive'] = "No user entries to be revived\n";
-$string['nouserstobeadded'] = "No users to be added\n";
+$string['nouserstobeadded'] = 'No user entries to be added';
 $string['ntlmsso_attempting'] = 'Attempting Single Sign On via NTLM...';
 $string['ntlmsso_failed'] = 'Auto-login failed, try the normal login page...';
 $string['ntlmsso_isdisabled'] = 'NTLM SSO is disabled.';
@@ -135,6 +137,7 @@ $string['pluginname'] = 'LDAP server';
 $string['pluginnotenabled'] = 'Plugin not enabled!';
 $string['renamingnotallowed'] = 'User renaming not allowed in LDAP';
 $string['rootdseerror'] = 'Error querying rootDSE for Active Directory';
+$string['synctask'] = 'LDAP users sync job';
 $string['start_tls'] = 'Use regular LDAP service (port 389) with TLS encryption';
 $string['start_tls_key'] = 'Use TLS';
 $string['updateremfail'] = 'Error updating LDAP record. Error code: {$a->errno}; Error string: {$a->errstring}<br/>Key ({$a->key}) - old moodle value: \'{$a->ouvalue}\' new value: \'{$a->nuvalue}\'';

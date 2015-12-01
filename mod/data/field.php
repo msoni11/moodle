@@ -20,7 +20,7 @@
  *
  * @copyright 2005 Martin Dougiamas  http://dougiamas.com
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @package mod-data
+ * @package mod_data
  */
 
 require_once('../../config.php');
@@ -121,9 +121,6 @@ switch ($mode) {
             /// Update some templates
                 data_append_new_field_to_templates($data, $fieldinput->name);
 
-                add_to_log($course->id, 'data', 'fields add',
-                           "field.php?d=$data->id&amp;mode=display&amp;fid=$fid", $fid, $cm->id);
-
                 $displaynoticegood = get_string('fieldadded','data');
             }
         }
@@ -149,6 +146,7 @@ switch ($mode) {
 
                 $field->field->name = $fieldinput->name;
                 $field->field->description = $fieldinput->description;
+                $field->field->required = !empty($fieldinput->required) ? 1 : 0;
 
                 for ($i=1; $i<=10; $i++) {
                     if (isset($fieldinput->{'param'.$i})) {
@@ -162,9 +160,6 @@ switch ($mode) {
 
             /// Update the templates.
                 data_replace_field_in_templates($data, $oldfieldname, $field->field->name);
-
-                add_to_log($course->id, 'data', 'fields update',
-                           "field.php?d=$data->id&amp;mode=display&amp;fid=$fid", $fid, $cm->id);
 
                 $displaynoticegood = get_string('fieldupdated','data');
             }
@@ -193,9 +188,6 @@ switch ($mode) {
                         $rec->defaultsortdir = 0;
                         $DB->update_record('data', $rec);
                     }
-
-                    add_to_log($course->id, 'data', 'fields delete',
-                               "field.php?d=$data->id", $field->field->name, $cm->id);
 
                     $displaynoticegood = get_string('fielddeleted', 'data');
                 }
@@ -240,11 +232,11 @@ switch ($mode) {
 /// Print the browsing interface
 
 ///get the list of possible fields (plugins)
-$directories = get_list_of_plugins('mod/data/field/');
+$plugins = core_component::get_plugin_list('datafield');
 $menufield = array();
 
-foreach ($directories as $directory){
-    $menufield[$directory] = get_string($directory,'data');    //get from language files
+foreach ($plugins as $plugin=>$fulldir){
+    $menufield[$plugin] = get_string('pluginname', 'datafield_'.$plugin);    //get from language files
 }
 asort($menufield);    //sort in alphabetical order
 $PAGE->set_title(get_string('course') . ': ' . $course->fullname);
@@ -273,7 +265,13 @@ if (($mode == 'new') && (!empty($newtype)) && confirm_sesskey()) {          /// 
     } else {    //else print quiz style list of fields
 
         $table = new html_table();
-        $table->head = array(get_string('fieldname','data'), get_string('type','data'), get_string('fielddescription', 'data'), get_string('action','data'));
+        $table->head = array(
+            get_string('fieldname', 'data'),
+            get_string('type', 'data'),
+            get_string('required', 'data'),
+            get_string('fielddescription', 'data'),
+            get_string('action', 'data'),
+        );
         $table->align = array('left','left','left', 'center');
         $table->wrap = array(false,false,false,false);
 
@@ -282,21 +280,28 @@ if (($mode == 'new') && (!empty($newtype)) && confirm_sesskey()) {          /// 
 
                 $field = data_get_field($ff, $data);
 
+                $baseurl = new moodle_url('/mod/data/field.php', array(
+                    'd'         => $data->id,
+                    'fid'       => $field->field->id,
+                    'sesskey'   => sesskey(),
+                ));
+
+                $displayurl = new moodle_url($baseurl, array(
+                    'mode'      => 'display',
+                ));
+
+                $deleteurl = new moodle_url($baseurl, array(
+                    'mode'      => 'delete',
+                ));
+
                 $table->data[] = array(
-
-                '<a href="field.php?mode=display&amp;d='.$data->id.
-                '&amp;fid='.$field->field->id.'&amp;sesskey='.sesskey().'">'.$field->field->name.'</a>',
-
-                $field->image().'&nbsp;'.get_string($field->type, 'data'),
-
-                shorten_text($field->field->description, 30),
-
-                '<a href="field.php?d='.$data->id.'&amp;mode=display&amp;fid='.$field->field->id.'&amp;sesskey='.sesskey().'">'.
-                '<img src="'.$OUTPUT->pix_url('t/edit') . '" class="iconsmall" alt="'.get_string('edit').'" title="'.get_string('edit').'" /></a>'.
-                '&nbsp;'.
-                '<a href="field.php?d='.$data->id.'&amp;mode=delete&amp;fid='.$field->field->id.'&amp;sesskey='.sesskey().'">'.
-                '<img src="'.$OUTPUT->pix_url('t/delete') . '" class="iconsmall" alt="'.get_string('delete').'" title="'.get_string('delete').'" /></a>'
-
+                    html_writer::link($displayurl, $field->field->name),
+                    $field->image() . '&nbsp;' . get_string($field->type, 'data'),
+                    $field->field->required ? get_string('yes') : get_string('no'),
+                    shorten_text($field->field->description, 30),
+                    html_writer::link($displayurl, $OUTPUT->pix_icon('t/edit', get_string('edit'))) .
+                        '&nbsp;' .
+                        html_writer::link($deleteurl, $OUTPUT->pix_icon('t/delete', get_string('delete'))),
                 );
             }
         }
@@ -305,9 +310,9 @@ if (($mode == 'new') && (!empty($newtype)) && confirm_sesskey()) {          /// 
 
 
     echo '<div class="fieldadd">';
-    echo '<label for="fieldform_jump">'.get_string('newfield','data').$OUTPUT->help_icon('newfield', 'data').'</label>';
     $popupurl = $CFG->wwwroot.'/mod/data/field.php?d='.$data->id.'&mode=new&sesskey='.  sesskey();
-    echo $OUTPUT->single_select(new moodle_url($popupurl), 'newtype', $menufield, null, array(''=>'choosedots'), 'fieldform');
+    echo $OUTPUT->single_select(new moodle_url($popupurl), 'newtype', $menufield, null, array('' => 'choosedots'),
+        'fieldform', array('label' => get_string('newfield', 'data') . $OUTPUT->help_icon('newfield', 'data')));
     echo '</div>';
 
     echo '<div class="sortdefault">';

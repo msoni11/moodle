@@ -36,6 +36,12 @@ if (isset($_SERVER['REMOTE_ADDR'])) {
     exit(1);
 }
 
+// Force OPcache reset if used, we do not want any stale caches
+// when preparing test environment.
+if (function_exists('opcache_reset')) {
+    opcache_reset();
+}
+
 $help =
 "Command line Moodle installer, creates config.php and initializes database.
 Please note you must execute this script with the same uid as apache
@@ -58,19 +64,24 @@ Options:
 --dbname=NAME         Database name. Default is moodle
 --dbuser=USERNAME     Database user. Default is root
 --dbpass=PASSWORD     Database password. Default is blank
---dbsocket            Use database sockets. Available for some databases only.
+--dbport=NUMBER       Use database port.
+--dbsocket=PATH       Use database socket, 1 means default. Available for some databases only.
 --prefix=STRING       Table prefix for above database tables. Default is mdl_
 --fullname=STRING     The fullname of the site
 --shortname=STRING    The shortname of the site
+--summary=STRING      The summary to be displayed on the front page
 --adminuser=USERNAME  Username for the moodle admin account. Default is admin
 --adminpass=PASSWORD  Password for the moodle admin account,
                       required in non-interactive mode.
+--adminemail=STRING   Email address for the moodle admin account.
+--upgradekey=STRING   The upgrade key to be set in the config.php, leave empty to not set it.
 --non-interactive     No interactive questions, installation fails if any
                       problem encountered.
 --agree-license       Indicates agreement with software license,
                       required in non-interactive mode.
 --allow-unstable      Install even if the version is not marked as stable yet,
                       required in non-interactive mode.
+--skip-database       Stop the installation before installing the database.
 -h, --help            Print out this help
 
 Example:
@@ -113,10 +124,11 @@ $olddir = getcwd();
 chdir(dirname($_SERVER['argv'][0]));
 
 // Servers should define a default timezone in php.ini, but if they don't then make sure something is defined.
-// This is a quick hack.  Ideally we should ask the admin for a value.  See MDL-22625 for more on this.
-if (function_exists('date_default_timezone_set') and function_exists('date_default_timezone_get')) {
-    @date_default_timezone_set(@date_default_timezone_get());
+if (!function_exists('date_default_timezone_set') or !function_exists('date_default_timezone_get')) {
+    fwrite(STDERR, "Timezone functions are not available.\n");
+    exit(1);
 }
+date_default_timezone_set(@date_default_timezone_get());
 
 // make sure PHP errors are displayed - helps with diagnosing of problems
 @error_reporting(E_ALL);
@@ -127,19 +139,24 @@ if (function_exists('date_default_timezone_set') and function_exists('date_defau
 /** Used by library scripts to check they are being called by Moodle */
 define('MOODLE_INTERNAL', true);
 
-// Disables caching.. just in case.
+// Disables all caching.
 define('CACHE_DISABLE_ALL', true);
 
+define('PHPUNIT_TEST', false);
+
+define('IGNORE_COMPONENT_CACHE', true);
+
 // Check that PHP is of a sufficient version
-if (version_compare(phpversion(), "5.3.2") < 0) {
+if (version_compare(phpversion(), "5.4.4") < 0) {
     $phpversion = phpversion();
     // do NOT localise - lang strings would not work here and we CAN NOT move it after installib
-    fwrite(STDERR, "Moodle 2.1 or later requires at least PHP 5.3.2 (currently using version $phpversion).\n");
+    fwrite(STDERR, "Moodle 2.7 or later requires at least PHP 5.4.4 (currently using version $phpversion).\n");
     fwrite(STDERR, "Please upgrade your server software or install older Moodle version.\n");
     exit(1);
 }
 
 // set up configuration
+global $CFG;
 $CFG = new stdClass();
 $CFG->lang                 = 'en';
 $CFG->dirroot              = dirname(dirname(dirname(__FILE__)));
@@ -149,6 +166,11 @@ $CFG->httpswwwroot         = $CFG->wwwroot;
 $CFG->docroot              = 'http://docs.moodle.org';
 $CFG->running_installer    = true;
 $CFG->early_install_lang   = true;
+$CFG->ostype               = (stristr(PHP_OS, 'win') && !stristr(PHP_OS, 'darwin')) ? 'WINDOWS' : 'UNIX';
+$CFG->dboptions            = array();
+$CFG->debug                = (E_ALL | E_STRICT);
+$CFG->debugdisplay         = true;
+$CFG->debugdeveloper       = true;
 
 $parts = explode('/', str_replace('\\', '/', dirname(dirname(__FILE__))));
 $CFG->admin                = array_pop($parts);
@@ -157,10 +179,14 @@ $CFG->admin                = array_pop($parts);
 //the problem is that we need specific version of quickforms and hacked excel files :-(
 ini_set('include_path', $CFG->libdir.'/pear' . PATH_SEPARATOR . ini_get('include_path'));
 
+require_once($CFG->libdir.'/classes/component.php');
+require_once($CFG->libdir.'/classes/text.php');
+require_once($CFG->libdir.'/classes/string_manager.php');
+require_once($CFG->libdir.'/classes/string_manager_install.php');
+require_once($CFG->libdir.'/classes/string_manager_standard.php');
 require_once($CFG->libdir.'/installlib.php');
 require_once($CFG->libdir.'/clilib.php');
 require_once($CFG->libdir.'/setuplib.php');
-require_once($CFG->libdir.'/textlib.class.php');
 require_once($CFG->libdir.'/weblib.php');
 require_once($CFG->libdir.'/dmllib.php');
 require_once($CFG->libdir.'/moodlelib.php');
@@ -169,11 +195,32 @@ require_once($CFG->libdir.'/adminlib.php');
 require_once($CFG->libdir.'/componentlib.class.php');
 require_once($CFG->dirroot.'/cache/lib.php');
 
+// Register our classloader, in theory somebody might want to replace it to load other hacked core classes.
+// Required because the database checks below lead to session interaction which is going to lead us to requiring autoloaded classes.
+if (defined('COMPONENT_CLASSLOADER')) {
+    spl_autoload_register(COMPONENT_CLASSLOADER);
+} else {
+    spl_autoload_register('core_component::classloader');
+}
+
 require($CFG->dirroot.'/version.php');
 $CFG->target_release = $release;
 
+\core\session\manager::init_empty_session();
+global $SESSION;
+global $USER;
+
+global $COURSE;
+$COURSE = new stdClass();
+$COURSE->id = 1;
+
+global $SITE;
+$SITE = $COURSE;
+define('SITEID', 1);
+
 //Database types
 $databases = array('mysqli' => moodle_database::get_driver_instance('mysqli', 'native'),
+                   'mariadb'=> moodle_database::get_driver_instance('mariadb', 'native'),
                    'pgsql'  => moodle_database::get_driver_instance('pgsql',  'native'),
                    'oci'    => moodle_database::get_driver_instance('oci',    'native'),
                    'sqlsrv' => moodle_database::get_driver_instance('sqlsrv', 'native'), // MS SQL*Server PHP driver
@@ -203,15 +250,20 @@ list($options, $unrecognized) = cli_get_params(
         'dbname'            => 'moodle',
         'dbuser'            => empty($distro->dbuser) ? 'root' : $distro->dbuser, // let distros set dbuser
         'dbpass'            => '',
-        'dbsocket'          => false,
+        'dbport'            => '',
+        'dbsocket'          => '',
         'prefix'            => 'mdl_',
         'fullname'          => '',
         'shortname'         => '',
+        'summary'           => '',
         'adminuser'         => 'admin',
         'adminpass'         => '',
+        'adminemail'        => '',
+        'upgradekey'        => '',
         'non-interactive'   => false,
         'agree-license'     => false,
         'allow-unstable'    => false,
+        'skip-database'     => false,
         'help'              => false
     ),
     array(
@@ -223,7 +275,8 @@ $interactive = empty($options['non-interactive']);
 
 // set up language
 $lang = clean_param($options['lang'], PARAM_SAFEDIR);
-if (file_exists($CFG->dirroot.'/install/lang/'.$lang)) {
+$languages = get_string_manager()->get_list_of_translations();
+if (array_key_exists($lang, $languages)) {
     $CFG->lang = $lang;
 }
 
@@ -238,28 +291,41 @@ if ($options['help']) {
 }
 
 //Print header
+cli_logo();
+echo PHP_EOL;
 echo get_string('cliinstallheader', 'install', $CFG->target_release)."\n";
 
 //Fist select language
 if ($interactive) {
     cli_separator();
-    $languages = get_string_manager()->get_list_of_translations();
     // Do not put the langs into columns because it is not compatible with RTL.
-    $langlist = implode("\n", $languages);
     $default = $CFG->lang;
-    cli_heading(get_string('availablelangs', 'install'));
-    echo $langlist."\n";
+    cli_heading(get_string('chooselanguagehead', 'install'));
+    if (array_key_exists($default, $languages)) {
+        echo $default.' - '.$languages[$default]."\n";
+    }
+    if ($default !== 'en') {
+        echo 'en - English (en)'."\n";
+    }
+    echo '? - '.get_string('availablelangs', 'install')."\n";
     $prompt = get_string('clitypevaluedefault', 'admin', $CFG->lang);
     $error = '';
     do {
         echo $error;
         $input = cli_input($prompt, $default);
-        $input = clean_param($input, PARAM_SAFEDIR);
 
-        if (!file_exists($CFG->dirroot.'/install/lang/'.$input)) {
-            $error = get_string('cliincorrectvalueretry', 'admin')."\n";
+        if ($input === '?') {
+            echo implode("\n", $languages)."\n";
+            $error = "\n";
+
         } else {
-            $error = '';
+            $input = clean_param($input, PARAM_SAFEDIR);
+
+            if (!array_key_exists($input, $languages)) {
+                $error = get_string('cliincorrectvalueretry', 'admin')."\n";
+            } else {
+                $error = '';
+            }
         }
     } while ($error !== '');
     $CFG->lang = $input;
@@ -293,6 +359,8 @@ if ($interactive) {
     }
 }
 $CFG->directorypermissions = $chmod;
+$CFG->filepermissions      = ($CFG->directorypermissions & 0666);
+$CFG->umaskpermissions     = (($CFG->directorypermissions & 0777) ^ 0777);
 
 //We need wwwroot before we test dataroot
 $wwwroot = clean_param($options['wwwroot'], PARAM_URL);
@@ -379,8 +447,9 @@ if ($interactive) {
         cli_error(get_string('pathserrcreatedataroot', 'install', $a));
     }
 }
-$CFG->tempdir  = $CFG->dataroot.'/temp';
-$CFG->cachedir = $CFG->dataroot.'/cache';
+$CFG->tempdir       = $CFG->dataroot.'/temp';
+$CFG->cachedir      = $CFG->dataroot.'/cache';
+$CFG->localcachedir = $CFG->dataroot.'/localcache';
 
 // download required lang packs
 if ($CFG->lang !== 'en') {
@@ -496,6 +565,34 @@ if ($interactive) {
     $CFG->prefix = $options['prefix'];
 }
 
+// ask for db port
+if ($interactive) {
+    cli_separator();
+    cli_heading(get_string('databaseport', 'install'));
+    $prompt = get_string('clitypevaluedefault', 'admin', $options['dbport']);
+    $CFG->dboptions['dbport'] = (int)cli_input($prompt, $options['dbport']);
+
+} else {
+    $CFG->dboptions['dbport'] = (int)$options['dbport'];
+}
+if ($CFG->dboptions['dbport'] <= 0) {
+    $CFG->dboptions['dbport'] = '';
+}
+
+// ask for db socket
+if ($CFG->ostype === 'WINDOWS') {
+    $CFG->dboptions['dbsocket'] = '';
+
+} else if ($interactive and empty($CFG->dboptions['dbport'])) {
+    cli_separator();
+    cli_heading(get_string('databasesocket', 'install'));
+    $prompt = get_string('clitypevaluedefault', 'admin', $options['dbsocket']);
+    $CFG->dboptions['dbsocket'] = cli_input($prompt, $options['dbsocket']);
+
+} else {
+    $CFG->dboptions['dbsocket'] = $options['dbsocket'];
+}
+
 // ask for db user
 if ($interactive) {
     cli_separator();
@@ -524,14 +621,14 @@ if ($interactive) {
 
         $CFG->dbpass = cli_input($prompt, $options['dbpass']);
         if (function_exists('distro_pre_create_db')) { // Hook for distros needing to do something before DB creation
-            $distro = distro_pre_create_db($database, $CFG->dbhost, $CFG->dbuser, $CFG->dbpass, $CFG->dbname, $CFG->prefix, array('dbpersist'=>0, 'dbsocket'=>$options['dbsocket']), $distro);
+            $distro = distro_pre_create_db($database, $CFG->dbhost, $CFG->dbuser, $CFG->dbpass, $CFG->dbname, $CFG->prefix, array('dbpersist'=>0, 'dbport'=>$CFG->dboptions['dbport'], 'dbsocket'=>$CFG->dboptions['dbsocket']), $distro);
         }
-        $hint_database = install_db_validate($database, $CFG->dbhost, $CFG->dbuser, $CFG->dbpass, $CFG->dbname, $CFG->prefix, array('dbpersist'=>0, 'dbsocket'=>$options['dbsocket']));
+        $hint_database = install_db_validate($database, $CFG->dbhost, $CFG->dbuser, $CFG->dbpass, $CFG->dbname, $CFG->prefix, array('dbpersist'=>0, 'dbport'=>$CFG->dboptions['dbport'], 'dbsocket'=>$CFG->dboptions['dbsocket']));
     } while ($hint_database !== '');
 
 } else {
     $CFG->dbpass = $options['dbpass'];
-    $hint_database = install_db_validate($database, $CFG->dbhost, $CFG->dbuser, $CFG->dbpass, $CFG->dbname, $CFG->prefix, array('dbpersist'=>0, 'dbsocket'=>$options['dbsocket']));
+    $hint_database = install_db_validate($database, $CFG->dbhost, $CFG->dbuser, $CFG->dbpass, $CFG->dbname, $CFG->prefix, array('dbpersist'=>0, 'dbport'=>$CFG->dboptions['dbport'], 'dbsocket'=>$CFG->dboptions['dbsocket']));
     if ($hint_database !== '') {
         cli_error(get_string('dbconnectionerror', 'install'));
     }
@@ -613,6 +710,38 @@ if ($interactive) {
     }
 }
 
+// Ask for the admin email address.
+if ($interactive) {
+    cli_separator();
+    cli_heading(get_string('cliadminemail', 'install'));
+    $prompt = get_string('clitypevaluedefault', 'admin', $options['adminemail']);
+    $options['adminemail'] = cli_input($prompt);
+}
+
+// Validate that the address provided was an e-mail address.
+if (!empty($options['adminemail']) && !validate_email($options['adminemail'])) {
+    $a = (object) array('option' => 'adminemail', 'value' => $options['adminemail']);
+    cli_error(get_string('cliincorrectvalueerror', 'admin', $a));
+}
+
+// Ask for the upgrade key.
+if ($interactive) {
+    cli_separator();
+    cli_heading(get_string('upgradekeyset', 'admin'));
+    if ($options['upgradekey'] !== '') {
+        $prompt = get_string('clitypevaluedefault', 'admin', $options['upgradekey']);
+        $options['upgradekey'] = cli_input($prompt, $options['upgradekey']);
+    } else {
+        $prompt = get_string('clitypevalue', 'admin');
+        $options['upgradekey'] = cli_input($prompt);
+    }
+}
+
+// Set the upgrade key if it was provided.
+if ($options['upgradekey'] !== '') {
+    $CFG->upgradekey = $options['upgradekey'];
+}
+
 if ($interactive) {
     if (!$options['agree-license']) {
         cli_separator();
@@ -671,14 +800,17 @@ if (!$envstatus) {
 }
 
 // Test plugin dependencies.
-require_once($CFG->libdir . '/pluginlib.php');
 $failed = array();
-if (!plugin_manager::instance()->all_plugins_ok($version, $failed)) {
+if (!core_plugin_manager::instance()->all_plugins_ok($version, $failed)) {
     cli_problem(get_string('pluginscheckfailed', 'admin', array('pluginslist' => implode(', ', array_unique($failed)))));
     cli_error(get_string('pluginschecktodo', 'admin'));
 }
 
-install_cli_database($options, $interactive);
+if (!$options['skip-database']) {
+    install_cli_database($options, $interactive);
+} else {
+    echo get_string('cliskipdatabase', 'install')."\n";
+}
 
 echo get_string('cliinstallfinished', 'install')."\n";
 exit(0); // 0 means success

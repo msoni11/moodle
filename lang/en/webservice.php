@@ -1,5 +1,4 @@
 <?php
-
 // This file is part of Moodle - http://moodle.org/
 //
 // Moodle is free software: you can redistribute it and/or modify
@@ -18,7 +17,7 @@
 /**
  * Strings for component 'webservice', language 'en', branch 'MOODLE_20_STABLE'
  *
- * @package   webservice
+ * @package   core_webservice
  * @copyright 1999 onwards Martin Dougiamas  {@link http://moodle.com}
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -41,6 +40,7 @@ $string['apiexplorer'] = 'API explorer';
 $string['apiexplorernotavalaible'] = 'API explorer not available yet.';
 $string['arguments'] = 'Arguments';
 $string['authmethod'] = 'Authentication method';
+$string['callablefromajax'] = 'Callable from AJAX';
 $string['cannotcreatetoken'] = 'No permission to create web service token for the service {$a}.';
 $string['cannotgetcoursecontents'] = 'Cannot get course contents';
 $string['configwebserviceplugins'] = 'For security reasons, only protocols that are in use should be enabled.';
@@ -52,7 +52,7 @@ $string['createtokenforuser'] = 'Create a token for a user';
 $string['createtokenforuserdescription'] = 'Create a token for the web services user.';
 $string['createuser'] = 'Create a specific user';
 $string['createuserdescription'] = 'A web services user is required to represent the system controlling Moodle.';
-$string['criteriaerror'] = 'Missing permissions to search on a criteria.';
+$string['criteriaerror'] = 'Missing permissions to search on a criterion.';
 $string['default'] = 'Default to "{$a}"';
 $string['deleteaservice'] = 'Delete service';
 $string['deleteservice'] = 'Delete the service: {$a->name} (id: {$a->id})';
@@ -82,6 +82,15 @@ $string['errorcoursecontextnotvalid'] = 'You cannot execute functions in the cou
 $string['errorinvalidparam'] = 'The param "{$a}" is invalid.';
 $string['errornotemptydefaultparamarray'] = 'The web service description parameter named \'{$a}\' is an single or multiple structure. The default can only be empty array. Check web service description.';
 $string['erroroptionalparamarray'] = 'The web service description parameter named \'{$a}\' is an single or multiple structure. It can not be set as VALUE_OPTIONAL. Check web service description.';
+$string['eventwebservicefunctioncalled'] = 'Web service function called';
+$string['eventwebserviceloginfailed'] = 'Web service login failed';
+$string['eventwebserviceservicecreated'] = 'Web service service created';
+$string['eventwebserviceservicedeleted'] = 'Web service service deleted';
+$string['eventwebserviceserviceupdated'] = 'Web service service updated';
+$string['eventwebserviceserviceuseradded'] = 'Web service service user added';
+$string['eventwebserviceserviceuserremoved'] = 'Web service service user removed';
+$string['eventwebservicetokencreated'] = 'Web service token created';
+$string['eventwebservicetokensent'] = 'Web service token sent';
 $string['execute'] = 'Execute';
 $string['executewarnign'] = 'WARNING: If you press execute your database will be modified and changes can not be reverted automatically!';
 $string['externalservice'] = 'External service';
@@ -105,9 +114,10 @@ $string['invalidiptoken'] = 'Invalid token - your IP is not supported';
 $string['invalidtimedtoken'] = 'Invalid token - token expired';
 $string['invalidtoken'] = 'Invalid token - token not found';
 $string['iprestriction'] = 'IP restriction';
-$string['iprestriction_help'] = 'The user will need to call web service from the listed IPs.';
+$string['iprestriction_help'] = 'The user will need to call the web service from the listed IPs (separated by commas).';
 $string['key'] = 'Key';
 $string['keyshelp'] = 'The keys are used to access your Moodle account from external applications.';
+$string['loginrequired'] = 'Restricted to logged-in users';
 $string['manageprotocols'] = 'Manage protocols';
 $string['managetokens'] = 'Manage tokens';
 $string['missingcaps'] = 'Missing capabilities';
@@ -118,6 +128,7 @@ $string['missingusername'] = 'Missing username';
 $string['missingversionfile'] = 'Coding error: version.php file is missing for the component {$a}';
 $string['mobilewsdisabled'] = 'Disabled';
 $string['mobilewsenabled'] = 'Enabled';
+$string['nameexists'] = 'This name is already in use by another service';
 $string['nocapabilitytouseparameter'] = 'The user does not have the required capability to use the parameter {$a}';
 $string['nofunctions'] = 'This service has no functions.';
 $string['norequiredcapability'] = 'No required capability';
@@ -168,10 +179,11 @@ $string['serviceusers'] = 'Authorised users';
 $string['serviceusersettings'] = 'User settings';
 $string['serviceusersmatching'] = 'Authorised users matching';
 $string['serviceuserssettings'] = 'Change settings for the authorised users';
+$string['shortnametaken'] = 'Short name is already used for another service ({$a})';
 $string['simpleauthlog'] = 'Simple authentication login';
 $string['step'] = 'Step';
 $string['supplyinfo'] = 'More details';
-$string['testauserwithtestclientdescription'] = 'Simulate external access to the service using the web service test client. Before doing so, login as a user with the moodle/webservice:createtoken capability and obtain the security key (token) via My profile settings. You will use this token in the test client. In the test client, also choose an enabled protocol with the token authentication. <strong>WARNING: The functions that you test WILL BE EXECUTED for this user, so be careful what you choose to test!</strong>';
+$string['testauserwithtestclientdescription'] = 'Simulate external access to the service using the web service test client. Before doing so, log in as a user with the moodle/webservice:createtoken capability and obtain the security key (token) via the user\'s preferences page. You will use this token in the test client. In the test client, also choose an enabled protocol with the token authentication. <strong>WARNING: The functions that you test WILL BE EXECUTED for this user, so be careful what you choose to test!</strong>';
 $string['testclient'] = 'Web service test client';
 $string['testclientdescription'] = '* The web service test client <strong>executes</strong> the functions for <strong>REAL</strong>. Do not test functions that you don\'t know. <br/>* All existing web service functions are not yet implemented into the test client. <br/>* In order to check that a user cannot access some functions, you can test some functions that you didn\'t allow.<br/>* To see clearer error messages set the debugging to <strong>{$a->mode}</strong> into {$a->atag}<br/>* Access the {$a->amfatag}.';
 $string['testwithtestclient'] = 'Test the service';
@@ -183,8 +195,10 @@ $string['tokencreator'] = 'Creator';
 $string['unknownoptionkey'] = 'Unknown option key ({$a})';
 $string['unnamedstringparam'] = 'A string parameter is unnamed.';
 $string['updateusersettings'] = 'Update';
+$string['uploadfiles'] = 'Can upload files';
+$string['uploadfiles_help'] = 'If enabled, any user can upload files with their security keys to their own private files area or a draft file area. Any user file quotas apply.';
 $string['userasclients'] = 'Users as clients with token';
-$string['userasclientsdescription'] = 'The following steps help you to set up the Moodle web service for users as clients. These steps also help to set up the recommended token (security keys) authentication method. In this use case, the user will generate his token from the security keys page via My profile settings.';
+$string['userasclientsdescription'] = 'The following steps help you to set up the Moodle web service for users as clients. These steps also help to set up the recommended token (security keys) authentication method. In this use case, the user will generate their token from the security keys page via their preferences page.';
 $string['usermissingcaps'] = 'Missing capabilities: {$a}';
 $string['usernameorid'] = 'Username / User id';
 $string['usernameorid_help'] = 'Enter a username or a user id.';

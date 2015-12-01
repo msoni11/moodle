@@ -75,19 +75,14 @@ defined('MOODLE_INTERNAL') || die();
  *          [string] A class to use as the data loader for this definition.
  *          Any class used here must inherit the cache_data_loader interface.
  *     + datasourcefile
- *          [string] Suplements the above setting indicated the file containing the class to be used. This file is included when
+ *          [string] Supplements the above setting indicating the file containing the class to be used. This file is included when
  *          required.
- *     + persistent
- *          [bool] This setting does two important things. First it tells the cache API to only instantiate the cache structure for
- *          this definition once, further requests will be given the original instance.
- *          Second the cache loader will keep an array of the items set and retrieved to the cache during the request.
- *          This has several advantages including better performance without needing to start passing the cache instance between
- *          function calls, the downside is that the cache instance + the items used stay within memory.
- *          Consider using this setting when you know that there are going to be many calls to the cache for the same information
- *          or when you are converting existing code to the cache and need to access the cache within functions but don't want
- *          to add it as an argument to the function.
- *     + persistentmaxsize
- *          [int] This supplements the above setting by limiting the number of items in the caches persistent array of items.
+ *     + staticacceleration
+ *          The cache loader will keep an array of the items set and retrieved to the cache during the request.
+ *          Consider using this setting when you know that there are going to be many calls to the cache for the same information.
+ *          Requests for data in this array will be ultra fast, but it will cost memory.
+ *     + staticaccelerationsize
+ *          [int] This supplements the above setting by limiting the number of items in the static acceleration array.
  *          Tweaking this setting lower will allow you to minimise the memory implications above while hopefully still managing to
  *          offset calls to the cache store.
  *     + ttl
@@ -100,6 +95,11 @@ defined('MOODLE_INTERNAL') || die();
  *          reason or another.
  *     + invalidationevents
  *          [array] An array of events that should cause this cache to invalidate some or all of the items within it.
+ *     + sharingoptions
+ *          [int] The sharing options that are appropriate for this definition. Should be the sum of the possible options.
+ *     + defaultsharing
+ *          [int] The default sharing option to use. It's highly recommended that you don't set this unless there is a very
+ *          specific reason not to use the system default.
  *
  * For examples take a look at lib/db/caches.php
  *
@@ -109,6 +109,26 @@ defined('MOODLE_INTERNAL') || die();
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class cache_definition {
+
+    /** The cache can be shared with everyone */
+    const SHARING_ALL = 1;
+    /** The cache can be shared with other sites using the same siteid. */
+    const SHARING_SITEID = 2;
+    /** The cache can be shared with other sites of the same version. */
+    const SHARING_VERSION = 4;
+    /** The cache can be shared with other sites using the same key */
+    const SHARING_INPUT = 8;
+
+    /**
+     * The default sharing options available.
+     * All + SiteID + Version + Input.
+     */
+    const SHARING_DEFAULTOPTIONS = 15;
+    /**
+     * The default sharing option that gets used if none have been selected.
+     * SiteID. It is the most restrictive.
+     */
+    const SHARING_DEFAULT = 2;
 
     /**
      * The identifier for the definition
@@ -184,6 +204,13 @@ class cache_definition {
     protected $requirelockingwrite = false;
 
     /**
+     * Gets set to true if this definition requires searchable stores.
+     * @since Moodle 2.4.4
+     * @var bool
+     */
+    protected $requiresearchable = false;
+
+    /**
      * Sets the maximum number of items that can exist in the cache.
      * Please note this isn't a hard limit, and doesn't need to be enforced by the caches. They can choose to do so optionally.
      * @var int
@@ -215,22 +242,23 @@ class cache_definition {
     protected $datasourcefile = null;
 
     /**
-     * The data source class aggregate to use. This is a super advanced setting.
+     * Deprecated - this is completely unused.
+     * @deprecated since 2.9
      * @var string
      */
     protected $datasourceaggregate = null;
 
     /**
-     * Set to true if the definitions cache should be persistent
+     * Set to true if the cache should hold onto items passing through it to speed up subsequent requests.
      * @var bool
      */
-    protected $persistent = false;
+    protected $staticacceleration = false;
 
     /**
-     * The persistent item array max size.
+     * The maximum number of items that static acceleration cache should hold onto.
      * @var int
      */
-    protected $persistentmaxsize = false;
+    protected $staticaccelerationsize = false;
 
     /**
      * The TTL for data in this cache. Please don't use this, instead use event driven invalidation.
@@ -254,7 +282,7 @@ class cache_definition {
      * An array of identifiers provided to this cache when it was initialised.
      * @var array
      */
-    protected $identifiers = array();
+    protected $identifiers = null;
 
     /**
      * Key prefix for use with single key cache stores
@@ -275,15 +303,33 @@ class cache_definition {
     protected $definitionhash = null;
 
     /**
+     * The selected sharing mode for this definition.
+     * @var int
+     */
+    protected $sharingoptions;
+
+    /**
+     * The selected sharing option.
+     * @var int One of self::SHARING_*
+     */
+    protected $selectedsharingoption = self::SHARING_DEFAULT;
+
+    /**
+     * The user input key to use if the SHARING_INPUT option has been selected.
+     * @var string Must be ALPHANUMEXT
+     */
+    protected $userinputsharingkey = '';
+
+    /**
      * Creates a cache definition given a definition from the cache configuration or from a caches.php file.
      *
      * @param string $id
      * @param array $definition
-     * @param string $datasourceaggregate
+     * @param string $unused Used to be datasourceaggregate but that was removed and this is now unused.
      * @return cache_definition
      * @throws coding_exception
      */
-    public static function load($id, array $definition, $datasourceaggregate = null) {
+    public static function load($id, array $definition, $unused = null) {
         global $CFG;
 
         if (!array_key_exists('mode', $definition)) {
@@ -307,16 +353,20 @@ class cache_definition {
         $requiremultipleidentifiers = false;
         $requirelockingread = false;
         $requirelockingwrite = false;
+        $requiresearchable = ($mode === cache_store::MODE_SESSION) ? true : false;
         $maxsize = null;
         $overrideclass = null;
         $overrideclassfile = null;
         $datasource = null;
         $datasourcefile = null;
-        $persistent = false;
-        $persistentmaxsize = false;
+        $staticacceleration = false;
+        $staticaccelerationsize = false;
         $ttl = 0;
         $mappingsonly = false;
         $invalidationevents = array();
+        $sharingoptions = self::SHARING_DEFAULT;
+        $selectedsharingoption = self::SHARING_DEFAULT;
+        $userinputsharingkey = '';
 
         if (array_key_exists('simplekeys', $definition)) {
             $simplekeys = (bool)$definition['simplekeys'];
@@ -342,6 +392,10 @@ class cache_definition {
         }
         $requirelocking = $requirelockingwrite || $requirelockingread;
 
+        if (array_key_exists('requiresearchable', $definition)) {
+            $requiresearchable = (bool)$definition['requiresearchable'];
+        }
+
         if (array_key_exists('maxsize', $definition)) {
             $maxsize = (int)$definition['maxsize'];
         }
@@ -361,10 +415,18 @@ class cache_definition {
         }
 
         if (array_key_exists('persistent', $definition)) {
-            $persistent = (bool)$definition['persistent'];
+            // Ahhh this is the legacy persistent option.
+            $staticacceleration = (bool)$definition['persistent'];
+        }
+        if (array_key_exists('staticacceleration', $definition)) {
+            $staticacceleration = (bool)$definition['staticacceleration'];
         }
         if (array_key_exists('persistentmaxsize', $definition)) {
-            $persistentmaxsize = (int)$definition['persistentmaxsize'];
+            // Ahhh this is the legacy persistentmaxsize option.
+            $staticaccelerationsize = (int)$definition['persistentmaxsize'];
+        }
+        if (array_key_exists('staticaccelerationsize', $definition)) {
+            $staticaccelerationsize = (int)$definition['staticaccelerationsize'];
         }
         if (array_key_exists('ttl', $definition)) {
             $ttl = (int)$definition['ttl'];
@@ -374,6 +436,26 @@ class cache_definition {
         }
         if (array_key_exists('invalidationevents', $definition)) {
             $invalidationevents = (array)$definition['invalidationevents'];
+        }
+        if (array_key_exists('sharingoptions', $definition)) {
+            $sharingoptions = (int)$definition['sharingoptions'];
+        }
+        if (array_key_exists('selectedsharingoption', $definition)) {
+            $selectedsharingoption = (int)$definition['selectedsharingoption'];
+        } else if (array_key_exists('defaultsharing', $definition)) {
+            $selectedsharingoption = (int)$definition['defaultsharing'];
+        } else if ($sharingoptions ^ $selectedsharingoption) {
+            if ($sharingoptions & self::SHARING_SITEID) {
+                $selectedsharingoption = self::SHARING_SITEID;
+            } else if ($sharingoptions & self::SHARING_VERSION) {
+                $selectedsharingoption = self::SHARING_VERSION;
+            } else {
+                $selectedsharingoption = self::SHARING_ALL;
+            }
+        }
+
+        if (array_key_exists('userinputsharingkey', $definition) && !empty($definition['userinputsharingkey'])) {
+            $userinputsharingkey = (string)$definition['userinputsharingkey'];
         }
 
         if (!is_null($overrideclass)) {
@@ -433,17 +515,20 @@ class cache_definition {
         $cachedefinition->requirelocking = $requirelocking;
         $cachedefinition->requirelockingread = $requirelockingread;
         $cachedefinition->requirelockingwrite = $requirelockingwrite;
+        $cachedefinition->requiresearchable = $requiresearchable;
         $cachedefinition->maxsize = $maxsize;
         $cachedefinition->overrideclass = $overrideclass;
         $cachedefinition->overrideclassfile = $overrideclassfile;
         $cachedefinition->datasource = $datasource;
         $cachedefinition->datasourcefile = $datasourcefile;
-        $cachedefinition->datasourceaggregate = $datasourceaggregate;
-        $cachedefinition->persistent = $persistent;
-        $cachedefinition->persistentmaxsize = $persistentmaxsize;
+        $cachedefinition->staticacceleration = $staticacceleration;
+        $cachedefinition->staticaccelerationsize = $staticaccelerationsize;
         $cachedefinition->ttl = $ttl;
         $cachedefinition->mappingsonly = $mappingsonly;
         $cachedefinition->invalidationevents = $invalidationevents;
+        $cachedefinition->sharingoptions = $sharingoptions;
+        $cachedefinition->selectedsharingoption = $selectedsharingoption;
+        $cachedefinition->userinputsharingkey = $userinputsharingkey;
 
         return $cachedefinition;
     }
@@ -461,7 +546,8 @@ class cache_definition {
      *   - simplekeys : Set to true if the keys you will use are a-zA-Z0-9_
      *   - simpledata : Set to true if the type of the data you are going to store is scalar, or an array of scalar vars
      *   - overrideclass : The class to use as the loader.
-     *   - persistent : If set to true the cache will persist construction requests.
+     *   - staticacceleration : If set to true the cache will hold onto data passing through it.
+     *   - staticaccelerationsize : Set it to an int to limit the size of the staticacceleration cache.
      * @return cache_application|cache_session|cache_request
      */
     public static function load_adhoc($mode, $component, $area, array $options = array()) {
@@ -478,10 +564,20 @@ class cache_definition {
             $definition['simpledata'] = $options['simpledata'];
         }
         if (!empty($options['persistent'])) {
-            $definition['persistent'] = $options['persistent'];
+            // Ahhh this is the legacy persistent option.
+            $definition['staticacceleration'] = (bool)$options['persistent'];
+        }
+        if (!empty($options['staticacceleration'])) {
+            $definition['staticacceleration'] = (bool)$options['staticacceleration'];
+        }
+        if (!empty($options['staticaccelerationsize'])) {
+            $definition['staticaccelerationsize'] = (int)$options['staticaccelerationsize'];
         }
         if (!empty($options['overrideclass'])) {
             $definition['overrideclass'] = $options['overrideclass'];
+        }
+        if (!empty($options['sharingoptions'])) {
+            $definition['sharingoptions'] = $options['sharingoptions'];
         }
         return self::load($id, $definition, null);
     }
@@ -558,6 +654,9 @@ class cache_definition {
      * @return array
      */
     public function get_identifiers() {
+        if (!isset($this->identifiers)) {
+            return array();
+        }
         return $this->identifiers;
     }
 
@@ -634,6 +733,15 @@ class cache_definition {
     }
 
     /**
+     * Returns true if this definition requires a searchable cache.
+     * @since Moodle 2.4.4
+     * @return bool
+     */
+    public function require_searchable() {
+        return $this->requiresearchable;
+    }
+
+    /**
      * Returns true if this definition has an associated data source.
      * @return bool
      */
@@ -661,10 +769,21 @@ class cache_definition {
      * @throws coding_exception
      */
     public function set_identifiers(array $identifiers = array()) {
+        // If we are setting the exact same identifiers then just return as nothing really changed.
+        // We don't care about order as cache::make will use the same definition order all the time.
+        if ($identifiers === $this->identifiers) {
+            return;
+        }
+
         foreach ($this->requireidentifiers as $identifier) {
-            if (!array_key_exists($identifier, $identifiers)) {
+            if (!isset($identifiers[$identifier])) {
                 throw new coding_exception('Identifier required for cache has not been provided: '.$identifier);
             }
+        }
+
+        if ($this->identifiers === null) {
+            // Initialize identifiers if they have not been.
+            $this->identifiers = array();
         }
         foreach ($identifiers as $name => $value) {
             $this->identifiers[$name] = (string)$value;
@@ -686,23 +805,62 @@ class cache_definition {
         if ($this->require_multiple_identifiers()) {
             $requires += cache_store::SUPPORTS_MULTIPLE_IDENTIFIERS;
         }
+        if ($this->require_searchable()) {
+            $requires += cache_store::IS_SEARCHABLE;
+        }
         return $requires;
     }
 
     /**
      * Returns true if this definitions cache should be made persistent.
+     *
+     * Please call {@link cache_definition::use_static_acceleration()} instead.
+     *
+     * @see cache_definition::use_static_acceleration()
+     * @deprecated since 2.6
      * @return bool
      */
     public function should_be_persistent() {
-        return $this->persistent;
+        debugging('Please upgrade your code to use cache_definition::use_static_acceleration', DEBUG_DEVELOPER);
+        return $this->use_static_acceleration();
     }
 
     /**
-     * Returns the max size for the persistent item array in the cache.
+     * Returns true if we should hold onto the data flowing through the cache.
+     *
+     * If set to true data flowing through the cache will be stored in a static variable
+     * to make subsequent requests for the data much faster.
+     *
+     * @return bool
+     */
+    public function use_static_acceleration() {
+        if ($this->mode === cache_store::MODE_REQUEST) {
+            // Request caches should never use static acceleration - it just doesn't make sense.
+            return false;
+        }
+        return $this->staticacceleration;
+    }
+
+    /**
+     * Returns the max size for the static acceleration array.
+     *
+     * Please call {@link cache_definition::get_static_acceleration_size()} instead.
+     *
+     * @see cache_definition::get_static_acceleration_size()
+     * @deprecated since 2.6
      * @return int
      */
     public function get_persistent_max_size() {
-        return $this->persistentmaxsize;
+        debugging('Please upgrade your code to call cache_definition::get_static_acceleration_size', DEBUG_DEVELOPER);
+        return $this->get_static_acceleration_size();
+    }
+
+    /**
+     * Returns the max size for the static acceleration array.
+     * @return int
+     */
+    public function get_static_acceleration_size() {
+        return $this->staticaccelerationsize;
     }
 
     /**
@@ -749,7 +907,7 @@ class cache_definition {
                 'area' => $this->area,
                 'siteidentifier' => $this->get_cache_identifier()
             );
-            if (!empty($this->identifiers)) {
+            if (isset($this->identifiers) && !empty($this->identifiers)) {
                 $identifiers = array();
                 foreach ($this->identifiers as $key => $value) {
                     $identifiers[] = htmlentities($key, ENT_QUOTES, 'UTF-8').'='.htmlentities($value, ENT_QUOTES, 'UTF-8');
@@ -794,6 +952,56 @@ class cache_definition {
      * @return string A string to be used as part of keys.
      */
     protected function get_cache_identifier() {
-        return cache_helper::get_site_identifier();
+        $identifiers = array();
+        if ($this->selectedsharingoption & self::SHARING_ALL) {
+            // Nothing to do here.
+        } else {
+            if ($this->selectedsharingoption & self::SHARING_SITEID) {
+                $identifiers[] = cache_helper::get_site_identifier();
+            }
+            if ($this->selectedsharingoption & self::SHARING_VERSION) {
+                $identifiers[] = cache_helper::get_site_version();
+            }
+            if ($this->selectedsharingoption & self::SHARING_INPUT && !empty($this->userinputsharingkey)) {
+                $identifiers[] = $this->userinputsharingkey;
+            }
+        }
+        return join('/', $identifiers);
+    }
+
+    /**
+     * Returns true if this definition requires identifiers.
+     *
+     * @param bool
+     */
+    public function has_required_identifiers() {
+        return (count($this->requireidentifiers) > 0);
+    }
+
+    /**
+     * Returns the possible sharing options that can be used with this defintion.
+     *
+     * @return int
+     */
+    public function get_sharing_options() {
+        return $this->sharingoptions;
+    }
+
+    /**
+     * Returns the user entered sharing key for this definition.
+     *
+     * @return string
+     */
+    public function get_user_input_sharing_key() {
+        return $this->userinputsharingkey;
+    }
+
+    /**
+     * Returns the user selected sharing option for this definition.
+     *
+     * @return int
+     */
+    public function get_selected_sharing_option() {
+        return $this->selectedsharingoption;
     }
 }

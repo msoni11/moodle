@@ -27,7 +27,8 @@
 defined('MOODLE_INTERNAL') || die();
 
 global $CFG;
-require_once(dirname(__FILE__) . '/../lib.php');
+require_once(__DIR__ . '/../lib.php');
+require_once($CFG->dirroot . '/lib/phpunit/lib.php');
 
 
 /**
@@ -43,8 +44,53 @@ class testable_question_attempt extends question_attempt {
     public function set_min_fraction($fraction) {
         $this->minfraction = $fraction;
     }
+    public function set_max_fraction($fraction) {
+        $this->maxfraction = $fraction;
+    }
     public function set_behaviour(question_behaviour $behaviour) {
         $this->behaviour = $behaviour;
+    }
+}
+
+
+/**
+ * Test subclass to allow access to some protected data so that the correct
+ * behaviour can be verified.
+ *
+ * @copyright  2012 The Open University
+ * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ */
+class testable_question_engine_unit_of_work extends question_engine_unit_of_work {
+    public function get_modified() {
+        return $this->modified;
+    }
+
+    public function get_attempts_added() {
+        return $this->attemptsadded;
+    }
+
+    public function get_attempts_modified() {
+        return $this->attemptsmodified;
+    }
+
+    public function get_steps_added() {
+        return $this->stepsadded;
+    }
+
+    public function get_steps_modified() {
+        return $this->stepsmodified;
+    }
+
+    public function get_steps_deleted() {
+        return $this->stepsdeleted;
+    }
+
+    public function get_metadata_added() {
+        return $this->metadataadded;
+    }
+
+    public function get_metadata_modified() {
+        return $this->metadatamodified;
     }
 }
 
@@ -62,6 +108,28 @@ abstract class question_test_helper {
      * this question type.
      */
     abstract public function get_test_questions();
+
+    /**
+     * Set up a form to create a question in $cat. This method also sets cat and contextid on $questiondata object.
+     * @param object $cat the category
+     * @param object $questiondata form initialisation requires question data.
+     * @return moodleform
+     */
+    public static function get_question_editing_form($cat, $questiondata) {
+        $catcontext = context::instance_by_id($cat->contextid, MUST_EXIST);
+        $contexts = new question_edit_contexts($catcontext);
+        $dataforformconstructor = new stdClass();
+        $dataforformconstructor->qtype = $questiondata->qtype;
+        $dataforformconstructor->contextid = $questiondata->contextid = $catcontext->id;
+        $dataforformconstructor->category = $questiondata->category = $cat->id;
+        $dataforformconstructor->formoptions = new stdClass();
+        $dataforformconstructor->formoptions->canmove = true;
+        $dataforformconstructor->formoptions->cansaveasnew = true;
+        $dataforformconstructor->formoptions->canedit = true;
+        $dataforformconstructor->formoptions->repeatelements = true;
+        $qtype = question_bank::get_qtype($questiondata->qtype);
+        return  $qtype->create_editing_form('question.php', $dataforformconstructor, $cat, $contexts, true);
+    }
 }
 
 
@@ -138,18 +206,6 @@ class test_question_maker {
         $qdata->hints = array();
     }
 
-    public static function initialise_question_form_data($qdata) {
-        $formdata = new stdClass();
-        $formdata->id = 0;
-        $formdata->category = '0,0';
-        $formdata->usecurrentcat = 1;
-        $formdata->categorymoveto = '0,0';
-        $formdata->tags = array();
-        $formdata->penalty = 0.3333333;
-        $formdata->questiontextformat = FORMAT_HTML;
-        $formdata->generalfeedbackformat = FORMAT_HTML;
-    }
-
     /**
      * Get the test helper class for a particular question type.
      * @param $qtype the question type name, e.g. 'multichoice'.
@@ -162,7 +218,7 @@ class test_question_maker {
             return self::$testhelpers[$qtype];
         }
 
-        $file = get_plugin_directory('qtype', $qtype) . '/tests/helper.php';
+        $file = core_component::get_plugin_directory('qtype', $qtype) . '/tests/helper.php';
         if (!is_readable($file)) {
             throw new coding_exception('Question type ' . $qtype .
                 ' does not have test helper code.');
@@ -203,7 +259,7 @@ class test_question_maker {
             array($qtype,    $which), $methodtemplate);
 
         if (!method_exists($helper, $method)) {
-            throw new coding_exception('Method ' . $method . ' does not exist on the' .
+            throw new coding_exception('Method ' . $method . ' does not exist on the ' .
                 $qtype . ' question type test helper class.');
         }
 
@@ -356,8 +412,12 @@ class test_question_maker {
         $essay->qtype = question_bank::get_qtype('essay');
 
         $essay->responseformat = 'editor';
+        $essay->responserequired = 1;
         $essay->responsefieldlines = 15;
         $essay->attachments = 0;
+        $essay->attachmentsrequired = 0;
+        $essay->responsetemplate = '';
+        $essay->responsetemplateformat = FORMAT_MOODLE;
         $essay->graderinfo = '';
         $essay->graderinfoformat = FORMAT_MOODLE;
 
@@ -378,6 +438,19 @@ class test_question_maker {
         $q->shownumcorrect = true;
         $q->incorrectfeedback = self::STANDARD_OVERALL_INCORRECT_FEEDBACK;
         $q->incorrectfeedbackformat = FORMAT_HTML;
+    }
+
+    /**
+     * Add some standard overall feedback to a question's form data.
+     */
+    public static function set_standard_combined_feedback_form_data($form) {
+        $form->correctfeedback = array('text' => self::STANDARD_OVERALL_CORRECT_FEEDBACK,
+                                    'format' => FORMAT_HTML);
+        $form->partiallycorrectfeedback = array('text' => self::STANDARD_OVERALL_PARTIALLYCORRECT_FEEDBACK,
+                                             'format' => FORMAT_HTML);
+        $form->shownumcorrect = true;
+        $form->incorrectfeedback = array('text' => self::STANDARD_OVERALL_INCORRECT_FEEDBACK,
+                                    'format' => FORMAT_HTML);
     }
 }
 
@@ -481,10 +554,10 @@ abstract class question_testcase extends advanced_testcase {
             $compare = (array)$compare;
             foreach ($expect as $k=>$v) {
                 if (!array_key_exists($k, $compare)) {
-                    $this->fail("Property $k does not exist");
+                    $this->fail("Property {$k} does not exist");
                 }
                 if ($v != $compare[$k]) {
-                    $this->fail("Property $k is different");
+                    $this->fail("Property {$k} is different");
                 }
             }
             $this->assertTrue(true);
@@ -649,12 +722,57 @@ abstract class qbehaviour_walkthrough_test_base extends question_testcase {
         $this->slot = $this->quba->add_question($question, $maxmark);
         $this->quba->start_question($this->slot, $variant);
     }
+
+    /**
+     * Convert an array of data destined for one question to the equivalent POST data.
+     * @param array $data the data for the quetsion.
+     * @return array the complete post data.
+     */
+    protected function response_data_to_post($data) {
+        $prefix = $this->quba->get_field_prefix($this->slot);
+        $fulldata = array(
+            'slots' => $this->slot,
+            $prefix . ':sequencecheck' => $this->get_question_attempt()->get_sequence_check_count(),
+        );
+        foreach ($data as $name => $value) {
+            $fulldata[$prefix . $name] = $value;
+        }
+        return $fulldata;
+    }
+
     protected function process_submission($data) {
-        $this->quba->process_action($this->slot, $data);
+        // Backwards compatibility.
+        reset($data);
+        if (count($data) == 1 && key($data) === '-finish') {
+            $this->finish();
+        }
+
+        $this->quba->process_all_actions(time(), $this->response_data_to_post($data));
+    }
+
+    protected function process_autosave($data) {
+        $this->quba->process_all_autosaves(null, $this->response_data_to_post($data));
+    }
+
+    protected function finish() {
+        $this->quba->finish_all_questions();
     }
 
     protected function manual_grade($comment, $mark, $commentformat = null) {
         $this->quba->manual_grade($this->slot, $comment, $mark, $commentformat);
+    }
+
+    protected function save_quba(moodle_database $db = null) {
+        question_engine::save_questions_usage_by_activity($this->quba, $db);
+    }
+
+    protected function load_quba(moodle_database $db = null) {
+        $this->quba = question_engine::load_questions_usage_by_activity($this->quba->get_id(), $db);
+    }
+
+    protected function delete_quba() {
+        question_engine::delete_questions_usage_by_activity($this->quba->get_id());
+        $this->quba = null;
     }
 
     protected function check_current_state($state) {
@@ -682,6 +800,90 @@ abstract class qbehaviour_walkthrough_test_base extends question_testcase {
      */
     protected function render() {
         $this->currentoutput = $this->quba->render_question($this->slot, $this->displayoptions);
+    }
+
+    protected function check_output_contains_text_input($name, $value = null, $enabled = true) {
+        $attributes = array(
+            'type' => 'text',
+            'name' => $this->quba->get_field_prefix($this->slot) . $name,
+        );
+        if (!is_null($value)) {
+            $attributes['value'] = $value;
+        }
+        if (!$enabled) {
+            $attributes['readonly'] = 'readonly';
+        }
+        $matcher = $this->get_tag_matcher('input', $attributes);
+        $this->assertTag($matcher, $this->currentoutput,
+                'Looking for an input with attributes ' . html_writer::attributes($attributes) . ' in ' . $this->currentoutput);
+
+        if ($enabled) {
+            $matcher['attributes']['readonly'] = 'readonly';
+            $this->assertNotTag($matcher, $this->currentoutput,
+                    'input with attributes ' . html_writer::attributes($attributes) .
+                    ' should not be read-only in ' . $this->currentoutput);
+        }
+    }
+
+    protected function check_output_contains_text_input_with_class($name, $class = null) {
+        $attributes = array(
+            'type' => 'text',
+            'name' => $this->quba->get_field_prefix($this->slot) . $name,
+        );
+        if (!is_null($class)) {
+            $attributes['class'] = 'regexp:/\b' . $class . '\b/';
+        }
+
+        $matcher = $this->get_tag_matcher('input', $attributes);
+        $this->assertTag($matcher, $this->currentoutput,
+                'Looking for an input with attributes ' . html_writer::attributes($attributes) . ' in ' . $this->currentoutput);
+    }
+
+    protected function check_output_does_not_contain_text_input_with_class($name, $class = null) {
+        $attributes = array(
+            'type' => 'text',
+            'name' => $this->quba->get_field_prefix($this->slot) . $name,
+        );
+        if (!is_null($class)) {
+            $attributes['class'] = 'regexp:/\b' . $class . '\b/';
+        }
+
+        $matcher = $this->get_tag_matcher('input', $attributes);
+        $this->assertNotTag($matcher, $this->currentoutput,
+                'Unexpected input with attributes ' . html_writer::attributes($attributes) . ' found in ' . $this->currentoutput);
+    }
+
+    protected function check_output_contains_hidden_input($name, $value) {
+        $attributes = array(
+            'type' => 'hidden',
+            'name' => $this->quba->get_field_prefix($this->slot) . $name,
+            'value' => $value,
+        );
+        $this->assertTag($this->get_tag_matcher('input', $attributes), $this->currentoutput,
+                'Looking for a hidden input with attributes ' . html_writer::attributes($attributes) . ' in ' . $this->currentoutput);
+    }
+
+    protected function check_output_contains($string) {
+        $this->render();
+        $this->assertContains($string, $this->currentoutput,
+                'Expected string ' . $string . ' not found in ' . $this->currentoutput);
+    }
+
+    protected function check_output_does_not_contain($string) {
+        $this->render();
+        $this->assertNotContains($string, $this->currentoutput,
+                'String ' . $string . ' unexpectedly found in ' . $this->currentoutput);
+    }
+
+    protected function check_output_contains_lang_string($identifier, $component = '', $a = null) {
+        $this->check_output_contains(get_string($identifier, $component, $a));
+    }
+
+    protected function get_tag_matcher($tag, $attributes) {
+        return array(
+            'tag' => $tag,
+            'attributes' => $attributes,
+        );
     }
 
     /**

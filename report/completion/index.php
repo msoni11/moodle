@@ -62,8 +62,8 @@ if ($csv) {
 
 // Paging
 $start   = optional_param('start', 0, PARAM_INT);
-$sifirst = optional_param('sifirst', 'all', PARAM_ALPHA);
-$silast  = optional_param('silast', 'all', PARAM_ALPHA);
+$sifirst = optional_param('sifirst', 'all', PARAM_NOTAGS);
+$silast  = optional_param('silast', 'all', PARAM_NOTAGS);
 
 // Whether to show extra user identity information
 $extrafields = get_extra_user_fields($context);
@@ -91,7 +91,7 @@ $modinfo = get_fast_modinfo($course);
 $completion = new completion_info($course);
 
 if (!$completion->has_criteria()) {
-    print_error('err_nocriteria', 'completion', $CFG->wwwroot.'/course/report.php?id='.$course->id);
+    print_error('nocriteriaset', 'completion', $CFG->wwwroot.'/course/report.php?id='.$course->id);
 }
 
 // Get criteria and put in correct order
@@ -142,7 +142,7 @@ if (!$csv) {
 if ($csv) {
 
     $shortname = format_string($course->shortname, true, array('context' => $context));
-    $shortname = preg_replace('/[^a-z0-9-]/', '_',textlib::strtolower(strip_tags($shortname)));
+    $shortname = preg_replace('/[^a-z0-9-]/', '_',core_text::strtolower(strip_tags($shortname)));
 
     $export = new csv_export_writer();
     $export->set_filename('completion-'.$shortname);
@@ -314,7 +314,7 @@ if (!$csv) {
     print '<table id="completion-progress" class="generaltable flexible boxaligncenter completionreport" style="text-align: left" cellpadding="5" border="1">';
 
     // Print criteria group names
-    print PHP_EOL.'<tr style="vertical-align: top">';
+    print PHP_EOL.'<thead><tr style="vertical-align: top">';
     echo '<th scope="row" class="rowheader" colspan="' . $leftcols . '">' .
             get_string('criteriagroup', 'completion') . '</th>';
 
@@ -457,18 +457,16 @@ if (!$csv) {
     foreach ($criteria as $criterion) {
 
         // Generate icon details
-        $icon = '';
         $iconlink = '';
-        $icontitle = ''; // Required if $iconlink set
         $iconalt = ''; // Required
+        $iconattributes = array('class' => 'icon');
         switch ($criterion->criteriatype) {
 
             case COMPLETION_CRITERIA_TYPE_ACTIVITY:
 
                 // Display icon
-                $icon = $OUTPUT->pix_url('icon', $criterion->module);
                 $iconlink = $CFG->wwwroot.'/mod/'.$criterion->module.'/view.php?id='.$criterion->moduleinstance;
-                $icontitle = $modinfo->cms[$criterion->moduleinstance]->name;
+                $iconattributes['title'] = $modinfo->cms[$criterion->moduleinstance]->get_formatted_name();
                 $iconalt = get_string('modulename', $criterion->module);
                 break;
 
@@ -478,7 +476,7 @@ if (!$csv) {
 
                 // Display icon
                 $iconlink = $CFG->wwwroot.'/course/view.php?id='.$criterion->courseinstance;
-                $icontitle = format_string($crs->fullname, true, array('context' => context_course::instance($crs->id, MUST_EXIST)));
+                $iconattributes['title'] = format_string($crs->fullname, true, array('context' => context_course::instance($crs->id, MUST_EXIST)));
                 $iconalt = format_string($crs->shortname, true, array('context' => context_course::instance($crs->id)));
                 break;
 
@@ -491,16 +489,16 @@ if (!$csv) {
                 break;
         }
 
+        // Create icon alt if not supplied
+        if (!$iconalt) {
+            $iconalt = $criterion->get_title();
+        }
+
         // Print icon and cell
         print '<th class="criteriaicon">';
 
-        // Create icon if not supplied
-        if (!$icon) {
-            $icon = $OUTPUT->pix_url('i/'.$COMPLETION_CRITERIA_TYPES[$criterion->criteriatype]);
-        }
-
-        print ($iconlink ? '<a href="'.$iconlink.'" title="'.$icontitle.'">' : '');
-        print '<img src="'.$icon.'" class="icon" alt="'.$iconalt.'" '.(!$iconlink ? 'title="'.$iconalt.'"' : '').' />';
+        print ($iconlink ? '<a href="'.$iconlink.'" title="'.$iconattributes['title'].'">' : '');
+        print $OUTPUT->render($criterion->get_icon($iconalt, $iconattributes));
         print ($iconlink ? '</a>' : '');
 
         print '</th>';
@@ -511,8 +509,9 @@ if (!$csv) {
     print '<img src="'.$OUTPUT->pix_url('i/course').'" class="icon" alt="'.get_string('course').'" title="'.get_string('coursecomplete', 'completion').'" />';
     print '</th>';
 
-    print '</tr>';
+    print '</tr></thead>';
 
+    echo '<tbody>';
 } else {
     // The CSV headers
     $row = array();
@@ -531,8 +530,9 @@ if (!$csv) {
 
             // Load activity
             $mod = $criterion->get_mod_instance();
-            $row[] = $mod->name;
-            $row[] = $mod->name . ' - ' . get_string('completiondate', 'report_completion');
+            $row[] = $formattedname = format_string($mod->name, true,
+                    array('context' => context_module::instance($criterion->moduleinstance)));
+            $row[] = $formattedname . ' - ' . get_string('completiondate', 'report_completion');
         }
         else {
             // Handle all other criteria
@@ -586,18 +586,17 @@ foreach ($progress as $user) {
             $activity = $modinfo->cms[$criterion->moduleinstance];
 
             // Get progress information and state
+            if (array_key_exists($activity->id, $user->progress)) {
+                $state = $user->progress[$activity->id]->completionstate;
+            } else if ($is_complete) {
+                $state = COMPLETION_COMPLETE;
+            } else {
+                $state = COMPLETION_INCOMPLETE;
+            }
             if ($is_complete) {
                 $date = userdate($criteria_completion->timecompleted, get_string('strftimedatetimeshort', 'langconfig'));
-
-                if (array_key_exists($activity->id, $user->progress)) {
-                    $thisprogress = $user->progress[$activity->id];
-                    $state = $thisprogress->completionstate;
-                } else {
-                    $state = COMPLETION_COMPLETE;
-                }
             } else {
                 $date = '';
-                $state = COMPLETION_INCOMPLETE;
             }
 
             // Work out how it corresponds to an icon
@@ -616,7 +615,7 @@ foreach ($progress as $user) {
             $a->state     = $describe;
             $a->date      = $date;
             $a->user      = fullname($user);
-            $a->activity  = strip_tags($activity->name);
+            $a->activity  = $activity->get_formatted_name();
             $fulldescribe = get_string('progress-title', 'completion', $a);
 
             if ($csv) {
@@ -626,7 +625,7 @@ foreach ($progress as $user) {
                 print '<td class="completion-progresscell">';
 
                 print '<img src="'.$OUTPUT->pix_url('i/'.$completionicon).
-                      '" alt="'.$describe.'" class="icon" title="'.$fulldescribe.'" />';
+                      '" alt="'.s($describe).'" class="icon" title="'.s($fulldescribe).'" />';
 
                 print '</td>';
             }
@@ -672,10 +671,12 @@ foreach ($progress as $user) {
                     )
                 );
 
-                print '<a href="'.$toggleurl->out().'"><img src="'.$OUTPUT->pix_url('i/completion-manual-'.($is_complete ? 'y' : 'n')).
-                    '" alt="'.$describe.'" class="icon" title="'.get_string('markcomplete', 'completion').'" /></a></td>';
+                print '<a href="'.$toggleurl->out().'" title="'.s(get_string('clicktomarkusercomplete', 'report_completion')).'">' .
+                    '<img src="'.$OUTPUT->pix_url('i/completion-manual-'.($is_complete ? 'y' : 'n')).
+                    '" alt="'.s($describe).'" class="icon" /></a></td>';
             } else {
-                print '<img src="'.$OUTPUT->pix_url('i/'.$completionicon).'" alt="'.$describe.'" class="icon" title="'.$fulldescribe.'" /></td>';
+                print '<img src="'.$OUTPUT->pix_url('i/'.$completionicon).'" alt="'.s($describe).
+                        '" class="icon" title="'.s($fulldescribe).'" /></td>';
             }
 
             print '</td>';
@@ -716,7 +717,7 @@ foreach ($progress as $user) {
 
         // Display course completion status icon
         print '<img src="'.$OUTPUT->pix_url('i/completion-auto-'.$completiontype).
-               '" alt="'.$describe.'" class="icon" title="'.$fulldescribe.'" />';
+               '" alt="'.s($describe).'" class="icon" title="'.s($fulldescribe).'" />';
 
         print '</td>';
     }
@@ -730,6 +731,8 @@ foreach ($progress as $user) {
 
 if ($csv) {
     $export->download_file();
+} else {
+    echo '</tbody>';
 }
 
 print '</table>';
@@ -744,3 +747,7 @@ print '<li><a href="'.$excelurl->out().'">'.get_string('excelcsvdownload','compl
 print '</ul>';
 
 echo $OUTPUT->footer($course);
+
+// Trigger a report viewed event.
+$event = \report_completion\event\report_viewed::create(array('context' => $context));
+$event->trigger();

@@ -1,18 +1,18 @@
-@mod_choice
+@mod @mod_choice
 Feature: A teacher can choose one of 4 options for publishing choice results
   In order to display choice activities outcomes
-  As a moodle teacher
+  As a teacher
   I need to publish the choice activity results in different ways
 
   Background:
-    Given the following "users" exists:
+    Given the following "users" exist:
       | username | firstname | lastname | email |
-      | teacher1 | Teacher | 1 | teacher1@asd.com |
-      | student1 | Student | 1 | student1@asd.com |
-    And the following "courses" exists:
+      | teacher1 | Teacher | 1 | teacher1@example.com |
+      | student1 | Student | 1 | student1@example.com |
+    And the following "courses" exist:
       | fullname | shortname | category |
       | Course 1 | C1 | 0 |
-    And the following "course enrolments" exists:
+    And the following "course enrolments" exist:
       | user | course | role |
       | teacher1 | C1 | editingteacher |
       | student1 | C1 | student |
@@ -22,7 +22,7 @@ Feature: A teacher can choose one of 4 options for publishing choice results
 
   @javascript
   Scenario: Do not publish results to students
-    Given I add a "choice" to section "1" and I fill the form with:
+    Given I add a "Choice" to section "1" and I fill the form with:
       | Choice name | Choice 1 |
       | Description | Choice Description |
       | Publish results | Do not publish results to students |
@@ -38,7 +38,7 @@ Feature: A teacher can choose one of 4 options for publishing choice results
 
   @javascript
   Scenario: Show results to students after they answer
-    Given I add a "choice" to section "1" and I fill the form with:
+    Given I add a "Choice" to section "1" and I fill the form with:
       | Choice name | Choice 1 |
       | Description | Choice Description |
       | option[0] | Option 1 |
@@ -58,7 +58,7 @@ Feature: A teacher can choose one of 4 options for publishing choice results
 
   @javascript
   Scenario: Show results to students only after the choice is closed
-    Given I add a "choice" to section "1" and I fill the form with:
+    Given I add a "Choice" to section "1" and I fill the form with:
       | Choice name | Choice 1 |
       | Description | Choice Description |
       | Publish results | Show results to students only after the choice is closed |
@@ -77,7 +77,7 @@ Feature: A teacher can choose one of 4 options for publishing choice results
     And I follow "Choice 1"
     And I follow "Edit settings"
     And I expand all fieldsets
-    And I fill the moodle form with:
+    And I set the following fields to these values:
       | Restrict answering to this time period | 1 |
       | timeclose[year] | 2010 |
     And I press "Save and return to course"
@@ -90,7 +90,7 @@ Feature: A teacher can choose one of 4 options for publishing choice results
 
   @javascript
   Scenario: Always show results to students
-    Given I add a "choice" to section "1" and I fill the form with:
+    Given I add a "Choice" to section "1" and I fill the form with:
       | Choice name | Choice 1 |
       | Description | Choice Description |
       | option[0] | Option 1 |

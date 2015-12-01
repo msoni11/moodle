@@ -45,8 +45,6 @@ $gpr = new grade_plugin_return(array('type'=>'edit', 'plugin'=>'settings', 'cour
 $strgrades = get_string('grades');
 $pagename  = get_string('coursesettings', 'grades');
 
-$navigation = grade_build_nav(__FILE__, $pagename, $courseid);
-
 $returnurl = $CFG->wwwroot.'/grade/index.php?id='.$course->id;
 
 $mform = new course_settings_form();
@@ -60,7 +58,7 @@ if ($mform->is_cancelled()) {
 
 } else if ($data = $mform->get_data()) {
     $data = (array)$data;
-    $general = array('displaytype', 'decimalpoints', 'aggregationposition');
+    $general = array('displaytype', 'decimalpoints', 'aggregationposition', 'minmaxtouse');
     foreach ($data as $key=>$value) {
         if (!in_array($key, $general) and strpos($key, 'report_') !== 0
                                       and strpos($key, 'import_') !== 0
@@ -71,12 +69,22 @@ if ($mform->is_cancelled()) {
             $value = null;
         }
         grade_set_setting($course->id, $key, $value);
+
+        $previousvalue = isset($settings->{$key}) ? $settings->{$key} : null;
+        if ($key == 'minmaxtouse' && $previousvalue != $value) {
+            // The min max has changed, we need to regrade the grades.
+            grade_force_full_regrading($courseid);
+        }
     }
 
     redirect($returnurl);
 }
 
-print_grade_page_head($courseid, 'settings', 'coursesettings', get_string('coursesettings', 'grades'));
+print_grade_page_head($courseid, 'settings', 'coursesettings', get_string('coursegradesettings', 'grades'));
+
+// The settings could have been changed due to a notice shown in print_grade_page_head, we need to refresh them.
+$settings = grade_get_settings($course->id);
+$mform->set_data($settings);
 
 echo $OUTPUT->box_start('generalbox boxaligncenter boxwidthnormal centerpara');
 echo get_string('coursesettingsexplanation', 'grades');

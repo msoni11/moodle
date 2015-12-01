@@ -31,19 +31,22 @@
 defined('MOODLE_INTERNAL') || die();
 
 $string['admindirname'] = 'Yönetici Dizini';
-$string['availablelangs'] = 'Kullanılabilir diller';
+$string['availablelangs'] = 'Kullanılabilir dil paketleri';
 $string['chooselanguagehead'] = 'Bir dil seçin';
 $string['chooselanguagesub'] = 'Lütfen, SADECE kurulum için bir dil seçin. Site ve kullanıcı dillerini sonraki ekranda seçebilirsiniz.';
-$string['clialreadyinstalled'] = 'Config.php zaten var. Sitenizi güncellemek istiyorsanız bu adresi kullanın: admin/cli/upgrade.php';
+$string['clialreadyconfigured'] = 'config.php halihazırda mevcut, lütfen eğer bu siteyi yüklemek istiyorsanız şu dizini kullanın: admin/cli/install_database.php';
+$string['clialreadyinstalled'] = 'Config.php zaten var. Sitenizi güncellemek istiyorsanız bu adresi kullanın: admin/cli/install_database.php';
 $string['cliinstallheader'] = 'Moodle {$a} komut satırı kurulum programı';
-$string['databasehost'] = 'Veritabanı sunucusu:';
-$string['databasename'] = 'Veritabanı adı:';
+$string['databasehost'] = 'Veritabanı sunucusu';
+$string['databasename'] = 'Veritabanı adı';
 $string['databasetypehead'] = 'Veritabanı sürücünü seçin';
 $string['dataroot'] = 'Veri Dizini';
+$string['datarootpermission'] = 'Veri dizinleri izni';
 $string['dbprefix'] = 'Tablo öneki';
 $string['dirroot'] = 'Moodle Dizini';
 $string['environmenthead'] = 'Ortam kontrol ediliyor...';
-$string['errorsinenvironment'] = 'Ortamda hatalar var!';
+$string['environmentsub2'] = 'Her Moodle dağıtımı, bazı PHP versiyon gereksinimi ve bir takım PHP uzantılarının yüklü olmalı zorunluluğuna sahiptir. Tüm ortam denetimi her yükleme ve güncellemeden önce yapılmalıdır. Eğer PHP \'nin yeni versiyonunu veya PHP uzantılarını nasıl yükleyeceğinizi bilmiyorsanız lütfen sunucu yöneticiniz ile iletişime geçiniz.';
+$string['errorsinenvironment'] = 'Ortam kontrolu başarısız oldu!';
 $string['installation'] = 'Kurulum';
 $string['langdownloaderror'] = 'Maalesef "{$a}" dil paketi kurulamadı. Kuruluma İngilizce olarak devam edilecek.';
 $string['memorylimithelp'] = '<p>Sunucunuz için PHP bellek limiti şu anda {$a} olarak ayarlanmış durumda.</p>
@@ -74,7 +77,17 @@ $string['pathserrcreatedataroot'] = 'Veri Klasörü ({$a->dataroot}) kurulum tar
 $string['pathshead'] = 'Yolları doğrulayın';
 $string['pathsrodataroot'] = 'Veri yolu yazılabilir değil.';
 $string['pathsroparentdataroot'] = 'Ana klasör ({$a->parent}) yazılabilir değil. Veri Klasörü ({$a->dataroot}) kurulum tarafından oluşturulamıyor.';
-$string['pathssubdirroot'] = 'Moodle kurulumu için tam klasör yolu. Sadece sembolik linkleri kullanmaya gereksinim duyuyorsanız değiştirin.';
+$string['pathssubadmindir'] = 'Pek az web sunucusu /admin adresini kontrol paneline yada benzeri birşeye erişmek için kullanır. Ne yazık ki bu Moodle admin sayfalarının standart konumuyla bir karışıklık yaratır. Bu durumu düzeltmek için kurulumunuzdaki admin dizinini yeniden isimlendirip buraya yeni ismi yazınız. Örneğin: <em>moodleadmin</em>. Bu Moodle\'daki admin bağlantısını düzeltecektir.';
+$string['pathssubdataroot'] = '<p>Moodle\'ın yüklenen dosyaları kayıt etmesi için bir yere ihtiyacınız var. </p>
+ <p>Bu dizin/klasör web sunucusunun kullanıcı hesabı tarafından (genellikle \' \'www-data\', \'nobody\', ya da \'apache\') okunabilir ve yazılabilir olmalıdır. </p>
+ <p>Bu okuma, yazma izinlerini klasöre vermelisiniz. </p>
+<p>Fakat bu klasör aynı zamanda web üzerinden direk erişilebilir olmamalıdır. </p>
+<p>Yükleyici eğer klasör yok ise oluşturmayı deneyecektir.</p>';
+$string['pathssubdirroot'] = '<p>Moodle kurulumu için tam klasör yolu.</p >';
+$string['pathssubwwwroot'] = '<p>Moodle\'a erişilecek tam web adresi. Moodle\'ın birden çok adres kullanması mümkün değildir. </p>
+<p>Eğer siteniz birden fazla adrese sahip ise bu adres harici diğerlerinin yönlendirme ayarlarını yapılandırın.</p>
+<p>Eğer siteniz Intranet ve İnternet üzerinden erişilebilirse burada genel bir adres kullanın ve DNS\'iniz ayarlayın. Bu şekilde Intranet kullanıcıları da genel adresi kullanabilirler.</p>
+<p>IEğer adres doğru değilse lütfen kurulumu tekrar başlatmak için tarayıcınızdaki URL\'i değiştirin.</p>';
 $string['pathsunsecuredataroot'] = 'Veri yolu güvenli değil';
 $string['pathswrongadmindir'] = 'Yönetici klasörü yok';
 $string['phpextension'] = '{$a} PHP eklentisi';

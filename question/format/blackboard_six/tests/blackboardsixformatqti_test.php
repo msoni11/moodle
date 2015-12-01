@@ -44,17 +44,21 @@ class qformat_blackboard_six_qti_test extends question_testcase {
         $xmlfile = new qformat_blackboard_six_file();
         $xmlfile->filetype = 1;
         $xmlfile->text = file_get_contents(__DIR__ . '/fixtures/sample_blackboard_qti.dat');
-        return array(0=>$xmlfile);
+        return array(0 => $xmlfile);
     }
     public function test_import_match() {
         $xml = $this->make_test_xml();
 
         $importer = new qformat_blackboard_six();
         $questions = $importer->readquestions($xml);
-        $q = $questions[3];
+        $q = $questions[4];
+
+        // If qtype_ddmatch is installed, the formatter produces ddmatch
+        // qtypes, not match ones.
+        $ddmatchisinstalled = question_bank::is_qtype_installed('ddmatch');
 
         $expectedq = new stdClass();
-        $expectedq->qtype = 'match';
+        $expectedq->qtype = $ddmatchisinstalled ? 'ddmatch' : 'match';
         $expectedq->name = 'Classify the animals.';
         $expectedq->questiontext = 'Classify the animals.';
         $expectedq->questiontextformat = FORMAT_HTML;
@@ -75,7 +79,16 @@ class qformat_blackboard_six_qti_test extends question_testcase {
             array('text' => 'cat', 'format' => FORMAT_HTML),
             array('text' => 'frog', 'format' => FORMAT_HTML),
             array('text' => 'newt', 'format' => FORMAT_HTML));
-        $expectedq->subanswers = array('insect', 'mammal', 'amphibian', 'amphibian');
+        if ($ddmatchisinstalled) {
+            $expectedq->subanswers = array(
+                array('text' => 'insect', 'format' => FORMAT_HTML),
+                array('text' => 'mammal', 'format' => FORMAT_HTML),
+                array('text' => 'amphibian', 'format' => FORMAT_HTML),
+                array('text' => 'amphibian', 'format' => FORMAT_HTML),
+            );
+        } else {
+            $expectedq->subanswers = array('insect', 'mammal', 'amphibian', 'amphibian');
+        }
 
         $this->assert(new question_check_specified_fields_expectation($expectedq), $q);
     }
@@ -85,7 +98,7 @@ class qformat_blackboard_six_qti_test extends question_testcase {
 
         $importer = new qformat_blackboard_six();
         $questions = $importer->readquestions($xml);
-        $q = $questions[1];
+        $q = $questions[2];
 
         $expectedq = new stdClass();
         $expectedq->qtype = 'multichoice';
@@ -144,7 +157,7 @@ class qformat_blackboard_six_qti_test extends question_testcase {
 
         $importer = new qformat_blackboard_six();
         $questions = $importer->readquestions($xml);
-        $q = $questions[2];
+        $q = $questions[3];
 
         $expectedq = new stdClass();
         $expectedq->qtype = 'multichoice';
@@ -220,7 +233,7 @@ class qformat_blackboard_six_qti_test extends question_testcase {
 
         $importer = new qformat_blackboard_six();
         $questions = $importer->readquestions($xml);
-        $q = $questions[0];
+        $q = $questions[1];
 
         $expectedq = new stdClass();
         $expectedq->qtype = 'truefalse';
@@ -250,7 +263,7 @@ class qformat_blackboard_six_qti_test extends question_testcase {
 
         $importer = new qformat_blackboard_six();
         $questions = $importer->readquestions($xml);
-        $q = $questions[4];
+        $q = $questions[5];
 
         $expectedq = new stdClass();
         $expectedq->qtype = 'shortanswer';
@@ -284,7 +297,7 @@ class qformat_blackboard_six_qti_test extends question_testcase {
 
         $importer = new qformat_blackboard_six();
         $questions = $importer->readquestions($xml);
-        $q = $questions[5];
+        $q = $questions[6];
 
         $expectedq = new stdClass();
         $expectedq->qtype = 'essay';
@@ -302,6 +315,21 @@ class qformat_blackboard_six_qti_test extends question_testcase {
                 'text' => 'Blackboard answer for essay questions will be imported as informations for graders.',
                 'format' => FORMAT_HTML,
             );
+
+        $this->assert(new question_check_specified_fields_expectation($expectedq), $q);
+    }
+
+    public function test_import_category() {
+
+        $xml = $this->make_test_xml();
+
+        $importer = new qformat_blackboard_six();
+        $questions = $importer->readquestions($xml);
+        $q = $questions[0];
+
+        $expectedq = new stdClass();
+        $expectedq->qtype = 'category';
+        $expectedq->category = 'sample_blackboard_six';
 
         $this->assert(new question_check_specified_fields_expectation($expectedq), $q);
     }

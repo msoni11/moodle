@@ -16,7 +16,7 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * @package mod-forum
+ * @package   mod_forum
  * @copyright 1999 onwards Martin Dougiamas  {@link http://moodle.com}
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -100,17 +100,11 @@
         rss_add_http_header($context, 'mod_forum', $forum, $rsstitle);
     }
 
-    // Mark viewed if required
-    $completion = new completion_info($course);
-    $completion->set_module_viewed($cm);
-
 /// Print header.
 
-    $PAGE->set_title(format_string($forum->name));
+    $PAGE->set_title($forum->name);
     $PAGE->add_body_class('forumtype-'.$forum->type);
-    $PAGE->set_heading(format_string($course->fullname));
-
-    echo $OUTPUT->header();
+    $PAGE->set_heading($course->fullname);
 
 /// Some capability checks.
     if (empty($cm->visible) and !has_capability('moodle/course:viewhiddenactivities', $context)) {
@@ -121,17 +115,18 @@
         notice(get_string('noviewdiscussionspermission', 'forum'));
     }
 
+    // Mark viewed and trigger the course_module_viewed event.
+    forum_view($forum, $course, $cm, $context);
+
+    echo $OUTPUT->header();
+
+    echo $OUTPUT->heading(format_string($forum->name), 2);
+    if (!empty($forum->intro) && $forum->type != 'single' && $forum->type != 'teacher') {
+        echo $OUTPUT->box(format_module_intro('forum', $forum, $cm->id), 'generalbox', 'intro');
+    }
+
 /// find out current groups mode
     groups_print_activity_menu($cm, $CFG->wwwroot . '/mod/forum/view.php?id=' . $cm->id);
-    $currentgroup = groups_get_activity_group($cm);
-    $groupmode = groups_get_activity_groupmode($cm);
-
-/// Okay, we can show the discussions. Log the forum view.
-    if ($cm->id) {
-        add_to_log($course->id, "forum", "view forum", "view.php?id=$cm->id", "$forum->id", $cm->id);
-    } else {
-        add_to_log($course->id, "forum", "view forum", "view.php?f=$forum->id", "$forum->id");
-    }
 
     $SESSION->fromdiscussion = qualified_me();   // Return here if we post or set subscription etc
 
@@ -156,9 +151,10 @@
     }
 
     if (!empty($forum->blockafter) && !empty($forum->blockperiod)) {
+        $a = new stdClass();
         $a->blockafter = $forum->blockafter;
         $a->blockperiod = get_string('secondstotime'.$forum->blockperiod);
-        echo $OUTPUT->notification(get_string('thisforumisthrottled','forum',$a));
+        echo $OUTPUT->notification(get_string('thisforumisthrottled', 'forum', $a));
     }
 
     if ($forum->type == 'qanda' && !has_capability('moodle/course:manageactivities', $context)) {
@@ -186,9 +182,6 @@
             break;
 
         case 'eachuser':
-            if (!empty($forum->intro)) {
-                echo $OUTPUT->box(format_module_intro('forum', $forum, $cm->id), 'generalbox', 'intro');
-            }
             echo '<p class="mdl-align">';
             if (forum_user_can_post_discussion($forum, null, -1, $cm)) {
                 print_string("allowsdiscussions", "forum");
@@ -212,21 +205,16 @@
             break;
 
         case 'blog':
-            if (!empty($forum->intro)) {
-                echo $OUTPUT->box(format_module_intro('forum', $forum, $cm->id), 'generalbox', 'intro');
-            }
             echo '<br />';
             if (!empty($showall)) {
-                forum_print_latest_discussions($course, $forum, 0, 'plain', '', -1, -1, -1, 0, $cm);
+                forum_print_latest_discussions($course, $forum, 0, 'plain', 'p.created DESC', -1, -1, -1, 0, $cm);
             } else {
-                forum_print_latest_discussions($course, $forum, -1, 'plain', '', -1, -1, $page, $CFG->forum_manydiscussions, $cm);
+                forum_print_latest_discussions($course, $forum, -1, 'plain', 'p.created DESC', -1, -1, $page,
+                    $CFG->forum_manydiscussions, $cm);
             }
             break;
 
         default:
-            if (!empty($forum->intro)) {
-                echo $OUTPUT->box(format_module_intro('forum', $forum, $cm->id), 'generalbox', 'intro');
-            }
             echo '<br />';
             if (!empty($showall)) {
                 forum_print_latest_discussions($course, $forum, 0, 'header', '', -1, -1, -1, 0, $cm);
@@ -238,6 +226,7 @@
             break;
     }
 
+    // Add the subscription toggle JS.
+    $PAGE->requires->yui_module('moodle-mod_forum-subscriptiontoggle', 'Y.M.mod_forum.subscriptiontoggle.init');
+
     echo $OUTPUT->footer($course);
-
-

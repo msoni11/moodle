@@ -26,6 +26,10 @@
 require_once('../config.php');
 require_once($CFG->libdir . '/filelib.php');
 
+define('OVERVIEW_NO_GROUP', -1); // The fake group for users not in a group.
+define('OVERVIEW_GROUPING_GROUP_NO_GROUPING', -1); // The fake grouping for groups that have no grouping.
+define('OVERVIEW_GROUPING_NO_GROUP', -2); // The fake grouping for users with no group.
+
 $courseid   = required_param('id', PARAM_INT);
 $groupid    = optional_param('group', 0, PARAM_INT);
 $groupingid = optional_param('grouping', 0, PARAM_INT);
@@ -61,14 +65,22 @@ $strnotingrouping    = get_string('notingrouping', 'group');
 $strfiltergroups     = get_string('filtergroups', 'group');
 $strnogroups         = get_string('nogroups', 'group');
 $strdescription      = get_string('description');
+$strnotingroup       = get_string('notingrouplist', 'group');
+$strnogroup          = get_string('nogroup', 'group');
+$strnogrouping       = get_string('nogrouping', 'group');
 
-// Get all groupings
+// Get all groupings and sort them by formatted name.
 $groupings = $DB->get_records('groupings', array('courseid'=>$courseid), 'name');
+foreach ($groupings as $gid => $grouping) {
+    $groupings[$gid]->formattedname = format_string($grouping->name, true, array('context' => $context));
+}
+core_collator::asort_objects_by_property($groupings, 'formattedname');
 $members = array();
 foreach ($groupings as $grouping) {
     $members[$grouping->id] = array();
 }
-$members[-1] = array(); //groups not in a grouping
+// Groups not in a grouping.
+$members[OVERVIEW_GROUPING_GROUP_NO_GROUPING] = array();
 
 // Get all groups
 $groups = $DB->get_records('groups', array('courseid'=>$courseid), 'name');
@@ -82,15 +94,20 @@ if ($groupid) {
 }
 
 if ($groupingid) {
-    $groupingwhere = "AND gg.groupingid = :groupingid";
-    $params['groupingid'] = $groupingid;
+    if ($groupingid < 0) { // No grouping filter.
+        $groupingwhere = "AND gg.groupingid IS NULL";
+    } else {
+        $groupingwhere = "AND gg.groupingid = :groupingid";
+        $params['groupingid'] = $groupingid;
+    }
 } else {
     $groupingwhere = "";
 }
 
 list($sort, $sortparams) = users_order_by_sql('u');
 
-$sql = "SELECT g.id AS groupid, gg.groupingid, u.id AS userid, u.firstname, u.lastname, u.idnumber, u.username
+$allnames = get_all_user_name_fields(true, 'u');
+$sql = "SELECT g.id AS groupid, gg.groupingid, u.id AS userid, $allnames, u.idnumber, u.username
           FROM {groups} g
                LEFT JOIN {groupings_groups} gg ON g.id = gg.groupid
                LEFT JOIN {groups_members} gm ON g.id = gm.groupid
@@ -101,22 +118,59 @@ $sql = "SELECT g.id AS groupid, gg.groupingid, u.id AS userid, u.firstname, u.la
 $rs = $DB->get_recordset_sql($sql, array_merge($params, $sortparams));
 foreach ($rs as $row) {
     $user = new stdClass();
-    $user->id        = $row->userid;
-    $user->firstname = $row->firstname;
-    $user->lastname  = $row->lastname;
-    $user->username  = $row->username;
-    $user->idnumber  = $row->idnumber;
+    $user = username_load_fields_from_object($user, $row, null, array('id' => 'userid', 'username', 'idnumber'));
     if (!$row->groupingid) {
-        $row->groupingid = -1;
+        $row->groupingid = OVERVIEW_GROUPING_GROUP_NO_GROUPING;
     }
     if (!array_key_exists($row->groupid, $members[$row->groupingid])) {
         $members[$row->groupingid][$row->groupid] = array();
     }
-    if(isset($user->id)){
+    if (!empty($user->id)) {
         $members[$row->groupingid][$row->groupid][] = $user;
     }
 }
 $rs->close();
+
+// Add 'no groupings' / 'no groups' selectors.
+$groupings[OVERVIEW_GROUPING_GROUP_NO_GROUPING] = (object)array(
+    'id' => OVERVIEW_GROUPING_GROUP_NO_GROUPING,
+    'formattedname' => $strnogrouping,
+);
+$groups[OVERVIEW_NO_GROUP] = (object)array(
+    'id' => OVERVIEW_NO_GROUP,
+    'courseid' => $courseid,
+    'idnumber' => '',
+    'name' => $strnogroup,
+    'description' => '',
+    'descriptionformat' => FORMAT_HTML,
+    'enrolmentkey' => '',
+    'picture' => 0,
+    'hidepicture' => 0,
+    'timecreated' => 0,
+    'timemodified' => 0,
+);
+
+// Add users who are not in a group.
+if ($groupid <= 0 && $groupingid <= 0) {
+    list($esql, $params) = get_enrolled_sql($context, null, 0, true);
+    $sql = "SELECT u.id, $allnames, u.idnumber, u.username
+              FROM {user} u
+              JOIN ($esql) e ON e.id = u.id
+         LEFT JOIN (
+                  SELECT gm.userid
+                    FROM {groups_members} gm
+                    JOIN {groups} g ON g.id = gm.groupid
+                   WHERE g.courseid = :courseid
+                   ) grouped ON grouped.userid = u.id
+             WHERE grouped.userid IS NULL";
+    $params['courseid'] = $courseid;
+
+    $nogroupusers = $DB->get_records_sql($sql, $params);
+
+    if ($nogroupusers) {
+        $members[OVERVIEW_GROUPING_NO_GROUP][OVERVIEW_NO_GROUP] = $nogroupusers;
+    }
+}
 
 navigation_node::override_active_url(new moodle_url('/group/index.php', array('id'=>$courseid)));
 $PAGE->navbar->add(get_string('overview', 'group'));
@@ -139,7 +193,7 @@ echo $strfiltergroups;
 $options = array();
 $options[0] = get_string('all');
 foreach ($groupings as $grouping) {
-    $options[$grouping->id] = strip_tags(format_string($grouping->name));
+    $options[$grouping->id] = strip_tags($grouping->formattedname);
 }
 $popupurl = new moodle_url($rooturl.'&group='.$groupid);
 $select = new single_select($popupurl, 'grouping', $options, $groupingid, array());
@@ -163,7 +217,9 @@ $printed = false;
 $hoverevents = array();
 foreach ($members as $gpgid=>$groupdata) {
     if ($groupingid and $groupingid != $gpgid) {
-        continue; // do not show
+        if ($groupingid > 0 || $gpgid > 0) { // Still show 'not in group' when 'no grouping' selected.
+            continue; // Do not show.
+        }
     }
     $table = new html_table();
     $table->head  = array(get_string('groupscount', 'group', count($groupdata)), get_string('groupmembers', 'group'), get_string('usercount', 'group'));
@@ -185,8 +241,8 @@ foreach ($members as $gpgid=>$groupdata) {
         if (empty($jsdescription)) {
             $line[] = $name;
         } else {
-            $line[] = html_writer::tag('span', $name, array('id'=>'group_'.$gpid));
-            $hoverevents['group_'.$gpid] = $jsdescription;
+            $line[] = html_writer::tag('span', $name, array('class' => 'group_hoverdescription', 'data-groupid' => $gpid));
+            $hoverevents[$gpid] = $jsdescription;
         }
         $fullnames = array();
         foreach ($users as $user) {
@@ -200,12 +256,16 @@ foreach ($members as $gpgid=>$groupdata) {
         continue;
     }
     if ($gpgid < 0) {
-        echo $OUTPUT->heading($strnotingrouping, 3);
+        // Display 'not in group' for grouping id == OVERVIEW_GROUPING_NO_GROUP.
+        if ($gpgid == OVERVIEW_GROUPING_NO_GROUP) {
+            echo $OUTPUT->heading($strnotingroup, 3);
+        } else {
+            echo $OUTPUT->heading($strnotingrouping, 3);
+        }
     } else {
-        echo $OUTPUT->heading(format_string($groupings[$gpgid]->name), 3);
+        echo $OUTPUT->heading($groupings[$gpgid]->formattedname, 3);
         $description = file_rewrite_pluginfile_urls($groupings[$gpgid]->description, 'pluginfile.php', $context->id, 'grouping', 'description', $gpgid);
         $options = new stdClass;
-        $options->noclean = true;
         $options->overflowdiv = true;
         echo $OUTPUT->box(format_text($description, $groupings[$gpgid]->descriptionformat, $options), 'generalbox boxwidthnarrow boxaligncenter');
     }

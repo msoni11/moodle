@@ -63,12 +63,13 @@ class completion_criteria_grade extends completion_criteria {
     public function config_form_display(&$mform, $data = null) {
         $mform->addElement('checkbox', 'criteria_grade', get_string('enable'));
         $mform->addElement('text', 'criteria_grade_value', get_string('graderequired', 'completion'));
-        $mform->setDefault('criteria_grade_value', $data);
-        $mform->addElement('static', 'criteria_grade_value_note', '', get_string('criteriagradenote', 'completion'));
+        $mform->disabledIf('criteria_grade_value', 'criteria_grade');
+        $mform->setType('criteria_grade_value', PARAM_RAW); // Uses unformat_float.
+        $mform->setDefault('criteria_grade_value', format_float($data));
 
         if ($this->id) {
             $mform->setDefault('criteria_grade', 1);
-            $mform->setDefault('criteria_grade_value', $this->gradepass);
+            $mform->setDefault('criteria_grade_value', format_float($this->gradepass));
         }
     }
 
@@ -79,12 +80,14 @@ class completion_criteria_grade extends completion_criteria {
      */
     public function update_config(&$data) {
 
-        // TODO validation
-        if (!empty($data->criteria_grade) && is_numeric($data->criteria_grade_value))
-        {
-            $this->course = $data->id;
-            $this->gradepass = $data->criteria_grade_value;
-            $this->insert();
+        if (!empty($data->criteria_grade)) {
+            $formatedgrade = unformat_float($data->criteria_grade_value);
+            // TODO validation
+            if (!empty($formatedgrade) && is_numeric($formatedgrade)) {
+                $this->course = $data->id;
+                $this->gradepass = $formatedgrade;
+                $this->insert();
+            }
         }
     }
 
@@ -244,5 +247,16 @@ class completion_criteria_grade extends completion_criteria {
         }
 
         return $details;
+    }
+
+    /**
+     * Return pix_icon for display in reports.
+     *
+     * @param string $alt The alt text to use for the icon
+     * @param array $attributes html attributes
+     * @return pix_icon
+     */
+    public function get_icon($alt, array $attributes = null) {
+        return new pix_icon('i/grades', $alt, 'moodle', $attributes);
     }
 }

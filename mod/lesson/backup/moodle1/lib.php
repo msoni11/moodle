@@ -18,8 +18,7 @@
 /**
  * Provides support for the conversion of moodle1 backup to the moodle2 format
  *
- * @package    mod
- * @subpackage lesson
+ * @package mod_lesson
  * @copyright  2011 Rossiani Wijaya <rwijaya@moodle.com>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -234,6 +233,9 @@ class moodle1_mod_lesson_handler extends moodle1_mod_handler {
      * This is executed when we reach the closing </MOD> tag of our 'lesson' path
      */
     public function on_lesson_end() {
+        // Append empty <overrides> subpath element.
+        $this->write_xml('overrides', array());
+
         // finish writing lesson.xml
         $this->xmlwriter->end_tag('lesson');
         $this->xmlwriter->end_tag('activity');

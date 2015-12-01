@@ -1,5 +1,4 @@
 <?php
-
 // This file is part of Moodle - http://moodle.org/
 //
 // Moodle is free software: you can redistribute it and/or modify
@@ -18,8 +17,7 @@
 /**
  * This page shows all course enrolment options for current user.
  *
- * @package    core
- * @subpackage enrol
+ * @package    core_enrol
  * @copyright  2010 Petr Skoda {@link http://skodak.org}
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -28,8 +26,15 @@ require('../config.php');
 require_once("$CFG->libdir/formslib.php");
 
 $id = required_param('id', PARAM_INT);
+$returnurl = optional_param('returnurl', 0, PARAM_LOCALURL);
 
 if (!isloggedin()) {
+    $referer = get_local_referer();
+    if (empty($referer)) {
+        // A user that is not logged in has arrived directly on this page,
+        // they should be redirected to the course page they are trying to enrol on after logging in.
+        $SESSION->wantsurl = "$CFG->wwwroot/course/view.php?id=$id";
+    }
     // do not use require_login here because we are usually coming from it,
     // it would also mess up the SESSION->wantsurl
     redirect(get_login_url());
@@ -43,12 +48,16 @@ if ($course->id == SITEID) {
     redirect("$CFG->wwwroot/");
 }
 
+if (!$course->visible && !has_capability('moodle/course:viewhiddencourses', context_course::instance($course->id))) {
+    print_error('coursehidden');
+}
+
 $PAGE->set_course($course);
-$PAGE->set_pagelayout('course');
+$PAGE->set_pagelayout('incourse');
 $PAGE->set_url('/enrol/index.php', array('id'=>$course->id));
 
 // do not allow enrols when in login-as session
-if (session_is_loggedinas() and $USER->loginascontext->contextlevel == CONTEXT_COURSE) {
+if (\core\session\manager::is_loggedinas() and $USER->loginascontext->contextlevel == CONTEXT_COURSE) {
     print_error('loginasnoenrol', '', $CFG->wwwroot.'/course/view.php?id='.$USER->loginascontext->instanceid);
 }
 
@@ -96,8 +105,14 @@ foreach ($forms as $form) {
 if (!$forms) {
     if (isguestuser()) {
         notice(get_string('noguestaccess', 'enrol'), get_login_url());
+    } else if ($returnurl) {
+        notice(get_string('notenrollable', 'enrol'), $returnurl);
     } else {
-        notice(get_string('notenrollable', 'enrol'), "$CFG->wwwroot/index.php");
+        $url = get_local_referer(false);
+        if (empty($url)) {
+            $url = new moodle_url('/index.php');
+        }
+        notice(get_string('notenrollable', 'enrol'), $url);
     }
 }
 

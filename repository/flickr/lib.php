@@ -17,7 +17,7 @@
 /**
  * This plugin is used to access flickr pictures
  *
- * @since 2.0
+ * @since Moodle 2.0
  * @package    repository_flickr
  * @copyright  2010 Dongsheng Cai {@link http://dongsheng.org}
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
@@ -28,7 +28,7 @@ require_once($CFG->libdir.'/flickrlib.php');
 /**
  * This plugin is used to access user's private flickr repository
  *
- * @since 2.0
+ * @since Moodle 2.0
  * @package    repository_flickr
  * @copyright  2009 Dongsheng Cai {@link http://dongsheng.org}
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
@@ -299,7 +299,9 @@ class repository_flickr extends repository {
 
         $strrequired = get_string('required');
         $mform->addElement('text', 'api_key', get_string('apikey', 'repository_flickr'), array('value'=>$api_key,'size' => '40'));
+        $mform->setType('api_key', PARAM_RAW_TRIMMED);
         $mform->addElement('text', 'secret', get_string('secret', 'repository_flickr'), array('value'=>$secret,'size' => '40'));
+        $mform->setType('secret', PARAM_RAW_TRIMMED);
 
         //retrieve the flickr instances
         $params = array();

@@ -18,7 +18,7 @@
 /**
  * This file contains the class definition for the mahara portfolio plugin
  *
- * @since 2.0
+ * @since Moodle 2.0
  * @package moodlecore
  * @subpackage portfolio
  * @copyright 2009 Penny Leach
@@ -92,7 +92,9 @@ class portfolio_plugin_mahara extends portfolio_plugin_pull_base {
         }
         $mform->addElement('select', 'mnethostid', get_string('mnethost', 'portfolio_mahara'), $hosts);
         $mform->addRule('mnethostid', $strrequired, 'required', null, 'client');
+        $mform->setType('mnethostid', PARAM_INT);
         $mform->addElement('selectyesno', 'enableleap2a', get_string('enableleap2a', 'portfolio_mahara'));
+        $mform->setType('enableleap2a', PARAM_BOOL);
     }
 
     public function instance_sanity_check() {

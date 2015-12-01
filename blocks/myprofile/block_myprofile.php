@@ -21,8 +21,7 @@
  * can easily check the logged-in user matches the person
  * operating the computer.
  *
- * @package    block
- * @subpackage myprofile
+ * @package    block_myprofile
  * @copyright  2010 Remote-Learner.net
  * @author     Olav Jordan <olav.jordan@remote-learner.ca>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
@@ -128,13 +127,13 @@ class block_myprofile extends block_base {
 
         if(!empty($this->config->display_phone1) && !empty($USER->phone1)) {
             $this->content->text .= '<div class="myprofileitem phone1">';
-            $this->content->text .= get_string('phone').': ' . s($USER->phone1);
+            $this->content->text .= get_string('phone1').': ' . s($USER->phone1);
             $this->content->text .= '</div>';
         }
 
         if(!empty($this->config->display_phone2) && !empty($USER->phone2)) {
             $this->content->text .= '<div class="myprofileitem phone2">';
-            $this->content->text .= get_string('phone').': ' . s($USER->phone2);
+            $this->content->text .= get_string('phone2').': ' . s($USER->phone2);
             $this->content->text .= '</div>';
         }
 
@@ -211,24 +210,6 @@ class block_myprofile extends block_base {
      *
      */
     public function specialization() {
-    }
-
-    /**
-     * displays instance configuration form
-     *
-     * @return boolean
-     */
-    function instance_config_print() {
-        return false;
-
-        /*
-        global $CFG;
-
-        $form = new block_myprofile.phpConfigForm(null, array($this->config));
-        $form->display();
-
-        return true;
-        */
     }
 
     /**

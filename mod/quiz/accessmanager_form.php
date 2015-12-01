@@ -17,10 +17,9 @@
 /**
  * Defines the form that limits student's access to attempt a quiz.
  *
- * @package    mod
- * @subpackage quiz
- * @copyright  2011 The Open University
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @package   mod_quiz
+ * @copyright 2011 The Open University
+ * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
 
@@ -45,6 +44,7 @@ class mod_quiz_preflight_check_form extends moodleform {
                 continue;
             }
             $mform->addElement('hidden', $name, $value);
+            $mform->setType($name, PARAM_INT);
         }
 
         foreach ($this->_customdata['rules'] as $rule) {

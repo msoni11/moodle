@@ -17,7 +17,7 @@
 /**
  * This file contains main class for the course format Topic
  *
- * @since     2.0
+ * @since     Moodle 2.0
  * @package   format_topics
  * @copyright 2009 Sam Hemelryk
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
@@ -57,10 +57,29 @@ class format_topics extends format_base {
         if ((string)$section->name !== '') {
             return format_string($section->name, true,
                     array('context' => context_course::instance($this->courseid)));
-        } else if ($section->section == 0) {
+        } else {
+            return $this->get_default_section_name($section);
+        }
+    }
+
+    /**
+     * Returns the default section name for the topics course format.
+     *
+     * If the section number is 0, it will use the string with key = section0name from the course format's lang file.
+     * If the section number is not 0, the base implementation of format_base::get_default_section_name which uses
+     * the string with the key = 'sectionname' from the course format's lang file + the section number will be used.
+     *
+     * @param stdClass $section Section object from database or just field course_sections section
+     * @return string The default value for the section name.
+     */
+    public function get_default_section_name($section) {
+        if ($section->section == 0) {
+            // Return the general section.
             return get_string('section0name', 'format_topics');
         } else {
-            return get_string('topic').' '.$section->section;
+            // Use format_base::get_default_section_name implementation which
+            // will display the section name in "Topic n" format.
+            return parent::get_default_section_name($section);
         }
     }
 
@@ -75,6 +94,7 @@ class format_topics extends format_base {
      * @return null|moodle_url
      */
     public function get_view_url($section, $options = array()) {
+        global $CFG;
         $course = $this->get_course();
         $url = new moodle_url('/course/view.php', array('id' => $course->id));
 
@@ -101,7 +121,7 @@ class format_topics extends format_base {
             if ($sectionno != 0 && $usercoursedisplay == COURSE_DISPLAY_MULTIPAGE) {
                 $url->param('section', $sectionno);
             } else {
-                if (!empty($options['navigation'])) {
+                if (empty($CFG->linkcoursesections) && !empty($options['navigation'])) {
                     return null;
                 }
                 $url->set_anchor('section-'.$sectionno);
@@ -115,14 +135,12 @@ class format_topics extends format_base {
      *
      * The returned object's property (boolean)capable indicates that
      * the course format supports Moodle course ajax features.
-     * The property (array)testedbrowsers can be used as a parameter for {@link ajaxenabled()}.
      *
      * @return stdClass
      */
     public function supports_ajax() {
         $ajaxsupport = new stdClass();
         $ajaxsupport->capable = true;
-        $ajaxsupport->testedbrowsers = array('MSIE' => 6.0, 'Gecko' => 20061111, 'Safari' => 531, 'Chrome' => 6.0);
         return $ajaxsupport;
     }
 
@@ -145,6 +163,19 @@ class format_topics extends format_base {
 
         // check if there are callbacks to extend course navigation
         parent::extend_course_navigation($navigation, $node);
+
+        // We want to remove the general section if it is empty.
+        $modinfo = get_fast_modinfo($this->get_course());
+        $sections = $modinfo->get_sections();
+        if (!isset($sections[0])) {
+            // The general section is empty to find the navigation node for it we need to get its ID.
+            $section = $modinfo->get_section_info(0);
+            $generalsection = $node->get($section->id, navigation_node::TYPE_SECTION);
+            if ($generalsection) {
+                // We found the node - now remove it.
+                $generalsection->remove();
+            }
+        }
     }
 
     /**
@@ -258,6 +289,37 @@ class format_topics extends format_base {
     }
 
     /**
+     * Adds format options elements to the course/section edit form.
+     *
+     * This function is called from {@link course_edit_form::definition_after_data()}.
+     *
+     * @param MoodleQuickForm $mform form the elements are added to.
+     * @param bool $forsection 'true' if this is a section edit form, 'false' if this is course edit form.
+     * @return array array of references to the added form elements.
+     */
+    public function create_edit_form_elements(&$mform, $forsection = false) {
+        $elements = parent::create_edit_form_elements($mform, $forsection);
+
+        // Increase the number of sections combo box values if the user has increased the number of sections
+        // using the icon on the course page beyond course 'maxsections' or course 'maxsections' has been
+        // reduced below the number of sections already set for the course on the site administration course
+        // defaults page.  This is so that the number of sections is not reduced leaving unintended orphaned
+        // activities / resources.
+        if (!$forsection) {
+            $maxsections = get_config('moodlecourse', 'maxsections');
+            $numsections = $mform->getElementValue('numsections');
+            $numsections = $numsections[0];
+            if ($numsections > $maxsections) {
+                $element = $mform->getElement('numsections');
+                for ($i = $maxsections+1; $i <= $numsections; $i++) {
+                    $element->addOption("$i", $i);
+                }
+            }
+        }
+        return $elements;
+    }
+
+    /**
      * Updates format options for a course
      *
      * In case if course format was changed to 'topics', we try to copy options
@@ -272,8 +334,8 @@ class format_topics extends format_base {
      */
     public function update_course_format_options($data, $oldcourse = null) {
         global $DB;
+        $data = (array)$data;
         if ($oldcourse !== null) {
-            $data = (array)$data;
             $oldcourse = (array)$oldcourse;
             $options = $this->course_format_options();
             foreach ($options as $key => $unused) {
@@ -294,6 +356,30 @@ class format_topics extends format_base {
                 }
             }
         }
-        return $this->update_format_options($data);
+        $changed = $this->update_format_options($data);
+        if ($changed && array_key_exists('numsections', $data)) {
+            // If the numsections was decreased, try to completely delete the orphaned sections (unless they are not empty).
+            $numsections = (int)$data['numsections'];
+            $maxsection = $DB->get_field_sql('SELECT max(section) from {course_sections}
+                        WHERE course = ?', array($this->courseid));
+            for ($sectionnum = $maxsection; $sectionnum > $numsections; $sectionnum--) {
+                if (!$this->delete_section($sectionnum, false)) {
+                    break;
+                }
+            }
+        }
+        return $changed;
+    }
+
+    /**
+     * Whether this format allows to delete sections
+     *
+     * Do not call this function directly, instead use {@link course_can_delete_section()}
+     *
+     * @param int|stdClass|section_info $section
+     * @return bool
+     */
+    public function can_delete_section($section) {
+        return true;
     }
 }

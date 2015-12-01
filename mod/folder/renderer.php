@@ -18,10 +18,9 @@
 /**
  * Folder module renderer
  *
- * @package    mod
- * @subpackage folder
- * @copyright  2009 Petr Skoda  {@link http://skodak.org}
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @package   mod_folder
+ * @copyright 2009 Petr Skoda  {@link http://skodak.org}
+ * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 defined('MOODLE_INTERNAL') || die();
 
@@ -40,11 +39,10 @@ class mod_folder_renderer extends plugin_renderer_base {
         $folderinstances = get_fast_modinfo($folder->course)->get_instances_of('folder');
         if (!isset($folderinstances[$folder->id]) ||
                 !($cm = $folderinstances[$folder->id]) ||
-                !$cm->uservisible ||
-                !($context = context_module::instance($cm->id)) ||
-                !has_capability('mod/folder:view', $context)) {
-            // some error in parameters or module is not visible to the user
-            // don't throw any errors in renderer, just return empty string
+                !($context = context_module::instance($cm->id))) {
+            // Some error in parameters.
+            // Don't throw any errors in renderer, just return empty string.
+            // Capability to view module must be checked before calling renderer.
             return $output;
         }
 
@@ -58,7 +56,12 @@ class mod_folder_renderer extends plugin_renderer_base {
             }
         }
 
-        $output .= $this->output->box($this->render(new folder_tree($folder, $cm)),
+        $foldertree = new folder_tree($folder, $cm);
+        if ($folder->display == FOLDER_DISPLAY_INLINE) {
+            // Display module name as the name of the root directory.
+            $foldertree->dir['dirname'] = $cm->get_formatted_name();
+        }
+        $output .= $this->output->box($this->render($foldertree),
                 'generalbox foldertree');
 
         // Do not append the edit button on the course page.
@@ -79,11 +82,11 @@ class mod_folder_renderer extends plugin_renderer_base {
         $content .= '<div id="'.$id.'" class="filemanager">';
         $content .= $this->htmllize_tree($tree, array('files' => array(), 'subdirs' => array($tree->dir)));
         $content .= '</div>';
-        $show_expanded = true;
-        if (empty($tree->folder->show_expanded)) {
-            $show_expanded = false;
+        $showexpanded = true;
+        if (empty($tree->folder->showexpanded)) {
+            $showexpanded = false;
         }
-        $this->page->requires->js_init_call('M.mod_folder.init_tree', array($id, $show_expanded));
+        $this->page->requires->js_init_call('M.mod_folder.init_tree', array($id, $showexpanded));
         return $content;
     }
 

@@ -35,7 +35,7 @@ defined('MOODLE_INTERNAL') || die();
  * @copyright  2009 The Open University
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class qbehaviour_adaptive extends question_behaviour_with_save {
+class qbehaviour_adaptive extends question_behaviour_with_multiple_tries {
     const IS_ARCHETYPAL = true;
 
     public function is_compatible_question(question_definition $question) {
@@ -70,10 +70,19 @@ class qbehaviour_adaptive extends question_behaviour_with_save {
     }
 
     public function adjust_display_options(question_display_options $options) {
+        // Save some bits so we can put them back later.
+        $save = clone($options);
+
+        // Do the default thing.
         parent::adjust_display_options($options);
+
+        // Then, if they have just Checked an answer, show them the applicable bits of feedback.
         if (!$this->qa->get_state()->is_finished() &&
                 $this->qa->get_last_behaviour_var('_try')) {
-            $options->feedback = true;
+            $options->feedback        = $save->feedback;
+            $options->correctness     = $save->correctness;
+            $options->numpartscorrect = $save->numpartscorrect;
+
         }
     }
 

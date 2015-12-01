@@ -49,8 +49,7 @@ class cache_disabled extends cache {
      * @param null $loader Unused.
      */
     public function __construct(cache_definition $definition, cache_store $store, $loader = null) {
-        $this->definition = $definition;
-        $this->store = $store;
+        // Nothing to do here.
     }
 
     /**
@@ -185,10 +184,10 @@ class cache_factory_disabled extends cache_factory {
      *
      * @param string $component
      * @param string $area
-     * @param string $aggregate Unused.
+     * @param string $unused Used to be datasourceaggregate but that was removed and this is now unused.
      * @return cache_definition
      */
-    public function create_definition($component, $area, $aggregate = null) {
+    public function create_definition($component, $area, $unused = null) {
         return cache_definition::load_adhoc(cache_store::MODE_REQUEST, $component, $area);
     }
 
@@ -209,11 +208,11 @@ class cache_factory_disabled extends cache_factory {
      * @param string $component
      * @param string $area
      * @param array $identifiers
-     * @param string $aggregate
+     * @param string $unused Used to be datasourceaggregate but that was removed and this is now unused.
      * @return cache_application|cache_session|cache_request
      */
-    public function create_cache_from_definition($component, $area, array $identifiers = array(), $aggregate = null) {
-        $definition = $this->create_definition($component, $area, $aggregate);
+    public function create_cache_from_definition($component, $area, array $identifiers = array(), $unused = null) {
+        $definition = $this->create_definition($component, $area);
         $cache = $this->create_cache($definition, $identifiers);
         return $cache;
     }
@@ -228,7 +227,8 @@ class cache_factory_disabled extends cache_factory {
      * @param array $options An array of options, available options are:
      *   - simplekeys : Set to true if the keys you will use are a-zA-Z0-9_
      *   - simpledata : Set to true if the type of the data you are going to store is scalar, or an array of scalar vars
-     *   - persistent : If set to true the cache will persist construction requests.
+     *   - staticacceleration : If set to true the cache will hold onto all data passing through it.
+     *   - staticaccelerationsize : Sets the max size of the static acceleration array.
      * @return cache_application|cache_session|cache_request
      */
     public function create_cache_from_params($mode, $component, $area, array $identifiers = array(), array $options = array()) {
@@ -253,13 +253,28 @@ class cache_factory_disabled extends cache_factory {
      * Creates a cache config instance with the ability to write if required.
      *
      * @param bool $writer Unused.
-     * @return cache_config|cache_config_writer
+     * @return cache_config_disabled|cache_config_writer
      */
     public function create_config_instance($writer = false) {
+        // We are always going to use the cache_config_disabled class for all regular request.
+        // However if the code has requested the writer then likely something is changing and
+        // we're going to need to interact with the config.php file.
+        // In this case we will still use the cache_config_writer.
         $class = 'cache_config_disabled';
+        if ($writer) {
+            // If the writer was requested then something is changing.
+            $class = 'cache_config_writer';
+        }
         if (!array_key_exists($class, $this->configs)) {
             self::set_state(self::STATE_INITIALISING);
-            $configuration = $class::create_default_configuration();
+            if ($class === 'cache_config_disabled') {
+                $configuration = $class::create_default_configuration();
+            } else {
+                $configuration = false;
+                if (!cache_config::config_file_exists()) {
+                    cache_config_writer::create_default_configuration(true);
+                }
+            }
             $this->configs[$class] = new $class;
             $this->configs[$class]->load($configuration);
         }
@@ -361,9 +376,10 @@ class cache_config_disabled extends cache_config_writer {
     /**
      * Creates the default configuration and saves it.
      *
+     * @param bool $forcesave Ignored because we are disabled!
      * @return array
      */
-    public static function create_default_configuration() {
+    public static function create_default_configuration($forcesave = false) {
         global $CFG;
 
         // HACK ALERT.

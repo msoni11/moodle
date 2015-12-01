@@ -39,9 +39,7 @@ defined('MOODLE_INTERNAL') || die();
  * @copyright  2009 The Open University
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class qbehaviour_interactive extends question_behaviour_with_save {
-    const IS_ARCHETYPAL = true;
-
+class qbehaviour_interactive extends question_behaviour_with_multiple_tries {
     /**
      * Special value used for {@link question_display_options::$readonly when
      * we are showing the try again button to the student during an attempt.
@@ -54,6 +52,10 @@ class qbehaviour_interactive extends question_behaviour_with_save {
 
     public function is_compatible_question(question_definition $question) {
         return $question instanceof question_automatically_gradable;
+    }
+
+    public function can_finish_during_attempt() {
+        return true;
     }
 
     public function get_right_answer_summary() {
@@ -73,6 +75,10 @@ class qbehaviour_interactive extends question_behaviour_with_save {
         // We only need different behaviour in try again states.
         if (!$this->is_try_again_state()) {
             parent::adjust_display_options($options);
+            if ($this->qa->get_state() == question_state::$invalid &&
+                    $options->marks == question_display_options::MARK_AND_MAX) {
+                $options->marks = question_display_options::MAX_ONLY;
+            }
             return;
         }
 
@@ -130,12 +136,8 @@ class qbehaviour_interactive extends question_behaviour_with_save {
             return parent::get_state_string($showcorrectness);
         }
 
-        if ($this->is_try_again_state()) {
-            return get_string('notcomplete', 'qbehaviour_interactive');
-        } else {
-            return get_string('triesremaining', 'qbehaviour_interactive',
-                    $this->qa->get_last_behaviour_var('_triesleft'));
-        }
+        return get_string('triesremaining', 'qbehaviour_interactive',
+                $this->qa->get_last_behaviour_var('_triesleft'));
     }
 
     public function init_first_step(question_attempt_step $step, $variant) {

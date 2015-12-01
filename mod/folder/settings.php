@@ -18,20 +18,16 @@
 /**
  * Folder module admin settings and defaults
  *
- * @package    mod
- * @subpackage folder
- * @copyright  2009 Petr Skoda  {@link http://skodak.org}
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @package   mod_folder
+ * @copyright 2009 Petr Skoda  {@link http://skodak.org}
+ * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
 defined('MOODLE_INTERNAL') || die;
 
 if ($ADMIN->fulltree) {
     //--- general settings -----------------------------------------------------------------------------------
-    $settings->add(new admin_setting_configcheckbox('folder/requiremodintro',
-        get_string('requiremodintro', 'admin'), get_string('configrequiremodintro', 'admin'), 1));
-
-    $settings->add(new admin_setting_configcheckbox('folder/show_expanded',
-            get_string('show_expanded', 'folder'),
-            get_string('show_expanded_help', 'folder'), 1));
+    $settings->add(new admin_setting_configcheckbox('folder/showexpanded',
+            get_string('showexpanded', 'folder'),
+            get_string('showexpanded_help', 'folder'), 1));
 }

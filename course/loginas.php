@@ -1,5 +1,5 @@
 <?php
-// Allows a teacher/admin to login as another user (in stealth mode)
+// Allows a teacher/admin to login as another user (in stealth mode).
 
 require_once('../config.php');
 require_once('lib.php');
@@ -10,8 +10,8 @@ $redirect = optional_param('redirect', 0, PARAM_BOOL);
 $url = new moodle_url('/course/loginas.php', array('id'=>$id));
 $PAGE->set_url($url);
 
-/// Reset user back to their real self if needed, for security reasons you need to log out and log in again
-if (session_is_loggedinas()) {
+// Reset user back to their real self if needed, for security reasons you need to log out and log in again.
+if (\core\session\manager::is_loggedinas()) {
     require_sesskey();
     require_logout();
 
@@ -29,15 +29,13 @@ if ($redirect) {
     redirect(get_login_url());
 }
 
-///-------------------------------------
-/// We are trying to log in as this user in the first place
-
-$userid = required_param('user', PARAM_INT);         // login as this user
+// Try log in as this user.
+$userid = required_param('user', PARAM_INT);
 
 require_sesskey();
 $course = $DB->get_record('course', array('id'=>$id), '*', MUST_EXIST);
 
-/// User must be logged in
+// User must be logged in.
 
 $systemcontext = context_system::instance();
 $coursecontext = context_course::instance($course->id);
@@ -60,14 +58,28 @@ if (has_capability('moodle/user:loginas', $systemcontext)) {
         print_error('usernotincourse');
     }
     $context = $coursecontext;
+
+    // Check if course has SEPARATEGROUPS and user is part of that group.
+    if (groups_get_course_groupmode($course) == SEPARATEGROUPS &&
+            !has_capability('moodle/site:accessallgroups', $context)) {
+        $samegroup = false;
+        if ($groups = groups_get_all_groups($course->id, $USER->id)) {
+            foreach ($groups as $group) {
+                if (groups_is_member($group->id, $userid)) {
+                    $samegroup = true;
+                    break;
+                }
+            }
+        }
+        if (!$samegroup) {
+            print_error('nologinas');
+        }
+    }
 }
 
-/// Login as this user and return to course home page.
-$oldfullname = fullname($USER, true);
-session_loginas($userid, $context);
+// Login as this user and return to course home page.
+\core\session\manager::loginas($userid, $context);
 $newfullname = fullname($USER, true);
-
-add_to_log($course->id, "course", "loginas", "../user/view.php?id=$course->id&amp;user=$userid", "$oldfullname -> $newfullname");
 
 $strloginas    = get_string('loginas');
 $strloggedinas = get_string('loggedinas', '', $newfullname);

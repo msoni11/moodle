@@ -41,7 +41,7 @@ if ($ADMIN->fulltree) {
 
     $settings->add(new admin_setting_configpasswordunmask('enrol_database/dbpass', get_string('dbpass', 'enrol_database'), '', ''));
 
-    $settings->add(new admin_setting_configtext('enrol_database/dbname', get_string('dbname', 'enrol_database'), '', ''));
+    $settings->add(new admin_setting_configtext('enrol_database/dbname', get_string('dbname', 'enrol_database'), get_string('dbname_desc', 'enrol_database'), ''));
 
     $settings->add(new admin_setting_configtext('enrol_database/dbencoding', get_string('dbencoding', 'enrol_database'), '', 'utf-8'));
 
@@ -78,6 +78,10 @@ if ($ADMIN->fulltree) {
 
     $settings->add(new admin_setting_configtext('enrol_database/remoterolefield', get_string('remoterolefield', 'enrol_database'), get_string('remoterolefield_desc', 'enrol_database'), ''));
 
+    $otheruserfieldlabel = get_string('remoteotheruserfield', 'enrol_database');
+    $otheruserfielddesc  = get_string('remoteotheruserfield_desc', 'enrol_database');
+    $settings->add(new admin_setting_configtext('enrol_database/remoteotheruserfield', $otheruserfieldlabel, $otheruserfielddesc, ''));
+
     if (!during_initial_install()) {
         $options = get_default_enrol_roles(context_system::instance());
         $student = get_archetype_roles('student');
@@ -107,14 +111,9 @@ if ($ADMIN->fulltree) {
 
     $settings->add(new admin_setting_configtext('enrol_database/newcoursecategory', get_string('newcoursecategory', 'enrol_database'), '', ''));
 
-    if (!during_initial_install()) {
-        require_once($CFG->dirroot.'/course/lib.php');
-        $options = array();
-        $parentlist = array();
-        make_categories_list($options, $parentlist);
-        $settings->add(new admin_setting_configselect('enrol_database/defaultcategory', get_string('defaultcategory', 'enrol_database'), get_string('defaultcategory_desc', 'enrol_database'), 1, $options));
-        unset($parentlist);
-    }
+    require_once($CFG->dirroot.'/enrol/database/settingslib.php');
+
+    $settings->add(new enrol_database_admin_setting_category('enrol_database/defaultcategory', get_string('defaultcategory', 'enrol_database'), get_string('defaultcategory_desc', 'enrol_database')));
 
     $settings->add(new admin_setting_configtext('enrol_database/templatecourse', get_string('templatecourse', 'enrol_database'), get_string('templatecourse_desc', 'enrol_database'), ''));
 }

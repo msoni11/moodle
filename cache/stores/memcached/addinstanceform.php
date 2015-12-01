@@ -57,11 +57,12 @@ class cachestore_memcached_addinstance_form extends cachestore_addinstance_form 
         $form->addElement('select', 'serialiser', get_string('useserialiser', 'cachestore_memcached'), $serialiseroptions);
         $form->addHelpButton('serialiser', 'useserialiser', 'cachestore_memcached');
         $form->setDefault('serialiser', Memcached::SERIALIZER_PHP);
-        $form->setType('serialiser', PARAM_NUMBER);
+        $form->setType('serialiser', PARAM_INT);
 
         $form->addElement('text', 'prefix', get_string('prefix', 'cachestore_memcached'), array('size' => 16));
-        $form->setType('prefix', PARAM_ALPHANUM);
+        $form->setType('prefix', PARAM_TEXT); // We set to text but we have a rule to limit to alphanumext.
         $form->addHelpButton('prefix', 'prefix', 'cachestore_memcached');
+        $form->addRule('prefix', get_string('prefixinvalid', 'cachestore_memcached'), 'regex', '#^[a-zA-Z0-9\-_]+$#');
 
         $hashoptions = cachestore_memcached::config_get_hash_options();
         $form->addElement('select', 'hash', get_string('hash', 'cachestore_memcached'), $hashoptions);
@@ -73,5 +74,54 @@ class cachestore_memcached_addinstance_form extends cachestore_addinstance_form 
         $form->addHelpButton('bufferwrites', 'bufferwrites', 'cachestore_memcached');
         $form->setDefault('bufferwrites', 0);
         $form->setType('bufferwrites', PARAM_BOOL);
+
+        $form->addElement('header', 'clusteredheader', get_string('clustered', 'cachestore_memcached'));
+
+        $form->addElement('checkbox', 'clustered', get_string('clustered', 'cachestore_memcached'));
+        $form->setDefault('checkbox', false);
+        $form->addHelpButton('clustered', 'clustered', 'cachestore_memcached');
+
+        $form->addElement('textarea', 'setservers', get_string('setservers', 'cachestore_memcached'),
+                array('cols' => 75, 'rows' => 5));
+        $form->addHelpButton('setservers', 'setservers', 'cachestore_memcached');
+        $form->disabledIf('setservers', 'clustered');
+        $form->setType('setservers', PARAM_RAW);
+    }
+
+    /**
+     * Perform minimal validation on the settings form.
+     *
+     * @param array $data
+     * @param array $files
+     */
+    public function validation($data, $files) {
+        $errors = parent::validation($data, $files);
+
+        if (isset($data['clustered']) && ($data['clustered'] == 1)) {
+            // Set servers is required with in cluster mode.
+            if (!isset($data['setservers'])) {
+                $errors['setservers'] = get_string('required');
+            } else {
+                $trimmed = trim($data['setservers']);
+                if (empty($trimmed)) {
+                    $errors['setservers'] = get_string('required');
+                }
+            }
+
+            $validservers = false;
+            if (isset($data['servers'])) {
+                $servers = trim($data['servers']);
+                $servers = explode("\n", $servers);
+                if (count($servers) === 1) {
+                    $validservers = true;
+                }
+            }
+
+            if (!$validservers) {
+                $errors['servers'] = get_string('serversclusterinvalid', 'cachestore_memcached');
+            }
+        }
+
+        return $errors;
     }
 }

@@ -22,6 +22,19 @@ class grade_export_ods extends grade_export {
     public $plugin = 'ods';
 
     /**
+     * Constructor should set up all the private variables ready to be pulled
+     * @param object $course
+     * @param int $groupid id of selected group, 0 means all
+     * @param stdClass $formdata The validated data from the grade export form.
+     */
+    public function __construct($course, $groupid, $formdata) {
+        parent::__construct($course, $groupid, $formdata);
+
+        // Overrides.
+        $this->usercustomfields = true;
+    }
+
+    /**
      * To be implemented by child classes
      */
     function print_grades() {
@@ -50,14 +63,21 @@ class grade_export_ods extends grade_export {
             $myxls->write_string(0, $id, $field->fullname);
         }
         $pos = count($profilefields);
+        if (!$this->onlyactive) {
+            $myxls->write_string(0, $pos++, get_string("suspended"));
+        }
         foreach ($this->columns as $grade_item) {
-            $myxls->write_string(0, $pos++, $this->format_column_name($grade_item));
+            foreach ($this->displaytype as $gradedisplayname => $gradedisplayconst) {
+                $myxls->write_string(0, $pos++, $this->format_column_name($grade_item, false, $gradedisplayname));
+            }
 
             // Add a column_feedback column.
             if ($this->export_feedback) {
                 $myxls->write_string(0, $pos++, $this->format_column_name($grade_item, true));
             }
         }
+        // Last downloaded column header.
+        $myxls->write_string(0, $pos++, get_string('timeexported', 'gradeexport_ods'));
 
         // Print all the lines of data.
         $i = 0;
@@ -76,17 +96,22 @@ class grade_export_ods extends grade_export {
             }
             $j = count($profilefields);
 
+            if (!$this->onlyactive) {
+                $issuspended = ($user->suspendedenrolment) ? get_string('yes') : '';
+                $myxls->write_string($i, $j++, $issuspended);
+            }
             foreach ($userdata->grades as $itemid => $grade) {
                 if ($export_tracking) {
                     $status = $geub->track($grade);
                 }
 
-                $gradestr = $this->format_grade($grade);
-                if (is_numeric($gradestr)) {
-                    $myxls->write_number($i,$j++,$gradestr);
-                }
-                else {
-                    $myxls->write_string($i,$j++,$gradestr);
+                foreach ($this->displaytype as $gradedisplayconst) {
+                    $gradestr = $this->format_grade($grade, $gradedisplayconst);
+                    if (is_numeric($gradestr)) {
+                        $myxls->write_number($i, $j++, $gradestr);
+                    } else {
+                        $myxls->write_string($i, $j++, $gradestr);
+                    }
                 }
 
                 // writing feedback if requested
@@ -94,6 +119,8 @@ class grade_export_ods extends grade_export {
                     $myxls->write_string($i, $j++, $this->format_feedback($userdata->feedbacks[$itemid]));
                 }
             }
+            // Time exported.
+            $myxls->write_string($i, $j++, time());
         }
         $gui->close();
         $geub->close();

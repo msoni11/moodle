@@ -1,5 +1,4 @@
 <?php
-
 // This file is part of Moodle - http://moodle.org/
 //
 // Moodle is free software: you can redistribute it and/or modify
@@ -16,10 +15,9 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * Strings for component 'enrol_imsenterprise', language 'en', branch 'MOODLE_20_STABLE'
+ * Strings for component 'enrol_imsenterprise', language 'en'.
  *
- * @package    enrol
- * @subpackage imsenterprise
+ * @package    enrol_imsenterprise
  * @copyright  1999 onwards Martin Dougiamas  {@link http://moodle.com}
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -48,6 +46,8 @@ $string['filelockedmail'] = 'The text file you are using for IMS-file-based enro
 $string['filelockedmailsubject'] = 'Important error: Enrolment file';
 $string['fixcasepersonalnames'] = 'Change personal names to Title Case';
 $string['fixcaseusernames'] = 'Change usernames to lower case';
+$string['imsenterprisecrontask'] = 'Enrolment file processing';
+$string['imsenterprise:config'] = 'Configure IMS Enterprise enrol instances';
 $string['imsrolesdescription'] = 'The IMS Enterprise specification includes 8 distinct role types. Please choose how you want them to be assigned in Moodle, including whether any of them should be ignored.';
 $string['location'] = 'File location';
 $string['logtolocation'] = 'Log file output location (blank for no logging)';

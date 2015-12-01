@@ -19,7 +19,7 @@
 /**
  * This file is used to manage repositories
  *
- * @since 2.0
+ * @since Moodle 2.0
  * @package    core
  * @subpackage repository
  * @copyright  2009 Dongsheng Cai <dongsheng@moodle.com>
@@ -69,6 +69,7 @@ $context = context::instance_by_id($contextid);
 
 $PAGE->set_url($url);
 $PAGE->set_context($context);
+$PAGE->set_pagelayout('standard');
 
 /// Security: make sure we're allowed to do this operation
 if ($context->contextlevel == CONTEXT_COURSE) {
@@ -84,7 +85,7 @@ if ($context->contextlevel == CONTEXT_COURSE) {
 
 } else if ($context->contextlevel == CONTEXT_USER) {
     require_login();
-    $pagename = get_string("personalrepositories",'repository');
+    $pagename = get_string('manageinstances', 'repository');
     //is the user looking at its own repository instances
     if ($USER->id != $context->instanceid){
         print_error('notyourinstances', 'repository');
@@ -134,21 +135,16 @@ if (!empty($instance)) {
     }
 }
 
-/// Create navigation links
+// Create navigation links.
 if (!empty($course)) {
-    $PAGE->navbar->add($pagename);
-    $fullname = $course->fullname;
+    $pageheading = $course->fullname;
 } else {
-    $fullname = fullname($user);
-    $strrepos = get_string('repositories', 'repository');
-    $PAGE->navbar->add($fullname, new moodle_url('/user/view.php', array('id'=>$user->id)));
-    $PAGE->navbar->add($strrepos);
+    $pageheading = $pagename;
 }
 
 // Display page header.
 $PAGE->set_title($pagename);
-$PAGE->set_heading($fullname);
-echo $OUTPUT->header();
+$PAGE->set_heading($pageheading);
 
 $return = true;
 if (!empty($edit) || !empty($new)) {
@@ -180,7 +176,7 @@ if (!empty($edit) || !empty($new)) {
             $settings = array();
             $settings['name'] = $fromform->name;
             foreach($configs as $config) {
-                $settings[$config] = $fromform->$config;
+                $settings[$config] = isset($fromform->$config) ? $fromform->$config : null;
             }
             $success = $instance->set_option($settings);
         } else {
@@ -189,13 +185,13 @@ if (!empty($edit) || !empty($new)) {
         }
         if ($success) {
             $savedstr = get_string('configsaved', 'repository');
-            echo $OUTPUT->heading($savedstr);
             redirect($baseurl);
         } else {
             print_error('instancenotsaved', 'repository', $baseurl);
         }
         exit;
     } else {     // Display the form
+        echo $OUTPUT->header();
         echo $OUTPUT->heading(get_string('configplugin', 'repository_'.$plugin));
         $OUTPUT->box_start();
         $mform->display();
@@ -209,18 +205,19 @@ if (!empty($edit) || !empty($new)) {
         }
         if ($instance->delete()) {
             $deletedstr = get_string('instancedeleted', 'repository');
-            echo $OUTPUT->heading($deletedstr);
             redirect($baseurl, $deletedstr, 3);
         } else {
             print_error('instancenotdeleted', 'repository', $baseurl);
         }
         exit;
     }
+    echo $OUTPUT->header();
     $formcontinue = new single_button(new moodle_url($baseurl, array('delete' => $delete, 'sure' => 'yes')), get_string('yes'));
     $formcancel = new single_button($baseurl, get_string('no'));
     echo $OUTPUT->confirm(get_string('confirmdelete', 'repository', $instance->name), $formcontinue, $formcancel);
     $return = false;
 } else {
+    echo $OUTPUT->header();
     repository::display_instances_list($context);
     $return = false;
 }

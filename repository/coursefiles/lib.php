@@ -17,7 +17,7 @@
 /**
  * This plugin is used to access coursefiles repository
  *
- * @since 2.0
+ * @since Moodle 2.0
  * @package    repository_coursefiles
  * @copyright  2010 Dongsheng Cai {@link http://dongsheng.org}
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
@@ -27,7 +27,7 @@ require_once($CFG->dirroot . '/repository/lib.php');
 /**
  * repository_coursefiles class is used to browse course files
  *
- * @since 2.0
+ * @since Moodle 2.0
  * @package    repository_coursefiles
  * @copyright  2010 Dongsheng Cai {@link http://dongsheng.org}
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
@@ -63,7 +63,7 @@ class repository_coursefiles extends repository {
         $browser = get_file_browser();
 
         if (!empty($encodedpath)) {
-            $params = unserialize(base64_decode($encodedpath));
+            $params = json_decode(base64_decode($encodedpath), true);
             if (is_array($params)) {
                 $filepath  = is_null($params['filepath']) ? NULL : clean_param($params['filepath'], PARAM_PATH);
                 $filename  = is_null($params['filename']) ? NULL : clean_param($params['filename'], PARAM_FILE);
@@ -80,12 +80,12 @@ class repository_coursefiles extends repository {
         if ($fileinfo = $browser->get_file_info($context, $component, $filearea, $itemid, $filepath, $filename)) {
             // build path navigation
             $pathnodes = array();
-            $encodedpath = base64_encode(serialize($fileinfo->get_params()));
+            $encodedpath = base64_encode(json_encode($fileinfo->get_params()));
             $pathnodes[] = array('name'=>$fileinfo->get_visible_name(), 'path'=>$encodedpath);
             $level = $fileinfo->get_parent();
             while ($level) {
                 $params = $level->get_params();
-                $encodedpath = base64_encode(serialize($params));
+                $encodedpath = base64_encode(json_encode($params));
                 if ($params['contextid'] != $context->id) {
                     break;
                 }
@@ -102,7 +102,7 @@ class repository_coursefiles extends repository {
                 if ($child->is_directory()) {
                     $params = $child->get_params();
                     $subdir_children = $child->get_children();
-                    $encodedpath = base64_encode(serialize($params));
+                    $encodedpath = base64_encode(json_encode($params));
                     $node = array(
                         'title' => $child->get_visible_name(),
                         'datemodified' => $child->get_timemodified(),
@@ -113,7 +113,7 @@ class repository_coursefiles extends repository {
                     );
                     $list[] = $node;
                 } else {
-                    $encodedpath = base64_encode(serialize($child->get_params()));
+                    $encodedpath = base64_encode(json_encode($child->get_params()));
                     $node = array(
                         'title' => $child->get_visible_name(),
                         'size' => $child->get_filesize(),
@@ -180,10 +180,15 @@ class repository_coursefiles extends repository {
         return parent::is_visible();
     }
 
+    /**
+     * Return the repository name.
+     *
+     * @return string
+     */
     public function get_name() {
-        list($context, $course, $cm) = get_context_info_array($this->context->id);
-        if (!empty($course)) {
-            return get_string('courselegacyfiles') . format_string($course->shortname, true, array('context' => get_course_context($context)));
+        $context = $this->context->get_course_context(false);
+        if ($context) {
+            return get_string('courselegacyfilesofcourse', 'moodle', $context->get_context_name(false, true));
         } else {
             return get_string('courselegacyfiles');
         }
@@ -204,17 +209,6 @@ class repository_coursefiles extends repository {
      */
     public function has_moodle_files() {
         return true;
-    }
-
-    /**
-     * Return reference file life time
-     *
-     * @param string $ref
-     * @return int
-     */
-    public function get_reference_file_lifetime($ref) {
-        // this should be realtime
-        return 0;
     }
 
     /**

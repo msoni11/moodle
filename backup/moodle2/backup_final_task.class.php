@@ -89,8 +89,16 @@ class backup_final_task extends backup_task {
         // execute_condition() so only will be excuted if ALL module grade_items in course have been exported
         $this->add_step(new backup_gradebook_structure_step('course_gradebook','gradebook.xml'));
 
+        // Generate the grade history file, conditionally.
+        $this->add_step(new backup_grade_history_structure_step('course_grade_history','grade_history.xml'));
+
         // Generate the course completion
         $this->add_step(new backup_course_completion_structure_step('course_completion', 'completion.xml'));
+
+        // Conditionally generate the badges file.
+        if ($this->get_setting_value('badges')) {
+            $this->add_step(new backup_badges_structure_step('course_badges', 'badges.xml'));
+        }
 
         // Generate the scales file with all the (final) annotated scales
         $this->add_step(new backup_final_scales_structure_step('scaleslist', 'scales.xml'));
@@ -150,6 +158,11 @@ class backup_final_task extends backup_task {
         $this->add_step($cleanstep);
 
         $this->built = true;
+    }
+
+    public function get_weight() {
+        // The final task takes ages, so give it 20 times the weight of a normal task.
+        return 20;
     }
 
 // Protected API starts here

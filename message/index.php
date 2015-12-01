@@ -57,6 +57,11 @@ $addcontact     = optional_param('addcontact',     0, PARAM_INT); // adding a co
 $removecontact  = optional_param('removecontact',  0, PARAM_INT); // removing a contact
 $blockcontact   = optional_param('blockcontact',   0, PARAM_INT); // blocking a contact
 $unblockcontact = optional_param('unblockcontact', 0, PARAM_INT); // unblocking a contact
+$deletemessageid = optional_param('deletemessageid', 0, PARAM_INT);
+$deletemessageconfirm = optional_param('deletemessageconfirm', 0, PARAM_BOOL);
+if ($deletemessageid) {
+    $deletemessagetype = required_param('deletemessagetype', PARAM_ALPHAEXT);
+}
 
 //for search
 $advancedsearch = optional_param('advanced', 0, PARAM_INT);
@@ -83,9 +88,6 @@ if ($viewing != MESSAGE_VIEW_UNREAD_MESSAGES) {
 
 $PAGE->set_url($url);
 
-$navigationurl = new moodle_url('/message/index.php', array('user1' => $user1id));
-navigation_node::override_active_url($navigationurl);
-
 // Disable message notification popups while the user is viewing their messages
 $PAGE->set_popup_notification_allowed(false);
 
@@ -106,69 +108,104 @@ unset($user1id);
 
 $user2 = null;
 if (!empty($user2id)) {
-    $user2 = $DB->get_record("user", array("id" => $user2id));
+    $user2 = core_user::get_user($user2id);
     if (!$user2) {
         print_error('invaliduserid');
     }
 }
 unset($user2id);
 
+$user2realuser = !empty($user2) && core_user::is_real_user($user2->id);
+$showactionlinks = $showactionlinks && $user2realuser;
 $systemcontext = context_system::instance();
 
-if (!empty($user2) && $user1->id == $user2->id) {
-    print_error('invaliduserid');
-}
-
-// Is the user involved in the conversation?
-// Do they have the ability to read other user's conversations?
-if (!message_current_user_is_involved($user1, $user2) && !has_capability('moodle/site:readallmessages', $systemcontext)) {
+if ($currentuser === false && !has_capability('moodle/site:readallmessages', $systemcontext)) {
     print_error('accessdenied','admin');
 }
 
+if (substr($viewing, 0, 7) == MESSAGE_VIEW_COURSE) {
+    $courseid = intval(substr($viewing, 7));
+    require_login($courseid);
+    require_capability('moodle/course:viewparticipants', context_course::instance($courseid));
+    $PAGE->set_pagelayout('incourse');
+} else {
+    $PAGE->set_pagelayout('standard');
+}
+// Page context should always be set to user.
 $PAGE->set_context(context_user::instance($user1->id));
-$PAGE->set_pagelayout('course');
-$PAGE->navigation->extend_for_user($user1);
+if (!empty($user1->id) && $user1->id != $USER->id) {
+    $PAGE->navigation->extend_for_user($user1);
+}
+if (!empty($user2->id) && $user2realuser && ($user2->id != $USER->id)) {
+    $PAGE->navigation->extend_for_user($user2);
+}
+
+$strmessages = get_string('messages', 'message');
+if ($user2realuser) {
+    $user2fullname = fullname($user2);
+
+    $PAGE->set_title("$strmessages: $user2fullname");
+    $PAGE->set_heading("$strmessages: $user2fullname");
+} else {
+    $PAGE->set_title("{$SITE->shortname}: $strmessages");
+    $PAGE->set_heading("{$SITE->shortname}: $strmessages");
+}
 
 /// Process any contact maintenance requests there may be
 if ($addcontact and confirm_sesskey()) {
-    add_to_log(SITEID, 'message', 'add contact', 'index.php?user1='.$addcontact.'&amp;user2='.$USER->id, $addcontact);
     message_add_contact($addcontact);
     redirect($CFG->wwwroot . '/message/index.php?viewing=contacts&id='.$addcontact);
 }
 if ($removecontact and confirm_sesskey()) {
-    add_to_log(SITEID, 'message', 'remove contact', 'index.php?user1='.$removecontact.'&amp;user2='.$USER->id, $removecontact);
     message_remove_contact($removecontact);
 }
 if ($blockcontact and confirm_sesskey()) {
-    add_to_log(SITEID, 'message', 'block contact', 'index.php?user1='.$blockcontact.'&amp;user2='.$USER->id, $blockcontact);
     message_block_contact($blockcontact);
 }
 if ($unblockcontact and confirm_sesskey()) {
-    add_to_log(SITEID, 'message', 'unblock contact', 'index.php?user1='.$unblockcontact.'&amp;user2='.$USER->id, $unblockcontact);
     message_unblock_contact($unblockcontact);
+}
+if ($deletemessageid and confirm_sesskey()) {
+    // Check that the message actually exists.
+    if ($message = $DB->get_record($deletemessagetype, array('id' => $deletemessageid))) {
+        // Check that we are allowed to delete this message.
+        if (message_can_delete_message($message, $user1->id)) {
+            if (!$deletemessageconfirm) {
+                $confirmurl = new moodle_url('/message/index.php', array('user1' => $user1->id, 'user2' => $user2->id,
+                    'viewing' => $viewing, 'deletemessageid' => $message->id, 'deletemessagetype' => $deletemessagetype,
+                    'deletemessageconfirm' => 1, 'sesskey' => sesskey()));
+                $confirmbutton = new single_button($confirmurl, get_string('delete'), 'post');
+                $strdeletemessage = get_string('deletemessage', 'message');
+                $PAGE->set_title($strdeletemessage);
+                echo $OUTPUT->header();
+                echo $OUTPUT->heading($strdeletemessage);
+                echo $OUTPUT->confirm(get_string('deletemessageconfirmation', 'message'), $confirmbutton, $url);
+                echo $OUTPUT->footer();
+                exit();
+            }
+            message_delete_message($message, $user1->id);
+        }
+    }
+    redirect($url);
 }
 
 //was a message sent? Do NOT allow someone looking at someone else's messages to send them.
 $messageerror = null;
 if ($currentuser && !empty($user2) && has_capability('moodle/site:sendmessage', $systemcontext)) {
     // Check that the user is not blocking us!!
-    if ($contact = $DB->get_record('message_contacts', array('userid' => $user2->id, 'contactid' => $user1->id))) {
-        if ($contact->blocked and !has_capability('moodle/site:readallmessages', $systemcontext)) {
-            $messageerror = get_string('userisblockingyou', 'message');
-        }
+    if (message_is_user_blocked($user2, $user1)) {
+        $messageerror = get_string('userisblockingyou', 'message');
     }
-    $userpreferences = get_user_preferences(NULL, NULL, $user2->id);
-
-    if (!empty($userpreferences['message_blocknoncontacts'])) {  // User is blocking non-contacts
-        if (empty($contact)) {   // We are not a contact!
-            $messageerror = get_string('userisblockingyounoncontact', 'message', fullname($user2));
-        }
+    // Check that we're not non-contact block by the user.
+    if (message_is_user_non_contact_blocked($user2, $user1)) {
+        $messageerror = get_string('userisblockingyounoncontact', 'message', fullname($user2));
     }
 
     if (empty($messageerror)) {
         $mform = new send_form();
         $defaultmessage = new stdClass;
         $defaultmessage->id = $user2->id;
+        $defaultmessage->viewing = $viewing;
         $defaultmessage->message = '';
 
         //Check if the current user has sent a message
@@ -181,7 +218,6 @@ if ($currentuser && !empty($user2) && has_capability('moodle/site:sendmessage', 
             if (!empty($messageid)) {
                 //including the id of the user sending the message in the logged URL so the URL works for admins
                 //note message ID may be misleading as the message may potentially get a different ID when moved from message to message_read
-                add_to_log(SITEID, 'message', 'write', 'index.php?user='.$user1->id.'&id='.$user2->id.'&history=1#m'.$messageid, $user1->id);
                 redirect($CFG->wwwroot . '/message/index.php?viewing='.$viewing.'&id='.$user2->id);
             }
         }
@@ -189,14 +225,26 @@ if ($currentuser && !empty($user2) && has_capability('moodle/site:sendmessage', 
 }
 
 $strmessages = get_string('messages', 'message');
-if (!empty($user2)) {
+if ($user2realuser) {
     $user2fullname = fullname($user2);
 
     $PAGE->set_title("$strmessages: $user2fullname");
-    $PAGE->set_heading("$strmessages: $user2fullname");
 } else {
     $PAGE->set_title("{$SITE->shortname}: $strmessages");
-    $PAGE->set_heading("{$SITE->shortname}: $strmessages");
+}
+$PAGE->set_heading(fullname($user1));
+
+// Remove the user node from the main navigation for this page.
+$usernode = $PAGE->navigation->find('users', null);
+$usernode->remove();
+
+$settings = $PAGE->settingsnav->find('messages', null);
+// Add the user we are contacting to the breadcrumb.
+if (!empty($user2realuser)) {
+    $usernode = $settings->add(fullname($user2), $url);
+    $usernode->make_active();
+} else {
+    $settings->make_active();
 }
 
 //now the page contents
@@ -294,25 +342,22 @@ echo html_writer::start_tag('div', array('class' => 'messagearea mdl-align'));
         echo html_writer::end_tag('div');
 
         //send message form
-        if ($currentuser && has_capability('moodle/site:sendmessage', $systemcontext)) {
+        if ($currentuser && has_capability('moodle/site:sendmessage', $systemcontext) && $user2realuser) {
             echo html_writer::start_tag('div', array('class' => 'mdl-align messagesend'));
                 if (!empty($messageerror)) {
                     echo html_writer::tag('span', $messageerror, array('id' => 'messagewarning'));
                 } else {
                     // Display a warning if the current user is blocking non-contacts and is about to message to a non-contact
                     // Otherwise they may wonder why they never get a reply
-                    $blocknoncontacts = get_user_preferences('message_blocknoncontacts', '', $user1->id);
-                    if (!empty($blocknoncontacts)) {
-                        $contact = $DB->get_record('message_contacts', array('userid' => $user1->id, 'contactid' => $user2->id));
-                        if (empty($contact)) {
-                            $msg = get_string('messagingblockednoncontact', 'message', fullname($user2));
-                            echo html_writer::tag('span', $msg, array('id' => 'messagewarning'));
-                        }
+                    if (message_is_user_non_contact_blocked($user1, $user2)) {
+                        $msg = get_string('messagingblockednoncontact', 'message', fullname($user2));
+                        echo html_writer::tag('span', $msg, array('id' => 'messagewarning'));
                     }
 
                     $mform = new send_form();
                     $defaultmessage = new stdClass;
                     $defaultmessage->id = $user2->id;
+                    $defaultmessage->viewing = $viewing;
                     $defaultmessage->message = '';
                     //$defaultmessage->messageformat = FORMAT_MOODLE;
                     $mform->set_data($defaultmessage);

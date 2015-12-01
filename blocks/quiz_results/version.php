@@ -17,14 +17,15 @@
 /**
  * Version information for the block_quiz_results plugin.
  *
- * @package    block
- * @subpackage quiz_results
+ * @package    block_quiz_results
  * @copyright  2011 The Open University
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
 defined('MOODLE_INTERNAL') || die();
 
-$plugin->version   = 2012112900;        // The current plugin version (Date: YYYYMMDDXX)
-$plugin->requires  = 2012112900;        // Requires this Moodle version
+$plugin->version   = 2015111600;        // The current plugin version (Date: YYYYMMDDXX)
+$plugin->requires  = 2015111000;        // Requires this Moodle version
 $plugin->component = 'block_quiz_results'; // Full name of the plugin (used for diagnostics)
+
+$plugin->dependencies = array('mod_quiz' => 2015111000);

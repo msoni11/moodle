@@ -17,7 +17,7 @@
 /**
  * Form for editing tag block instances.
  *
- * @package   moodlecore
+ * @package   block_tags
  * @copyright 2009 Tim Hunt
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -43,9 +43,5 @@ class block_tags_edit_form extends block_edit_form {
         }
         $mform->addElement('select', 'config_numberoftags', get_string('numberoftags', 'blog'), $numberoftags);
         $mform->setDefault('config_numberoftags', 80);
-
-        $defaults = array('default'=>'default', 'official'=>'official', ''=>'both');
-        $mform->addElement('select', 'config_tagtype', get_string('defaultdisplay', 'block_tags'), $defaults);
-        $mform->setDefault('config_tagtype', '');
     }
 }

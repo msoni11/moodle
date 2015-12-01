@@ -47,10 +47,8 @@ if ($USER->id != $user->id and has_capability('moodle/user:viewuseractivitiesrep
 
 if (!report_completion_can_access_user_report($user, $course, true)) {
     // this should never happen
-    error('Can not access user completion report');
+    print_error('nocapability', 'report_completion');
 }
-
-add_to_log($course->id, 'course', 'report completion', "report/completion/user.php?id=$user->id&course=$course->id", $course->id);
 
 $stractivityreport = get_string('activityreport');
 
@@ -301,3 +299,6 @@ foreach ($courses as $type => $infos) {
 
 
 echo $OUTPUT->footer();
+// Trigger a user report viewed event.
+$event = \report_completion\event\user_report_viewed::create(array('context' => $coursecontext, 'relateduserid' => $userid));
+$event->trigger();

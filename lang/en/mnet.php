@@ -1,5 +1,4 @@
 <?php
-
 // This file is part of Moodle - http://moodle.org/
 //
 // Moodle is free software: you can redistribute it and/or modify
@@ -18,7 +17,7 @@
 /**
  * Strings for component 'mnet', language 'en', branch 'MOODLE_20_STABLE'
  *
- * @package   mnet
+ * @package   core_mnet
  * @copyright 1999 onwards Martin Dougiamas  {@link http://moodle.com}
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -65,6 +64,8 @@ $string['error7023'] = 'The remote site has tried to decrypt your message with a
 $string['error7024'] = 'You send an unencrypted message to the remote site, but the remote site doesn\'t accept unencrypted communication from your site. This is very unexpected; you should probably file a bug if this occurs (giving as much information as possible about the application versions in question, etc.';
 $string['error7026'] = 'The key that your message was signed with differs from the key that the remote host has on file for your server. Further, the remote host attempted to fetch your current key and failed to do so. Please manually re-key with the remote host and try again.';
 $string['error709'] = 'The remote site failed to obtain a SSL key from you.';
+$string['eventaccesscontrolcreated'] = 'Access control created';
+$string['eventaccesscontrolupdated'] = 'Access control updated';
 $string['expired'] = 'This key expired on';
 $string['expires'] = 'Valid until';
 $string['expireyourkey'] = 'Delete this key';
@@ -130,7 +131,6 @@ $string['mnetidprovider'] = 'MNet ID provider';
 $string['mnetidproviderdesc'] = 'You can use this facility to retrieve a link that you can log in at, if you can provide the correct email address to match the username you previously tried to log in with.';
 $string['mnetidprovidermsg'] = 'You should be able to login at your {$a} provider.';
 $string['mnetidprovidernotfound'] = 'Sorry, but no further information could be found.';
-$string['mnetlog'] = 'Logs';
 $string['mnetpeers'] = 'Peers';
 $string['mnetservices'] = 'Services';
 $string['mnet_session_prohibited'] = 'Users from your home server are not currently permitted to roam to {$a}.';
@@ -192,7 +192,8 @@ $string['registerhostson'] = 'Register all hosts is currently <b>on</b>';
 $string['remotecourses'] = 'Remote courses';
 $string['remotehost'] = 'Remote host';
 $string['remotehosts'] = 'Remote hosts';
-$string['remoteuserinfo'] = 'Remote {$a->remotetype} user - profile fetched from <a href="{$a->remoteurl}">{$a->remotename}</a>';
+$string['remoteuser'] = 'Remote {$a->remotetype} user';
+$string['remoteuserinfo'] = 'Profile fetched from <a href="{$a->remoteurl}">{$a->remotename}</a>';
 $string['requiresopenssl'] = 'Networking requires the OpenSSL extension';
 $string['restore'] = 'Restore';
 $string['returnvalue'] = 'Return value';
@@ -213,8 +214,14 @@ $string['serviceswesubscribeto'] = 'Services on {$a} that we subscribe to.';
 $string['settings'] = 'Settings';
 $string['showlocal'] = 'Show local users';
 $string['showremote'] = 'Show remote users';
-$string['ssl_acl_allow'] = 'SSO ACL: Allow user {$a->user} from {$a->host}';
-$string['ssl_acl_deny'] = 'SSO ACL: Deny user {$a->user} from {$a->host}';
+$string['ssl_acl_allow'] = 'SSO ACL: Allow user \'{$a->user}\' from \'{$a->host}\'';
+$string['ssl_acl_deny'] = 'SSO ACL: Deny user \'{$a->user}\' from \'{$a->host}\'';
+$string['sslverification'] = 'SSL verification';
+$string['sslverification_help'] = 'This option allows you to configure the level of security when connecting to a peer using HTTPS.
+
+* None: no level of security
+* Verify host only: validates the domain of the SSL certificate
+* Verify host and peer (recommended): validates the domain and issuer of the SSL certificate';
 $string['ssoaccesscontrol'] = 'SSO access control';
 $string['ssoacldescr'] = 'Use this page to grant/deny access to specific users from remote MNet hosts. This is functional when you are offering SSO services to remote users. To control your <em>local</em> users\' ability to roam to other MNet hosts, use the roles system to grant them the <em>mnetlogintoremote</em> capability.';
 $string['ssoaclneeds'] = 'For this functionality to work, you must have Networking on, plus the MNet authentication plugin enabled.';
@@ -243,6 +250,8 @@ $string['userchangepasswordlink'] = '<br /> You may be able to change your passw
 $string['usernotfullysetup'] = 'Your user account is incomplete.  You need to go <a href="{$a}">back to your provider</a> and ensure your profile is completed there.  You may need to log out and in again for this to take effect.';
 $string['usersareonline'] = 'Warning: {$a} users from that server are currently logged on to your site.';
 $string['validated_by'] = 'It is validated by the network: <code>{$a}</code>';
+$string['verifyhostandpeer'] = 'Verify host and peer';
+$string['verifyhostonly'] = 'Verify host only';
 $string['verifysignature-error'] = 'The signature verification failed. An error has occurred.';
 $string['verifysignature-invalid'] = 'The signature verification failed. It appears that this payload was not signed by you.';
 $string['version'] = 'Version';

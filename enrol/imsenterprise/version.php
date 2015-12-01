@@ -17,15 +17,13 @@
 /**
  * IMS Enterprise file enrolment plugin version specification.
  *
- * @package    enrol
- * @subpackage imsenterprise
+ * @package    enrol_imsenterprise
  * @copyright  2010 Eugene Venter
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
 defined('MOODLE_INTERNAL') || die();
 
-$plugin->version   = 2012112900;        // The current plugin version (Date: YYYYMMDDXX)
-$plugin->requires  = 2012112900;        // Requires this Moodle version
-$plugin->component = 'enrol_imsenterprise'; // Full name of the plugin (used for diagnostics)
-$plugin->cron      = 60;
+$plugin->version   = 2015111600;        // The current plugin version (Date: YYYYMMDDXX)
+$plugin->requires  = 2015111000;        // Requires this Moodle version.
+$plugin->component = 'enrol_imsenterprise';

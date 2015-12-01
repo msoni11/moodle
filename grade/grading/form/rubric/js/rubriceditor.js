@@ -90,11 +90,11 @@ M.gradingform_rubriceditor.editmode = function(el, editmode, focustb) {
         var value = ta.get('value')
         if (value.length) taplain.removeClass('empty')
         else {
-            value = (el.hasClass('level')) ? M.str.gradingform_rubric.levelempty : M.str.gradingform_rubric.criterionempty
+            value = (el.hasClass('level')) ? M.util.get_string('levelempty', 'gradingform_rubric') : M.util.get_string('criterionempty', 'gradingform_rubric')
             taplain.addClass('empty')
         }
-        taplain.one('.textvalue').set('innerHTML', value)
-        if (tb) tbplain.one('.textvalue').set('innerHTML', tb.get('value'))
+        taplain.one('.textvalue').set('innerHTML', Y.Escape.html(value));
+        if (tb) tbplain.one('.textvalue').set('innerHTML', Y.Escape.html(tb.get('value')));
         // hide/display textarea, textbox and plaintexts
         taplain.removeClass('hiddenelement')
         ta.addClass('hiddenelement')
@@ -109,7 +109,7 @@ M.gradingform_rubriceditor.editmode = function(el, editmode, focustb) {
                 height
             if (el.hasClass('level')) height = parseFloat(el.getComputedStyle('height')) - parseFloat(el.one('.score').getComputedStyle('height'))
             else height = parseFloat(ta.get('parentNode').getComputedStyle('height'))
-            ta.setStyle('width', Math.max(width,50)+'px')
+            ta.setStyle('width', Math.max(width-16,50)+'px')
             ta.setStyle('height', Math.max(height,20)+'px')
         }
         catch (err) {
@@ -143,7 +143,7 @@ M.gradingform_rubriceditor.buttonclick = function(e, confirmed) {
         elements_str = '#rubric-'+name+' .criterion'
     }
     // prepare the id of the next inserted level or criterion
-    if (action == 'addcriterion' || action == 'addlevel') {
+    if (action == 'addcriterion' || action == 'addlevel' || action == 'duplicate' ) {
         var newid = M.gradingform_rubriceditor.calculatenewid('#rubric-'+name+' .criterion')
         var newlevid = M.gradingform_rubriceditor.calculatenewid('#rubric-'+name+' .level')
     }
@@ -201,16 +201,51 @@ M.gradingform_rubriceditor.buttonclick = function(e, confirmed) {
             Y.one('#'+name+'-criteria-'+chunks[2]).remove()
             M.gradingform_rubriceditor.assignclasses(elements_str)
         } else {
-            dialog_options['message'] = M.str.gradingform_rubric.confirmdeletecriterion
+            dialog_options['message'] = M.util.get_string('confirmdeletecriterion', 'gradingform_rubric')
             M.util.show_confirm_dialog(e, dialog_options);
         }
+    } else if (chunks.length == 4 && action == 'duplicate') {
+        // Duplicate criterion.
+        var levelsdef = [], levelsscores = [0], levidx = null;
+        var parentel = Y.one('#'+name+'-criteria');
+        if (parentel.one('>tbody')) { parentel = parentel.one('>tbody'); }
+
+        var source = Y.one('#'+name+'-criteria-'+chunks[2]);
+        if (source.all('.level')) {
+            var lastcriterion = source.all('.level');
+            for (levidx = 0; levidx < lastcriterion.size(); levidx++) {
+                levelsdef[levidx] = lastcriterion.item(levidx).one('.definition .textvalue').get('innerHTML');
+            }
+            for (levidx = 0; levidx < lastcriterion.size(); levidx++) {
+                levelsscores[levidx] = lastcriterion.item(levidx).one('.score input[type=text]').get('value');
+            }
+        }
+
+        for (levidx; levidx < 3; levidx++) { levelsscores[levidx] = parseFloat(levelsscores[levidx-1]) + 1; }
+        var levelsstr = '';
+        for (levidx = 0; levidx < levelsscores.length; levidx++) {
+            levelsstr += M.gradingform_rubriceditor.templates[name].level
+                            .replace(/\{LEVEL-id\}/g, 'NEWID'+(newlevid+levidx))
+                            .replace(/\{LEVEL-score\}/g, levelsscores[levidx])
+                            .replace(/\{LEVEL-definition\}/g, levelsdef[levidx]);
+        }
+        var description = source.one('.description .textvalue');
+        var newcriterion = M.gradingform_rubriceditor.templates[name].criterion
+                                .replace(/\{LEVELS\}/, levelsstr)
+                                .replace(/\{CRITERION-description\}/, description.get('innerHTML'));
+        parentel.append(newcriterion.replace(/\{CRITERION-id\}/g, 'NEWID'+newid).replace(/\{.+?\}/g, ''));
+        M.gradingform_rubriceditor.assignclasses('#rubric-'+name+' #'+name+'-criteria-NEWID'+newid+'-levels .level');
+        M.gradingform_rubriceditor.addhandlers();
+        M.gradingform_rubriceditor.disablealleditors();
+        M.gradingform_rubriceditor.assignclasses(elements_str);
+        M.gradingform_rubriceditor.editmode(Y.one('#rubric-'+name+' #'+name+'-criteria-NEWID'+newid+'-description'),true);
     } else if (chunks.length == 6 && action == 'delete') {
         // DELETE LEVEL
         if (confirmed) {
             Y.one('#'+name+'-criteria-'+chunks[2]+'-'+chunks[3]+'-'+chunks[4]).remove()
             M.gradingform_rubriceditor.assignclasses(elements_str)
         } else {
-            dialog_options['message'] = M.str.gradingform_rubric.confirmdeletelevel
+            dialog_options['message'] = M.util.get_string('confirmdeletelevel', 'gradingform_rubric')
             M.util.show_confirm_dialog(e, dialog_options);
         }
     } else {

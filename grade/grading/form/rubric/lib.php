@@ -505,15 +505,19 @@ class gradingform_rubric_controller extends gradingform_controller {
             throw new coding_exception('It is the caller\'s responsibility to make sure that the form is actually defined');
         }
 
-        $output = $this->get_renderer($page);
         $criteria = $this->definition->rubric_criteria;
         $options = $this->get_options();
         $rubric = '';
         if (has_capability('moodle/grade:managegradingforms', $page->context)) {
             $showdescription = true;
         } else {
+            if (empty($options['alwaysshowdefinition']))  {
+                // ensure we don't display unless show rubric option enabled
+                return '';
+            }
             $showdescription = $options['showdescriptionstudent'];
         }
+        $output = $this->get_renderer($page);
         if ($showdescription) {
             $rubric .= $output->box($this->get_formatted_description(), 'gradingform_rubric-description');
         }
@@ -654,6 +658,59 @@ class gradingform_rubric_controller extends gradingform_controller {
         }
         return $returnvalue;
     }
+
+    /**
+     * @return array An array containing a single key/value pair with the 'rubric_criteria' external_multiple_structure.
+     * @see gradingform_controller::get_external_definition_details()
+     * @since Moodle 2.5
+     */
+    public static function get_external_definition_details() {
+        $rubric_criteria = new external_multiple_structure(
+            new external_single_structure(
+                array(
+                   'id'   => new external_value(PARAM_INT, 'criterion id', VALUE_OPTIONAL),
+                   'sortorder' => new external_value(PARAM_INT, 'sortorder', VALUE_OPTIONAL),
+                   'description' => new external_value(PARAM_RAW, 'description', VALUE_OPTIONAL),
+                   'descriptionformat' => new external_format_value('description', VALUE_OPTIONAL),
+                   'levels' => new external_multiple_structure(
+                                   new external_single_structure(
+                                       array(
+                                        'id' => new external_value(PARAM_INT, 'level id', VALUE_OPTIONAL),
+                                        'score' => new external_value(PARAM_FLOAT, 'score', VALUE_OPTIONAL),
+                                        'definition' => new external_value(PARAM_RAW, 'definition', VALUE_OPTIONAL),
+                                        'definitionformat' => new external_format_value('definition', VALUE_OPTIONAL)
+                                       )
+                                  ), 'levels', VALUE_OPTIONAL
+                              )
+                   )
+              ), 'definition details', VALUE_OPTIONAL
+        );
+        return array('rubric_criteria' => $rubric_criteria);
+    }
+
+    /**
+     * Returns an array that defines the structure of the rubric's filling. This function is used by
+     * the web service function core_grading_external::get_gradingform_instances().
+     *
+     * @return An array containing a single key/value pair with the 'criteria' external_multiple_structure
+     * @see gradingform_controller::get_external_instance_filling_details()
+     * @since Moodle 2.6
+     */
+    public static function get_external_instance_filling_details() {
+        $criteria = new external_multiple_structure(
+            new external_single_structure(
+                array(
+                    'id' => new external_value(PARAM_INT, 'filling id'),
+                    'criterionid' => new external_value(PARAM_INT, 'criterion id'),
+                    'levelid' => new external_value(PARAM_INT, 'level id', VALUE_OPTIONAL),
+                    'remark' => new external_value(PARAM_RAW, 'remark', VALUE_OPTIONAL),
+                    'remarkformat' => new external_format_value('remark', VALUE_OPTIONAL)
+                )
+            ), 'filling', VALUE_OPTIONAL
+        );
+        return array ('criteria' => $criteria);
+    }
+
 }
 
 /**
@@ -697,6 +754,37 @@ class gradingform_rubric_instance extends gradingform_instance {
             $DB->insert_record('gradingform_rubric_fillings', $params);
         }
         return $instanceid;
+    }
+
+    /**
+     * Determines whether the submitted form was empty.
+     *
+     * @param array $elementvalue value of element submitted from the form
+     * @return boolean true if the form is empty
+     */
+    public function is_empty_form($elementvalue) {
+        $criteria = $this->get_controller()->get_definition()->rubric_criteria;
+
+        foreach ($criteria as $id => $criterion) {
+            if (isset($elementvalue['criteria'][$id]['levelid'])
+                    || !empty($elementvalue['criteria'][$id]['remark'])) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Removes the attempt from the gradingform_guide_fillings table
+     * @param array $data the attempt data
+     */
+    public function clear_attempt($data) {
+        global $DB;
+
+        foreach ($data['criteria'] as $criterionid => $record) {
+            $DB->delete_records('gradingform_rubric_fillings',
+                array('criterionid' => $criterionid, 'instanceid' => $this->get_id()));
+        }
     }
 
     /**
@@ -780,10 +868,9 @@ class gradingform_rubric_instance extends gradingform_instance {
     /**
      * Calculates the grade to be pushed to the gradebook
      *
-     * @return int the valid grade from $this->get_controller()->get_grade_range()
+     * @return float|int the valid grade from $this->get_controller()->get_grade_range()
      */
     public function get_grade() {
-        global $DB, $USER;
         $grade = $this->get_rubric_filling();
 
         if (!($scores = $this->get_controller()->get_min_max_score()) || $scores['maxscore'] <= $scores['minscore']) {
@@ -802,7 +889,11 @@ class gradingform_rubric_instance extends gradingform_instance {
         foreach ($grade['criteria'] as $id => $record) {
             $curscore += $this->get_controller()->get_definition()->rubric_criteria[$id]['levels'][$record['levelid']]['score'];
         }
-        return round(($curscore-$scores['minscore'])/($scores['maxscore']-$scores['minscore'])*($maxgrade-$mingrade), 0) + $mingrade;
+        $gradeoffset = ($curscore-$scores['minscore'])/($scores['maxscore']-$scores['minscore'])*($maxgrade-$mingrade);
+        if ($this->get_controller()->get_allow_grade_decimals()) {
+            return $gradeoffset + $mingrade;
+        }
+        return round($gradeoffset, 0) + $mingrade;
     }
 
     /**

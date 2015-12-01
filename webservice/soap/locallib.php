@@ -32,7 +32,7 @@ require_once 'Zend/Soap/Server.php';
  * @package    webservice_soap
  * @copyright  2011 Jerome Mouneyrac
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @since 2.2
+ * @since Moodle 2.2
  */
 class moodle_zend_soap_server extends Zend_Soap_Server {
 
@@ -155,7 +155,7 @@ class moodle_zend_soap_server extends Zend_Soap_Server {
  * @package    webservice_soap
  * @copyright  2009 Petr Skodak
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @since 2.0
+ * @since Moodle 2.0
  */
 class webservice_soap_server extends webservice_zend_server {
 
@@ -273,17 +273,18 @@ class webservice_soap_server extends webservice_zend_server {
      */
     protected function generate_simple_struct_class(external_single_structure $structdesc) {
         global $USER;
-        // let's use unique class name, there might be problem in unit tests
-        $classname = 'webservices_struct_class_000000';
-        while(class_exists($classname)) {
-            $classname++;
-        }
 
         $fields = array();
         foreach ($structdesc->keys as $name => $fieldsdesc) {
             $type = $this->get_phpdoc_type($fieldsdesc);
             $fields[] = '    /** @var '.$type." */\n" .
                         '    public $'.$name.';';
+        }
+
+        // We do this after the call to get_phpdoc_type() to avoid duplicate class creation.
+        $classname = 'webservices_struct_class_000000';
+        while (class_exists($classname)) {
+            $classname++;
         }
 
         $code = '
@@ -305,7 +306,7 @@ class '.$classname.' {
  * @package    webservice_soap
  * @copyright  2009 Petr Skodak
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @since 2.0
+ * @since Moodle 2.0
  */
 class webservice_soap_test_client implements webservice_test_client_interface {
 

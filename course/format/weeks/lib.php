@@ -17,7 +17,7 @@
 /**
  * This file contains main class for the course format Weeks
  *
- * @since     2.0
+ * @since     Moodle 2.0
  * @package   format_weeks
  * @copyright 2009 Sam Hemelryk
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
@@ -55,7 +55,22 @@ class format_weeks extends format_base {
         if ((string)$section->name !== '') {
             // Return the name the user set.
             return format_string($section->name, true, array('context' => context_course::instance($this->courseid)));
-        } else if ($section->section == 0) {
+        } else {
+            return $this->get_default_section_name($section);
+        }
+    }
+
+    /**
+     * Returns the default section name for the weekly course format.
+     *
+     * If the section number is 0, it will use the string with key = section0name from the course format's lang file.
+     * Otherwise, the default format of "[start date] - [end date]" will be returned.
+     *
+     * @param stdClass $section Section object from database or just field course_sections section
+     * @return string The default value for the section name.
+     */
+    public function get_default_section_name($section) {
+        if ($section->section == 0) {
             // Return the general section.
             return get_string('section0name', 'format_weeks');
         } else {
@@ -64,7 +79,7 @@ class format_weeks extends format_base {
             // We subtract 24 hours for display purposes.
             $dates->end = ($dates->end - 86400);
 
-            $dateformat = ' '.get_string('strftimedateshort');
+            $dateformat = get_string('strftimedateshort');
             $weekday = userdate($dates->start, $dateformat);
             $endweekday = userdate($dates->end, $dateformat);
             return $weekday.' - '.$endweekday;
@@ -82,6 +97,7 @@ class format_weeks extends format_base {
      * @return null|moodle_url
      */
     public function get_view_url($section, $options = array()) {
+        global $CFG;
         $course = $this->get_course();
         $url = new moodle_url('/course/view.php', array('id' => $course->id));
 
@@ -108,7 +124,7 @@ class format_weeks extends format_base {
             if ($sectionno != 0 && $usercoursedisplay == COURSE_DISPLAY_MULTIPAGE) {
                 $url->param('section', $sectionno);
             } else {
-                if (!empty($options['navigation'])) {
+                if (empty($CFG->linkcoursesections) && !empty($options['navigation'])) {
                     return null;
                 }
                 $url->set_anchor('section-'.$sectionno);
@@ -122,14 +138,12 @@ class format_weeks extends format_base {
      *
      * The returned object's property (boolean)capable indicates that
      * the course format supports Moodle course ajax features.
-     * The property (array)testedbrowsers can be used as a parameter for {@link ajaxenabled()}.
      *
      * @return stdClass
      */
     public function supports_ajax() {
         $ajaxsupport = new stdClass();
         $ajaxsupport->capable = true;
-        $ajaxsupport->testedbrowsers = array('MSIE' => 6.0, 'Gecko' => 20061111, 'Safari' => 531, 'Chrome' => 6.0);
         return $ajaxsupport;
     }
 
@@ -150,6 +164,19 @@ class format_weeks extends format_base {
             }
         }
         parent::extend_course_navigation($navigation, $node);
+
+        // We want to remove the general section if it is empty.
+        $modinfo = get_fast_modinfo($this->get_course());
+        $sections = $modinfo->get_sections();
+        if (!isset($sections[0])) {
+            // The general section is empty to find the navigation node for it we need to get its ID.
+            $section = $modinfo->get_section_info(0);
+            $generalsection = $node->get($section->id, navigation_node::TYPE_SECTION);
+            if ($generalsection) {
+                // We found the node - now remove it.
+                $generalsection->remove();
+            }
+        }
     }
 
     /**
@@ -162,15 +189,19 @@ class format_weeks extends format_base {
     function ajax_section_move() {
         global $PAGE;
         $titles = array();
+        $current = -1;
         $course = $this->get_course();
         $modinfo = get_fast_modinfo($course);
         $renderer = $this->get_renderer($PAGE);
         if ($renderer && ($sections = $modinfo->get_section_info_all())) {
             foreach ($sections as $number => $section) {
                 $titles[$number] = $renderer->section_title($section, $course);
+                if ($this->is_section_current($section)) {
+                    $current = $number;
+                }
             }
         }
-        return array('sectiontitles' => $titles, 'action' => 'move');
+        return array('sectiontitles' => $titles, 'current' => $current, 'action' => 'move');
     }
 
     /**
@@ -263,6 +294,37 @@ class format_weeks extends format_base {
     }
 
     /**
+     * Adds format options elements to the course/section edit form.
+     *
+     * This function is called from {@link course_edit_form::definition_after_data()}.
+     *
+     * @param MoodleQuickForm $mform form the elements are added to.
+     * @param bool $forsection 'true' if this is a section edit form, 'false' if this is course edit form.
+     * @return array array of references to the added form elements.
+     */
+    public function create_edit_form_elements(&$mform, $forsection = false) {
+        $elements = parent::create_edit_form_elements($mform, $forsection);
+
+        // Increase the number of sections combo box values if the user has increased the number of sections
+        // using the icon on the course page beyond course 'maxsections' or course 'maxsections' has been
+        // reduced below the number of sections already set for the course on the site administration course
+        // defaults page.  This is so that the number of sections is not reduced leaving unintended orphaned
+        // activities / resources.
+        if (!$forsection) {
+            $maxsections = get_config('moodlecourse', 'maxsections');
+            $numsections = $mform->getElementValue('numsections');
+            $numsections = $numsections[0];
+            if ($numsections > $maxsections) {
+                $element = $mform->getElement('numsections');
+                for ($i = $maxsections+1; $i <= $numsections; $i++) {
+                    $element->addOption("$i", $i);
+                }
+            }
+        }
+        return $elements;
+    }
+
+    /**
      * Updates format options for a course
      *
      * In case if course format was changed to 'weeks', we try to copy options
@@ -277,8 +339,8 @@ class format_weeks extends format_base {
      */
     public function update_course_format_options($data, $oldcourse = null) {
         global $DB;
+        $data = (array)$data;
         if ($oldcourse !== null) {
-            $data = (array)$data;
             $oldcourse = (array)$oldcourse;
             $options = $this->course_format_options();
             foreach ($options as $key => $unused) {
@@ -299,7 +361,19 @@ class format_weeks extends format_base {
                 }
             }
         }
-        return $this->update_format_options($data);
+        $changed = $this->update_format_options($data);
+        if ($changed && array_key_exists('numsections', $data)) {
+            // If the numsections was decreased, try to completely delete the orphaned sections (unless they are not empty).
+            $numsections = (int)$data['numsections'];
+            $maxsection = $DB->get_field_sql('SELECT max(section) from {course_sections}
+                        WHERE course = ?', array($this->courseid));
+            for ($sectionnum = $maxsection; $sectionnum > $numsections; $sectionnum--) {
+                if (!$this->delete_section($sectionnum, false)) {
+                    break;
+                }
+            }
+        }
+        return $changed;
     }
 
     /**
@@ -345,5 +419,17 @@ class format_weeks extends format_base {
         $timenow = time();
         $dates = $this->get_section_dates($section);
         return (($timenow >= $dates->start) && ($timenow < $dates->end));
+    }
+
+    /**
+     * Whether this format allows to delete sections
+     *
+     * Do not call this function directly, instead use {@link course_can_delete_section()}
+     *
+     * @param int|stdClass|section_info $section
+     * @return bool
+     */
+    public function can_delete_section($section) {
+        return true;
     }
 }

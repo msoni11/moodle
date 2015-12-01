@@ -1,10 +1,19 @@
-Description of TCPDF library import 5.9.181
+Description of TCPDF library import 6.2.12
 ===========================================
-* delete cache/ doc/ examples/ config/tcpdf_config_alt.php config/lang/ images/
-* remove all fonts but the core ones (courier.php, helveticabi.php,
-    helveticab.php, helveticai.php, helvetica.php, symbol.php, timesbi.php,
-    timesb.php, timesi.php, times.php, zapfdingbats.php) and FreeFont
-* remove font/utils/
+* delete examples/, tools/ and tcpdf_import.php
+* remove tcpdf_import.php from composer.json
+* remove all fonts that were not already present
+* visit http://127.0.0.1/lib/tests/other/pdflibtestpage.php and view the pdf
+
+2015/09/29
+----------
+Upgrade to tcpdf_php5 TCPDF 6.2.12 (MDL-51534)
+by Jun Pataleta <jun@moodle.com>
+
+2015/03/23
+----------
+Upgrade to tcpdf_php5 TCPDF 6.2.6 (MDL-49522)
+by Adrian Greeve <adrian@moodle.com>
 
 2011/10/29
 ----------

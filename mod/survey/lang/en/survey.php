@@ -18,7 +18,7 @@
 /**
  * Strings for component 'survey', language 'en', branch 'MOODLE_20_STABLE'
  *
- * @package   survey
+ * @package   mod_survey
  * @copyright 1999 onwards Martin Dougiamas  {@link http://moodle.com}
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -56,7 +56,7 @@ $string['attls15short'] = 'put myself in their shoes';
 $string['attls16'] = 'One could call my way of analysing things \'putting them on trial\' because I am careful to consider all the evidence.';
 $string['attls16short'] = 'putting on trial';
 $string['attls17'] = 'I value the use of logic and reason over the incorporation of my own concerns when solving problems.';
-$string['attls17short'] = 'i value logic most';
+$string['attls17short'] = 'I value logic most';
 $string['attls18'] = 'I can obtain insight into opinions that differ from mine through empathy.';
 $string['attls18short'] = 'insight from empathy';
 $string['attls19'] = 'When I encounter people whose opinions seem alien to me, I make a deliberate effort to \'extend\' myself into that person, to try to see how they could have those opinions.';
@@ -108,7 +108,7 @@ Thanks very much.';
 $string['collesaname'] = 'COLLES (Actual)';
 $string['collesapintro'] = 'The purpose of this questionnaire is to help us understand how well the online delivery of this unit enabled you to learn. 
 
-Each one of the 24 statements below asks you to compare your <b>preferred</b> (ideal) and <b>actual</b> experience in this unit.
+Each couple of the 24 statements below asks you to compare your <b>preferred</b> (ideal) and <b>actual</b> experience in this unit.
 
 There are no \'right\' or \'wrong\' answers; we are interested only in your opinion. Please be assured that your responses will be treated with a high degree of confidentiality, and will not affect your assessment.
 
@@ -197,7 +197,10 @@ $string['downloadinfo'] = 'You can download the complete raw data for this surve
 $string['downloadresults'] = 'Download results';
 $string['downloadtext'] = 'Download data as a plain text file';
 $string['editingasurvey'] = 'Editing a survey';
-$string['guestsnotallowed'] = 'Guests are not allowed to submit surveys';
+$string['eventreportdownloaded'] = 'Survey report downloaded';
+$string['eventreportviewed'] = 'Survey report viewed';
+$string['eventresponsesubmitted'] = 'Survey response submitted';
+$string['guestsnotallowed'] = 'Only enrolled users are able to submit surveys';
 $string['howlong'] = 'How long did this survey take you to complete?';
 $string['howlongoptions'] = 'under 1 min,1-2 min,2-3 min,3-4 min,4-5-min,5-10 min,more than 10';
 $string['ifoundthat'] = 'I found that';
@@ -239,6 +242,7 @@ $string['selectedquestions'] = 'Selected questions from a scale, all students';
 $string['summary'] = 'Summary';
 $string['survey:addinstance'] = 'Add a new survey';
 $string['surveycompleted'] = 'You\'ve completed this survey.  The graph below shows a summary of your results compared to the class averages.';
+$string['surveycompletednograph'] = 'You have completed this survey.';
 $string['survey:download'] = 'Download responses';
 $string['surveygraph'] = 'Survey graph';
 $string['surveyname'] = 'Survey name';

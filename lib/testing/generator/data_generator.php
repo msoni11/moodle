@@ -23,6 +23,7 @@
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
+defined('MOODLE_INTERNAL') || die();
 
 /**
  * Data generator class for unit tests and other tools that need to create fake test sites.
@@ -33,6 +34,12 @@
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class testing_data_generator {
+    /** @var int The number of grade categories created */
+    protected $gradecategorycounter = 0;
+    /** @var int The number of grade items created */
+    protected $gradeitemcounter = 0;
+    /** @var int The number of grade outcomes created */
+    protected $gradeoutcomecounter = 0;
     protected $usercounter = 0;
     protected $categorycount = 0;
     protected $cohortcount = 0;
@@ -40,16 +47,8 @@ class testing_data_generator {
     protected $scalecount = 0;
     protected $groupcount = 0;
     protected $groupingcount = 0;
-
-    /**
-     * @var int keep track of how many forum discussions have been created.
-     */
-    protected $forumdiscussioncount = 0;
-
-    /**
-     * @var int keep track of how many forum posts have been created.
-     */
-    protected $forumpostcount = 0;
+    protected $rolecount = 0;
+    protected $tagcount = 0;
 
     /** @var array list of plugin generators */
     protected $generators = array();
@@ -92,8 +91,6 @@ EOD;
         $this->categorycount = 0;
         $this->coursecount = 0;
         $this->scalecount = 0;
-        $this->forumdiscussioncount = 0;
-        $this->forumpostcount = 0;
 
         foreach ($this->generators as $generator) {
             $generator->reset();
@@ -101,29 +98,40 @@ EOD;
     }
 
     /**
-     * Return generator for given plugin
-     * @param string $component
-     * @return mixed plugin data generator
+     * Return generator for given plugin or component.
+     * @param string $component the component name, e.g. 'mod_forum' or 'core_question'.
+     * @return component_generator_base or rather an instance of the appropriate subclass.
      */
     public function get_plugin_generator($component) {
-        list($type, $plugin) = normalize_component($component);
-
-        if ($type !== 'mod' and $type !== 'block') {
-            throw new coding_exception("Plugin type $type does not support generators yet");
+        list($type, $plugin) = core_component::normalize_component($component);
+        $cleancomponent = $type . '_' . $plugin;
+        if ($cleancomponent != $component) {
+            debugging("Please specify the component you want a generator for as " .
+                    "{$cleancomponent}, not {$component}.", DEBUG_DEVELOPER);
+            $component = $cleancomponent;
         }
 
-        $dir = get_plugin_directory($type, $plugin);
-
-        if (!isset($this->generators[$type.'_'.$plugin])) {
-            $lib = "$dir/tests/generator/lib.php";
-            if (!include_once($lib)) {
-                throw new coding_exception("Plugin $component does not support data generator, missing tests/generator/lib");
-            }
-            $classname = $type.'_'.$plugin.'_generator';
-            $this->generators[$type.'_'.$plugin] = new $classname($this);
+        if (isset($this->generators[$component])) {
+            return $this->generators[$component];
         }
 
-        return $this->generators[$type.'_'.$plugin];
+        $dir = core_component::get_component_directory($component);
+        $lib = $dir . '/tests/generator/lib.php';
+        if (!$dir || !is_readable($lib)) {
+            throw new coding_exception("Component {$component} does not support " .
+                    "generators yet. Missing tests/generator/lib.php.");
+        }
+
+        include_once($lib);
+        $classname = $component . '_generator';
+
+        if (!class_exists($classname)) {
+            throw new coding_exception("Component {$component} does not support " .
+                    "data generators yet. Class {$classname} not found.");
+        }
+
+        $this->generators[$component] = new $classname($this);
+        return $this->generators[$component];
     }
 
     /**
@@ -157,6 +165,26 @@ EOD;
 
         } else if (!isset($record['lastname'])) {
             $record['lastname'] = 'Lastname'.$i;
+        }
+
+        if (!isset($record['firstnamephonetic'])) {
+            $firstnamephonetic = rand(0, 59);
+            $record['firstnamephonetic'] = $this->firstnames[$firstnamephonetic];
+        }
+
+        if (!isset($record['lastnamephonetic'])) {
+            $lastnamephonetic = rand(0, 59);
+            $record['lastnamephonetic'] = $this->lastnames[$lastnamephonetic];
+        }
+
+        if (!isset($record['middlename'])) {
+            $middlename = rand(0, 59);
+            $record['middlename'] = $this->firstnames[$middlename];
+        }
+
+        if (!isset($record['alternatename'])) {
+            $alternatename = rand(0, 59);
+            $record['alternatename'] = $this->firstnames[$alternatename];
         }
 
         if (!isset($record['idnumber'])) {
@@ -197,14 +225,33 @@ EOD;
         }
 
         if (!isset($record['maildisplay'])) {
-            $record['maildisplay'] = 1;
+            $record['maildisplay'] = $CFG->defaultpreference_maildisplay;
+        }
+
+        if (!isset($record['mailformat'])) {
+            $record['mailformat'] = $CFG->defaultpreference_mailformat;
+        }
+
+        if (!isset($record['maildigest'])) {
+            $record['maildigest'] = $CFG->defaultpreference_maildigest;
+        }
+
+        if (!isset($record['autosubscribe'])) {
+            $record['autosubscribe'] = $CFG->defaultpreference_autosubscribe;
+        }
+
+        if (!isset($record['trackforums'])) {
+            $record['trackforums'] = $CFG->defaultpreference_trackforums;
         }
 
         if (!isset($record['deleted'])) {
             $record['deleted'] = 0;
         }
 
-        $record['timecreated'] = time();
+        if (!isset($record['timecreated'])) {
+            $record['timecreated'] = time();
+        }
+
         $record['timemodified'] = $record['timecreated'];
         $record['lastip'] = '0.0.0.0';
 
@@ -225,18 +272,28 @@ EOD;
             context_user::instance($userid);
         }
 
-        return $DB->get_record('user', array('id'=>$userid), '*', MUST_EXIST);
+        $user = $DB->get_record('user', array('id' => $userid), '*', MUST_EXIST);
+
+        if (!$record['deleted'] && isset($record['interests'])) {
+            require_once($CFG->dirroot . '/user/editlib.php');
+            if (!is_array($record['interests'])) {
+                $record['interests'] = preg_split('/\s*,\s*/', trim($record['interests']), -1, PREG_SPLIT_NO_EMPTY);
+            }
+            useredit_update_interests($user, $record['interests']);
+        }
+
+        return $user;
     }
 
     /**
      * Create a test course category
      * @param array|stdClass $record
      * @param array $options
-     * @return stdClass course category record
+     * @return coursecat course category record
      */
     public function create_category($record=null, array $options=null) {
         global $DB, $CFG;
-        require_once("$CFG->dirroot/course/lib.php");
+        require_once("$CFG->libdir/coursecatlib.php");
 
         $this->categorycount++;
         $i = $this->categorycount;
@@ -247,43 +304,15 @@ EOD;
             $record['name'] = 'Course category '.$i;
         }
 
-        if (!isset($record['idnumber'])) {
-            $record['idnumber'] = '';
-        }
-
         if (!isset($record['description'])) {
             $record['description'] = "Test course category $i\n$this->loremipsum";
         }
 
-        if (!isset($record['descriptionformat'])) {
-            $record['descriptionformat'] = FORMAT_MOODLE;
+        if (!isset($record['idnumber'])) {
+            $record['idnumber'] = '';
         }
 
-        if (!isset($record['parent'])) {
-            $record['parent'] = 0;
-        }
-
-        if (empty($record['parent'])) {
-            $parent = new stdClass();
-            $parent->path = '';
-            $parent->depth = 0;
-        } else {
-            $parent = $DB->get_record('course_categories', array('id'=>$record['parent']), '*', MUST_EXIST);
-        }
-        $record['depth'] = $parent->depth+1;
-
-        $record['sortorder'] = 0;
-        $record['timemodified'] = time();
-        $record['timecreated'] = $record['timemodified'];
-
-        $catid = $DB->insert_record('course_categories', $record);
-        $path = $parent->path . '/' . $catid;
-        $DB->set_field('course_categories', 'path', $path, array('id'=>$catid));
-        context_coursecat::instance($catid);
-
-        fix_course_sortorder();
-
-        return $DB->get_record('course_categories', array('id'=>$catid), '*', MUST_EXIST);
+        return coursecat::create($record);
     }
 
     /**
@@ -319,6 +348,10 @@ EOD;
 
         if (!isset($record['descriptionformat'])) {
             $record['descriptionformat'] = FORMAT_MOODLE;
+        }
+
+        if (!isset($record['visible'])) {
+            $record['visible'] = 1;
         }
 
         if (!isset($record['component'])) {
@@ -380,6 +413,10 @@ EOD;
 
         if (!isset($record['category'])) {
             $record['category'] = $DB->get_field_select('course_categories', "MIN(id)", "parent=0");
+        }
+
+        if (isset($record['tags']) && !is_array($record['tags'])) {
+            $record['tags'] = preg_split('/\s*,\s*/', trim($record['tags']), -1, PREG_SPLIT_NO_EMPTY);
         }
 
         $course = create_course((object)$record);
@@ -585,6 +622,35 @@ EOD;
     }
 
     /**
+     * Create an instance of a repository.
+     *
+     * @param string type of repository to create an instance for.
+     * @param array|stdClass $record data to use to up set the instance.
+     * @param array $options options
+     * @return stdClass repository instance record
+     * @since Moodle 2.5.1
+     */
+    public function create_repository($type, $record=null, array $options = null) {
+        $generator = $this->get_plugin_generator('repository_'.$type);
+        return $generator->create_instance($record, $options);
+    }
+
+    /**
+     * Create an instance of a repository.
+     *
+     * @param string type of repository to create an instance for.
+     * @param array|stdClass $record data to use to up set the instance.
+     * @param array $options options
+     * @return repository_type object
+     * @since Moodle 2.5.1
+     */
+    public function create_repository_type($type, $record=null, array $options = null) {
+        $generator = $this->get_plugin_generator('repository_'.$type);
+        return $generator->create_type($record, $options);
+    }
+
+
+    /**
      * Create a test scale
      * @param array|stdClass $record
      * @param array $options
@@ -636,6 +702,171 @@ EOD;
     }
 
     /**
+     * Creates a new role in the system.
+     *
+     * You can fill $record with the role 'name',
+     * 'shortname', 'description' and 'archetype'.
+     *
+     * If an archetype is specified it's capabilities,
+     * context where the role can be assigned and
+     * all other properties are copied from the archetype;
+     * if no archetype is specified it will create an
+     * empty role.
+     *
+     * @param array|stdClass $record
+     * @return int The new role id
+     */
+    public function create_role($record=null) {
+        global $DB;
+
+        $this->rolecount++;
+        $i = $this->rolecount;
+
+        $record = (array)$record;
+
+        if (empty($record['shortname'])) {
+            $record['shortname'] = 'role-' . $i;
+        }
+
+        if (empty($record['name'])) {
+            $record['name'] = 'Test role ' . $i;
+        }
+
+        if (empty($record['description'])) {
+            $record['description'] = 'Test role ' . $i . ' description';
+        }
+
+        if (empty($record['archetype'])) {
+            $record['archetype'] = '';
+        } else {
+            $archetypes = get_role_archetypes();
+            if (empty($archetypes[$record['archetype']])) {
+                throw new coding_exception('\'role\' requires the field \'archetype\' to specify a ' .
+                    'valid archetype shortname (editingteacher, student...)');
+            }
+        }
+
+        // Creates the role.
+        if (!$newroleid = create_role($record['name'], $record['shortname'], $record['description'], $record['archetype'])) {
+            throw new coding_exception('There was an error creating \'' . $record['shortname'] . '\' role');
+        }
+
+        // If no archetype was specified we allow it to be added to all contexts,
+        // otherwise we allow it in the archetype contexts.
+        if (!$record['archetype']) {
+            $contextlevels = array_keys(context_helper::get_all_levels());
+        } else {
+            // Copying from the archetype default rol.
+            $archetyperoleid = $DB->get_field(
+                'role',
+                'id',
+                array('shortname' => $record['archetype'], 'archetype' => $record['archetype'])
+            );
+            $contextlevels = get_role_contextlevels($archetyperoleid);
+        }
+        set_role_contextlevels($newroleid, $contextlevels);
+
+        if ($record['archetype']) {
+
+            // We copy all the roles the archetype can assign, override and switch to.
+            if ($record['archetype']) {
+                $types = array('assign', 'override', 'switch');
+                foreach ($types as $type) {
+                    $rolestocopy = get_default_role_archetype_allows($type, $record['archetype']);
+                    foreach ($rolestocopy as $tocopy) {
+                        $functionname = 'allow_' . $type;
+                        $functionname($newroleid, $tocopy);
+                    }
+                }
+            }
+
+            // Copying the archetype capabilities.
+            $sourcerole = $DB->get_record('role', array('id' => $archetyperoleid));
+            role_cap_duplicate($sourcerole, $newroleid);
+        }
+
+        return $newroleid;
+    }
+
+    /**
+     * Create a tag.
+     *
+     * @param array|stdClass $record
+     * @return stdClass the tag record
+     */
+    public function create_tag($record = null) {
+        global $DB, $USER;
+
+        $this->tagcount++;
+        $i = $this->tagcount;
+
+        $record = (array) $record;
+
+        if (!isset($record['userid'])) {
+            $record['userid'] = $USER->id;
+        }
+
+        if (!isset($record['rawname'])) {
+            if (isset($record['name'])) {
+                $record['rawname'] = $record['name'];
+            } else {
+                $record['rawname'] = 'Tag name ' . $i;
+            }
+        }
+
+        // Attribute 'name' should be a lowercase version of 'rawname', if not set.
+        if (!isset($record['name'])) {
+            $record['name'] = core_text::strtolower($record['rawname']);
+        } else {
+            $record['name'] = core_text::strtolower($record['name']);
+        }
+
+        if (!isset($record['tagtype'])) {
+            $record['tagtype'] = 'default';
+        }
+
+        if (!isset($record['description'])) {
+            $record['description'] = 'Tag description';
+        }
+
+        if (!isset($record['descriptionformat'])) {
+            $record['descriptionformat'] = FORMAT_MOODLE;
+        }
+
+        if (!isset($record['flag'])) {
+            $record['flag'] = 0;
+        }
+
+        if (!isset($record['timemodified'])) {
+            $record['timemodified'] = time();
+        }
+
+        $id = $DB->insert_record('tag', $record);
+
+        return $DB->get_record('tag', array('id' => $id), '*', MUST_EXIST);
+    }
+
+    /**
+     * Helper method which combines $defaults with the values specified in $record.
+     * If $record is an object, it is converted to an array.
+     * Then, for each key that is in $defaults, but not in $record, the value
+     * from $defaults is copied.
+     * @param array $defaults the default value for each field with
+     * @param array|stdClass $record
+     * @return array updated $record.
+     */
+    public function combine_defaults_and_record(array $defaults, $record) {
+        $record = (array) $record;
+
+        foreach ($defaults as $key => $defaults) {
+            if (!array_key_exists($key, $record)) {
+                $record[$key] = $defaults;
+            }
+        }
+        return $record;
+    }
+
+    /**
      * Simplified enrolment of user to course using default options.
      *
      * It is strongly recommended to use only this method for 'manual' and 'self' plugins only!!!
@@ -646,9 +877,12 @@ EOD;
      * @param string $enrol name of enrol plugin,
      *     there must be exactly one instance in course,
      *     it must support enrol_user() method.
+     * @param int $timestart (optional) 0 means unknown
+     * @param int $timeend (optional) 0 means forever
+     * @param int $status (optional) default to ENROL_USER_ACTIVE for new enrolments
      * @return bool success
      */
-    public function enrol_user($userid, $courseid, $roleid = null, $enrol = 'manual') {
+    public function enrol_user($userid, $courseid, $roleid = null, $enrol = 'manual', $timestart = 0, $timeend = 0, $status = null) {
         global $DB;
 
         if (!$plugin = enrol_get_plugin($enrol)) {
@@ -665,159 +899,135 @@ EOD;
             $roleid = $instance->roleid;
         }
 
-        $plugin->enrol_user($instance, $userid, $roleid);
-
+        $plugin->enrol_user($instance, $userid, $roleid, $timestart, $timeend, $status);
         return true;
     }
 
     /**
-     * Function to create a dummy discussion.
+     * Assigns the specified role to a user in the context.
      *
-     * @param array|stdClass $record
-     * @return stdClass the discussion object
+     * @param int $roleid
+     * @param int $userid
+     * @param int $contextid Defaults to the system context
+     * @return int new/existing id of the assignment
      */
-    public function create_forum_discussion($record = null) {
-        global $DB;
+    public function role_assign($roleid, $userid, $contextid = false) {
 
-        // Increment the forum discussion count.
-        $this->forumdiscussioncount++;
-
-        $record = (array) $record;
-
-        if (!isset($record['course'])) {
-            throw new coding_exception('course must be present in phpunit_util::create_forum_discussion() $record');
+        // Default to the system context.
+        if (!$contextid) {
+            $context = context_system::instance();
+            $contextid = $context->id;
         }
 
-        if (!isset($record['forum'])) {
-            throw new coding_exception('forum must be present in phpunit_util::create_forum_discussion() $record');
+        if (empty($roleid)) {
+            throw new coding_exception('roleid must be present in testing_data_generator::role_assign() arguments');
         }
 
-        if (!isset($record['userid'])) {
-            throw new coding_exception('userid must be present in phpunit_util::create_forum_discussion() $record');
+        if (empty($userid)) {
+            throw new coding_exception('userid must be present in testing_data_generator::role_assign() arguments');
         }
 
-        if (!isset($record['name'])) {
-            $record['name'] = "Discussion " . $this->forumdiscussioncount;
-        }
-
-        if (!isset($record['subject'])) {
-            $record['subject'] = "Subject for discussion " . $this->forumdiscussioncount;
-        }
-
-        if (!isset($record['message'])) {
-            $record['message'] = html_writer::tag('p', 'Message for discussion ' . $this->forumdiscussioncount);
-        }
-
-        if (!isset($record['messageformat'])) {
-            $record['messageformat'] = editors_get_preferred_format();
-        }
-
-        if (!isset($record['messagetrust'])) {
-            $record['messagetrust'] = "";
-        }
-
-        if (!isset($record['assessed'])) {
-            $record['assessed'] = '1';
-        }
-
-        if (!isset($record['groupid'])) {
-            $record['groupid'] = "-1";
-        }
-
-        if (!isset($record['timestart'])) {
-            $record['timestart'] = "0";
-        }
-
-        if (!isset($record['timeend'])) {
-            $record['timeend'] = "0";
-        }
-
-        if (!isset($record['mailnow'])) {
-            $record['mailnow'] = "0";
-        }
-
-        $record = (object) $record;
-
-        // Add the discussion.
-        $record->id = forum_add_discussion($record, null, null, $record->userid);
-
-        return $record;
+        return role_assign($roleid, $userid, $contextid);
     }
 
     /**
-     * Function to create a dummy post.
+     * Create a grade_category.
      *
      * @param array|stdClass $record
-     * @return stdClass the post object
+     * @return stdClass the grade category record
      */
-    public function create_forum_post($record = null) {
-        global $DB;
+    public function create_grade_category($record = null) {
+        global $CFG;
 
-        // Increment the forum post count.
-        $this->forumpostcount++;
+        $this->gradecategorycounter++;
 
-        // Variable to store time.
-        $time = time() + $this->forumpostcount;
+        $record = (array)$record;
 
-        $record = (array) $record;
-
-        if (!isset($record['discussion'])) {
-            throw new coding_exception('discussion must be present in phpunit_util::create_forum_post() $record');
+        if (empty($record['courseid'])) {
+            throw new coding_exception('courseid must be present in testing::create_grade_category() $record');
         }
 
-        if (!isset($record['userid'])) {
-            throw new coding_exception('userid must be present in phpunit_util::create_forum_post() $record');
+        if (!isset($record['fullname'])) {
+            $record['fullname'] = 'Grade category ' . $this->gradecategorycounter;
         }
 
-        if (!isset($record['parent'])) {
-            $record['parent'] = 0;
-        }
+        // For gradelib classes.
+        require_once($CFG->libdir . '/gradelib.php');
+        // Create new grading category in this course.
+        $gradecategory = new grade_category(array('courseid' => $record['courseid']), false);
+        $gradecategory->apply_default_settings();
+        grade_category::set_properties($gradecategory, $record);
+        $gradecategory->apply_forced_settings();
+        $gradecategory->insert();
 
-        if (!isset($record['subject'])) {
-            $record['subject'] = 'Forum post subject ' . $this->forumpostcount;
-        }
+        // This creates a default grade item for the category
+        $gradeitem = $gradecategory->load_grade_item();
 
-        if (!isset($record['message'])) {
-            $record['message'] = html_writer::tag('p', 'Forum message post ' . $this->forumpostcount);
-        }
-
-        if (!isset($record['created'])) {
-            $record['created'] = $time;
-        }
-
-        if (!isset($record['modified'])) {
-            $record['modified'] = $time;
-        }
-
-        $record = (object) $record;
-
-        // Add the post.
-        $record->id = $DB->insert_record('forum_posts', $record);
-
-        // Update the last post.
-        forum_discussion_update_last_post($record->discussion);
-
-        return $record;
+        $gradecategory->update_from_db();
+        return $gradecategory->get_record_data();
     }
-}
-
-/**
- * Deprecated in favour of testing_data_generator
- *
- * @deprecated since Moodle 2.5 MDL-37457 - please do not use this function any more.
- * @todo       MDL-37517 This will be deleted in Moodle 2.7
- * @see        testing_data_generator
- * @package    core
- * @category   test
- * @copyright  2012 David Monllaó
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
-class phpunit_data_generator extends testing_data_generator {
 
     /**
-     * Dumb constructor to throw the deprecated notification
+     * Create a grade_item.
+     *
+     * @param array|stdClass $record
+     * @return stdClass the grade item record
      */
-    public function __construct() {
-        debugging('Class phpunit_data_generator is deprecated, please use class testing_module_generator instead', DEBUG_DEVELOPER);
+    public function create_grade_item($record = null) {
+        global $CFG;
+        require_once("$CFG->libdir/gradelib.php");
+
+        $this->gradeitemcounter++;
+
+        if (!isset($record['itemtype'])) {
+            $record['itemtype'] = 'manual';
+        }
+
+        if (!isset($record['itemname'])) {
+            $record['itemname'] = 'Grade item ' . $this->gradeitemcounter;
+        }
+
+        if (isset($record['outcomeid'])) {
+            $outcome = new grade_outcome(array('id' => $record['outcomeid']));
+            $record['scaleid'] = $outcome->scaleid;
+        }
+        if (isset($record['scaleid'])) {
+            $record['gradetype'] = GRADE_TYPE_SCALE;
+        } else if (!isset($record['gradetype'])) {
+            $record['gradetype'] = GRADE_TYPE_VALUE;
+        }
+
+        // Create new grade item in this course.
+        $gradeitem = new grade_item($record, false);
+        $gradeitem->insert();
+
+        $gradeitem->update_from_db();
+        return $gradeitem->get_record_data();
+    }
+
+    /**
+     * Create a grade_outcome.
+     *
+     * @param array|stdClass $record
+     * @return stdClass the grade outcome record
+     */
+    public function create_grade_outcome($record = null) {
+        global $CFG;
+
+        $this->gradeoutcomecounter++;
+        $i = $this->gradeoutcomecounter;
+
+        if (!isset($record['fullname'])) {
+            $record['fullname'] = 'Grade outcome ' . $i;
+        }
+
+        // For gradelib classes.
+        require_once($CFG->libdir . '/gradelib.php');
+        // Create new grading outcome in this course.
+        $gradeoutcome = new grade_outcome($record, false);
+        $gradeoutcome->insert();
+
+        $gradeoutcome->update_from_db();
+        return $gradeoutcome->get_record_data();
     }
 }

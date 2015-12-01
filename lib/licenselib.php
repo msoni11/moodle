@@ -19,7 +19,7 @@
 /**
  * A namespace contains license specific functions
  *
- * @since      2.0
+ * @since      Moodle 2.0
  * @package    core
  * @subpackage lib
  * @copyright  2010 Dongsheng Cai <dongsheng@moodle.com>
@@ -192,9 +192,9 @@ class license_manager {
 
         $license->shortname = 'cc-nc';
         $license->fullname = 'Creative Commons - No Commercial';
-        $license->source = 'http://creativecommons.org/licenses/by-nd/3.0/';
+        $license->source = 'http://creativecommons.org/licenses/by-nc/3.0/';
         $license->enabled = 1;
-        $license->version = '2010033100';
+        $license->version = '2013051500';
         $active_licenses[] = $license->shortname;
         self::add($license);
 

@@ -46,7 +46,7 @@ class core_message_renderer extends plugin_renderer_base {
         global $CFG;
         // Display the current workflows
         $table = new html_table();
-        $table->attributes['class'] = 'generaltable';
+        $table->attributes['class'] = 'admintable generaltable';
         $table->data        = array();
         $table->head        = array(
             get_string('name'),
@@ -81,7 +81,7 @@ class core_message_renderer extends plugin_renderer_base {
                     )
                 ));
             } else {
-                $name->attributes['class'] = 'dimmed_text';
+                $row->attributes['class'] = 'dimmed_text';
                 $url = new moodle_url('/admin/message.php', array('enable' => $processor->id, 'sesskey' => sesskey()));
                 $enable->text = html_writer::link($url, html_writer::empty_tag('img',
                     array('src'   => $this->output->pix_url('t/show'),
@@ -134,6 +134,9 @@ class core_message_renderer extends plugin_renderer_base {
         foreach ($processors as $processor) {
             $table->head[]  = get_string('pluginname', 'message_'.$processor->name);
         }
+        // Add enable/disable to head
+        $table->head[] = get_string('enabled', 'core_message');
+
         // Generate the matrix of settings for each provider and processor
         foreach ($providers as $provider) {
             $row = new html_table_row();
@@ -143,14 +146,16 @@ class core_message_renderer extends plugin_renderer_base {
             // Provider Name
             $providername = get_string('messageprovider:'.$provider->name, $provider->component);
             $row->cells[] = new html_table_cell($providername);
-
+            $providersettingprefix = $provider->component.'_'.$provider->name.'_';
+            $disableprovidersetting = $providersettingprefix.'disable';
+            $providerdisabled = !empty($preferences->$disableprovidersetting);
             // Settings for each processor
             foreach ($processors as $processor) {
                 $cellcontent = '';
                 foreach (array('permitted', 'loggedin', 'loggedoff') as $setting) {
                     // pepare element and preference names
-                    $elementname = $provider->component.'_'.$provider->name.'_'.$setting.'['.$processor->name.']';
-                    $preferencebase = $provider->component.'_'.$provider->name.'_'.$setting;
+                    $elementname = $providersettingprefix.$setting.'['.$processor->name.']';
+                    $preferencebase = $providersettingprefix.$setting;
                     // prepare language bits
                     $processorname = get_string('pluginname', 'message_'.$processor->name);
                     $statename = get_string($setting, 'message');
@@ -164,7 +169,9 @@ class core_message_renderer extends plugin_renderer_base {
                         // determine the current setting or use default
                         $select = MESSAGE_DEFAULT_PERMITTED;
                         $preference = $processor->name.'_provider_'.$preferencebase;
-                        if (array_key_exists($preference, $preferences)) {
+                        if ($providerdisabled) {
+                            $select = MESSAGE_DISALLOWED;
+                        } else if (array_key_exists($preference, $preferences)) {
                             $select = $preferences->{$preference};
                         }
                         // dropdown menu
@@ -193,6 +200,10 @@ class core_message_renderer extends plugin_renderer_base {
                 }
                 $row->cells[] = new html_table_cell($cellcontent);
             }
+            $disableprovider = html_writer::checkbox($disableprovidersetting, 1, !$providerdisabled, '',
+                    array('id' => $disableprovidersetting, 'class' => 'messagedisable'));
+            $disableprovider = html_writer::tag('div', $disableprovider);
+            $row->cells[] = new html_table_cell($disableprovider);
             $table->data[] = $row;
         }
 
@@ -212,9 +223,15 @@ class core_message_renderer extends plugin_renderer_base {
      * @param array $preferences Array of objects containing current preferences
      * @param array $defaultpreferences Array of objects containing site default preferences
      * @param bool $notificationsdisabled Indicate if the user's "emailstop" flag is set (shouldn't receive any non-forced notifications)
+     * @param null|int $userid User id, or null if current user.
      * @return string The text to render
      */
-    public function manage_messagingoptions($processors, $providers, $preferences, $defaultpreferences, $notificationsdisabled = false) {
+    public function manage_messagingoptions($processors, $providers, $preferences, $defaultpreferences,
+                                            $notificationsdisabled = false, $userid = null) {
+        global $USER;
+        if (empty($userid)) {
+            $userid = $USER->id;
+        }
         // Filter out enabled, available system_configured and user_configured processors only.
         $readyprocessors = array_filter($processors, create_function('$a', 'return $a->enabled && $a->configured && $a->object->is_user_configured();'));
 
@@ -240,6 +257,7 @@ class core_message_renderer extends plugin_renderer_base {
         $numprocs = count($processors);
         // Display the messaging options table(s)
         foreach ($components as $component) {
+            $provideradded = false;
             $table = new html_table();
             $table->attributes['class'] = 'generaltable';
             $table->data = array();
@@ -249,18 +267,18 @@ class core_message_renderer extends plugin_renderer_base {
                 $componentname = get_string('coresystem');
             }
             $table->head = array($componentname);
-
             foreach ($readyprocessors as $processor) {
                 $table->head[]  = get_string('pluginname', 'message_'.$processor->name);
             }
-
             // Populate the table with rows
-            foreach ( $providers as $provider) {
-                if( $provider->component != $component) {
+            foreach ($providers as $provider) {
+                $preferencebase = $provider->component.'_'.$provider->name;
+                // If provider component is not same or provider disabled then don't show.
+                if (($provider->component != $component) ||
+                        (!empty($defaultpreferences->{$preferencebase.'_disable'}))) {
                     continue;
                 }
-                $preferencebase = $provider->component.'_'.$provider->name;
-
+                $provideradded = true;
                 $headerrow = new html_table_row();
                 $providername = get_string('messageprovider:'.$provider->name, $provider->component);
                 $providercell = new html_table_cell($providername);
@@ -331,9 +349,12 @@ class core_message_renderer extends plugin_renderer_base {
                     $table->data[] = $optionrow;
                 }
             }
-            $output .= html_writer::start_tag('div', array('class' => 'messagesettingcomponent'));
-            $output .= html_writer::table($table);
-            $output .= html_writer::end_tag('div');
+            // Add settings only if provider added for component.
+            if ($provideradded) {
+                $output .= html_writer::start_tag('div', array('class' => 'messagesettingcomponent'));
+                $output .= html_writer::table($table);
+                $output .= html_writer::end_tag('div');
+            }
         }
 
         $output .= html_writer::end_tag('fieldset');
@@ -353,6 +374,10 @@ class core_message_renderer extends plugin_renderer_base {
         $output .= html_writer::nonempty_tag('legend', get_string('generalsettings','admin'), array('class' => 'ftoggler'));
 
         $output .= html_writer::start_tag('div');
+        $output .= html_writer::checkbox('beepnewmessage', 1, $preferences->beepnewmessage, get_string('beepnewmessage', 'message'));
+        $output .= html_writer::end_tag('div');
+
+        $output .= html_writer::start_tag('div');
         $output .= html_writer::checkbox('blocknoncontacts', 1, $preferences->blocknoncontacts, get_string('blocknoncontacts', 'message'));
         $output .= html_writer::end_tag('div');
 
@@ -360,10 +385,15 @@ class core_message_renderer extends plugin_renderer_base {
         $disableallcheckbox .= $this->output->help_icon('disableall', 'message');
         $output .= html_writer::nonempty_tag('div', $disableallcheckbox, array('class'=>'disableall'));
 
+        $redirect = new moodle_url("/user/preferences.php", array('userid' => $userid));
         $output .= html_writer::end_tag('fieldset');
         $output .= html_writer::start_tag('div', array('class' => 'mdl-align'));
-        $output .= html_writer::empty_tag('input', array('type' => 'submit', 'value' => get_string('updatemyprofile'), 'class' => 'form-submit'));
+        $output .= html_writer::empty_tag('input', array('type' => 'submit',
+            'value' => get_string('savechanges'), 'class' => 'form-submit'));
+        $output .= html_writer::link($redirect, html_writer::empty_tag('input', array('type' => 'button',
+            'value' => get_string('cancel'), 'class' => 'btn-cancel')));
         $output .= html_writer::end_tag('div');
+
         $output .= html_writer::end_tag('form');
         return $output;
     }

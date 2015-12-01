@@ -18,7 +18,7 @@
 /**
  * Strings for component 'glossary', language 'en', branch 'MOODLE_20_STABLE'
  *
- * @package   glossary
+ * @package mod_glossary
  * @copyright 1999 onwards Martin Dougiamas  {@link http://moodle.com}
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -55,6 +55,7 @@ $string['attachment_help'] = 'You can optionally attach one or more files to a g
 $string['author'] = 'author';
 $string['authorview'] = 'Browse by Author';
 $string['back'] = 'Back';
+$string['cachedef_concepts'] = 'Concept linking';
 $string['cantinsertcat'] = 'Can\'t insert category';
 $string['cantinsertrec'] = 'Can\'t insert record';
 $string['cantinsertrel'] = 'Can\'t insert relation category-entry';
@@ -79,6 +80,7 @@ $string['cnfshowgroup'] = 'Specify if the group break should be shown or not.';
 $string['cnfsortkey'] = 'Select the sorting key by default.';
 $string['cnfsortorder'] = 'Select the sorting order by default.';
 $string['cnfstudentcanpost'] = 'Define if the students can or cannot post entries by default';
+$string['cnftabs'] = 'Select visible tabs for this glossary format';
 $string['comment'] = 'Comment';
 $string['commentdeleted'] = 'The comment has been deleted.';
 $string['comments'] = 'Comments';
@@ -108,6 +110,7 @@ $string['deletingnoneemptycategory'] = 'Deleting this category will not delete t
 $string['descending'] = 'descending';
 $string['destination'] = 'Destination of imported entries';
 $string['destination_help'] = 'Entries can either be imported and added to the current glossary or to a new glossary, in which case a new glossary will be created based on information in the XML file.';
+$string['disapprove'] = 'Undo approval';
 $string['displayformat'] = 'Display format';
 $string['displayformat_help'] = 'There are 7 display formats:
 
@@ -130,7 +133,7 @@ $string['displayformats'] = 'Display formats';
 $string['displayformatssetup'] = 'Display formats setup';
 $string['duplicatecategory'] = 'Duplicate category';
 $string['duplicateentry'] = 'Duplicate entry';
-$string['editalways'] = 'Edit always';
+$string['editalways'] = 'Always allow editing';
 $string['editalways_help'] = 'This setting specifies whether entries are always editable or whether students can only edit their entries during a configured editing time (usually 30 minutes).';
 $string['editcategories'] = 'Edit categories';
 $string['editentry'] = 'Edit entry';
@@ -154,6 +157,15 @@ $string['errconceptalreadyexists'] = 'This concept already exists. No duplicates
 $string['errdeltimeexpired'] = 'You can\'t delete this. Time expired!';
 $string['erredittimeexpired'] = 'The editing time for this entry has expired.';
 $string['errorparsingxml'] = 'Errors occurred while parsing the file. Make sure it is valid XML syntax.';
+$string['eventcategorycreated'] = 'Category has been created';
+$string['eventcategorydeleted'] = 'Category has been deleted';
+$string['eventcategoryupdated'] = 'Category has been updated';
+$string['evententryapproved'] = 'Entry has been approved';
+$string['evententrycreated'] = 'Entry has been created';
+$string['evententrydeleted'] = 'Entry has been deleted';
+$string['evententrydisapproved'] = 'Entry has been disapproved';
+$string['evententryviewed'] = 'Entry has been viewed';
+$string['evententryupdated'] = 'Entry has been updated';
 $string['explainaddentry'] = 'Add a new entry to the current glossary.<br />Concept and definition are mandatory fields.';
 $string['explainall'] = 'Shows ALL entries on one page';
 $string['explainalphabet'] = 'Browse the glossary using this index';
@@ -173,7 +185,7 @@ $string['filtername'] = 'Glossary auto-linking';
 $string['fullmatch'] = 'Match whole words only';
 $string['fullmatch_help'] = 'This setting specifies whether only whole words will be linked, for example, a glossary entry named "construct" will not create a link inside the word "constructivism".';
 $string['glossary:addinstance'] = 'Add a new glossary';
-$string['glossary:approve'] = 'Approve unapproved entries';
+$string['glossary:approve'] = 'Approve and undo approved entries';
 $string['glossary:comment'] = 'Create comments';
 $string['glossary:export'] = 'Export entries';
 $string['glossary:exportentry'] = 'Export single entry';
@@ -248,6 +260,7 @@ $string['page-mod-glossary-view'] = 'View glossary edit page';
 $string['pluginadministration'] = 'Glossary administration';
 $string['pluginname'] = 'Glossary';
 $string['popupformat'] = 'Popup format';
+$string['print'] = 'Print';
 $string['printerfriendly'] = 'Printer-friendly version';
 $string['printviewnotallowed'] = 'Print view isn\'t allowed';
 $string['question'] = 'Question';
@@ -264,7 +277,7 @@ $string['searchindefinition'] = 'Search full text';
 $string['secondaryglossary'] = 'Secondary glossary';
 $string['showall'] = 'Show \'ALL\' link';
 $string['showall_help'] = 'If enabled, participants can browse all entries at once.';
-$string['showalphabet'] = 'Show alphabet';
+$string['showalphabet'] = 'Show alphabet links';
 $string['showalphabet_help'] = 'If enabled, participants can browse the glossary by letters of the alphabet.';
 $string['showspecial'] = 'Show \'Special\' link';
 $string['showspecial_help'] = 'If enabled, participants can browse the glossary by special characters, such as @ and #.';
@@ -278,6 +291,7 @@ $string['studentcanpost'] = 'Students can add entries';
 $string['totalentries'] = 'Total entries';
 $string['usedynalink'] = 'Automatically link glossary entries';
 $string['usedynalink_help'] = 'If site-wide glossary auto-linking has been enabled by an administrator and this setting is enabled, the "Add a new entry" form includes the option to automatically link the entry wherever the concept words and phrases appear throughout the rest of the course.';
+$string['visibletabs'] = 'Visible tabs';
 $string['waitingapproval'] = 'Waiting approval';
 $string['warningstudentcapost'] = '(Applies only if the glossary is not the main one)';
 $string['withauthor'] = 'Concepts with author';

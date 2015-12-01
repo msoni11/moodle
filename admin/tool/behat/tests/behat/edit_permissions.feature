@@ -1,21 +1,20 @@
-@tool_behat
+@tool @tool_behat
 Feature: Edit capabilities
   In order to extend and restrict moodle features
-  As an admin or teacher
+  As an admin or a teacher
   I need to allow/deny the existing capabilities at different levels
 
   Background:
-    Given the following "users" exists:
+    Given the following "users" exist:
       | username | firstname | lastname | email |
-      | teacher1 | Teacher | 1 | teacher1@asd.com |
-    And the following "courses" exists:
+      | teacher1 | Teacher | 1 | teacher1@example.com |
+    And the following "courses" exist:
       | fullname | shortname | category |
       | Course 1 | C1 | 0 |
-    And the following "course enrolments" exists:
+    And the following "course enrolments" exist:
       | user | course | role |
       | teacher1 | C1 | editingteacher |
 
-  @javascript
   Scenario: Default system capabilities modification
     Given I log in as "admin"
     And I set the following system permissions of "Teacher" role:
@@ -25,12 +24,11 @@ Feature: Edit capabilities
       | moodle/grade:managesharedforms | Prevent |
       | moodle/course:request | Prohibit |
     When I follow "Edit Teacher role"
-    Then the "block/mnet_hosts:myaddinstance" field should match "1" value
-    And the "moodle/community:add" field should match "0" value
-    And the "moodle/grade:managesharedforms" field should match "-1" value
-    And the "moodle/course:request" field should match "-1000" value
+    Then "block/mnet_hosts:myaddinstance" capability has "Allow" permission
+    And "moodle/community:add" capability has "Not set" permission
+    And "moodle/grade:managesharedforms" capability has "Prevent" permission
+    And "moodle/course:request" capability has "Prohibit" permission
 
-  @javascript
   Scenario: Course capabilities overrides
     Given I log in as "teacher1"
     And I follow "Course 1"
@@ -40,12 +38,12 @@ Feature: Edit capabilities
       | mod/forum:deleteanypost | Prohibit |
       | mod/forum:editanypost | Prevent |
       | mod/forum:addquestion | Allow |
-    When I select "Student (3)" from "Advanced role override"
-    Then the "mod/forum:deleteanypost" field should match "-1000" value
-    And the "mod/forum:editanypost" field should match "-1" value
-    And the "mod/forum:addquestion" field should match "1" value
+    When I set the field "Advanced role override" to "Student (3)"
+    And I press "Go"
+    Then "mod/forum:deleteanypost" capability has "Prohibit" permission
+    And "mod/forum:editanypost" capability has "Prevent" permission
+    And "mod/forum:addquestion" capability has "Allow" permission
 
-  @javascript
   Scenario: Module capabilities overrides
     Given I log in as "teacher1"
     And I follow "Course 1"
@@ -59,7 +57,8 @@ Feature: Edit capabilities
       | mod/forum:deleteanypost | Prohibit |
       | mod/forum:editanypost | Prevent |
       | mod/forum:addquestion | Allow |
-    When I select "Student (3)" from "Advanced role override"
-    Then the "mod/forum:deleteanypost" field should match "-1000" value
-    And the "mod/forum:editanypost" field should match "-1" value
-    And the "mod/forum:addquestion" field should match "1" value
+    When I set the field "Advanced role override" to "Student (3)"
+    And I press "Go"
+    Then "mod/forum:deleteanypost" capability has "Prohibit" permission
+    And "mod/forum:editanypost" capability has "Prevent" permission
+    And "mod/forum:addquestion" capability has "Allow" permission

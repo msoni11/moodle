@@ -88,6 +88,7 @@ class enrol_flatfile_testcase extends advanced_testcase {
         $user4 = $this->getDataGenerator()->create_user(array('idnumber'=>'čtvrtý'));
         $user5 = $this->getDataGenerator()->create_user(array('idnumber'=>'u5'));
         $user6 = $this->getDataGenerator()->create_user(array('idnumber'=>'u6'));
+        $user7 = $this->getDataGenerator()->create_user(array('idnumber'=>''));
 
         $course1 = $this->getDataGenerator()->create_course(array('idnumber'=>'c1'));
         $course2 = $this->getDataGenerator()->create_course(array('idnumber'=>'c2'));
@@ -124,7 +125,8 @@ class enrol_flatfile_testcase extends advanced_testcase {
             add,student,u5,c2,20,10
             add,student,u6,c1,0,$future
             add,student,u6,c2,$future,0
-            add,student,u6,c3,$future,$farfuture";
+            add,student,u6,c3,$future,$farfuture
+            add,student,,c2";
         file_put_contents($file, $data);
 
         $this->assertEquals(0, $DB->count_records('user_enrolments'));
@@ -165,7 +167,7 @@ class enrol_flatfile_testcase extends advanced_testcase {
         // Test encoding.
 
         $data = "add;student;čtvrtý;c3";
-        $data = textlib::convert($data, 'utf-8', 'iso-8859-2');
+        $data = core_text::convert($data, 'utf-8', 'iso-8859-2');
         file_put_contents($file, $data);
         $flatfileplugin->set_config('encoding', 'iso-8859-2');
 
@@ -464,5 +466,36 @@ class enrol_flatfile_testcase extends advanced_testcase {
         $this->assertEquals(5, $DB->count_records('role_assignments', array('roleid'=>$studentrole->id)));
         $this->assertEquals(1, $DB->count_records('role_assignments', array('roleid'=>$teacherrole->id)));
         $this->assertEquals(0, $DB->count_records('role_assignments', array('roleid'=>$managerrole->id)));
+    }
+
+    /**
+     * Flatfile enrolment sync task test.
+     */
+    public function test_flatfile_sync_task() {
+        global $CFG, $DB;
+        $this->resetAfterTest();
+
+        $flatfileplugin = enrol_get_plugin('flatfile');
+
+        $trace = new null_progress_trace();
+        $this->enable_plugin();
+        $file = "$CFG->dataroot/enrol.txt";
+        $flatfileplugin->set_config('location', $file);
+
+        $studentrole = $DB->get_record('role', array('shortname' => 'student'));
+        $this->assertNotEmpty($studentrole);
+
+        $user1 = $this->getDataGenerator()->create_user(array('idnumber' => 'u1'));
+        $course1 = $this->getDataGenerator()->create_course(array('idnumber' => 'c1'));
+        $context1 = context_course::instance($course1->id);
+
+        $data =
+            "add,student,u1,c1";
+        file_put_contents($file, $data);
+
+        $task = new enrol_flatfile\task\flatfile_sync_task;
+        $task->execute();
+
+        $this->assertEquals(1, $DB->count_records('role_assignments', array('roleid' => $studentrole->id)));
     }
 }

@@ -92,8 +92,10 @@ class qtype_shortanswer_question extends question_graded_by_strategy
         $pattern = self::safe_normalize($pattern);
         $string = self::safe_normalize($string);
 
-        // Break the string on non-escaped asterisks.
-        $bits = preg_split('/(?<!\\\\)\*/', $pattern);
+        // Break the string on non-escaped runs of asterisks.
+        // ** is equivalent to *, but people were doing that, and with many *s it breaks preg.
+        $bits = preg_split('/(?<!\\\\)\*+/', $pattern);
+
         // Escape regexp special characters in the bits.
         $escapedbits = array();
         foreach ($bits as $bit) {
@@ -162,7 +164,7 @@ class qtype_shortanswer_question extends question_graded_by_strategy
         if ($component == 'question' && $filearea == 'answerfeedback') {
             $currentanswer = $qa->get_last_qt_var('answer');
             $answer = $this->get_matching_answer(array('answer' => $currentanswer));
-            $answerid = reset($args); // itemid is answer id.
+            $answerid = reset($args); // Itemid is answer id.
             return $options->feedback && $answer && $answerid == $answer->id;
 
         } else if ($component == 'question' && $filearea == 'hint') {

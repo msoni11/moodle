@@ -23,8 +23,7 @@
  *    delete
  *    move
  *    moveit
- * @package    mod
- * @subpackage lesson
+ * @package mod_lesson
  * @copyright 1999 onwards Martin Dougiamas  {@link http://moodle.com}
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  **/
@@ -81,24 +80,31 @@ switch ($action) {
         $title = $DB->get_field("lesson_pages", "title", array("id" => $pageid));
 
         echo $lessonoutput->header($lesson, $cm, '', false, null, get_string('moving', 'lesson', format_String($title)));
-        echo $OUTPUT->heading(get_string("moving", "lesson", format_string($title)));
+        echo $OUTPUT->heading(get_string("moving", "lesson", format_string($title)), 3);
 
         $params = array ("lessonid" => $lesson->id, "prevpageid" => 0);
         if (!$page = $DB->get_record_select("lesson_pages", "lessonid = :lessonid AND prevpageid = :prevpageid", $params)) {
             print_error('cannotfindfirstpage', 'lesson');
         }
 
-        echo "<center><table cellpadding=\"5\" border=\"1\">\n";
-        echo "<tr><td><a href=\"lesson.php?id=$cm->id&amp;sesskey=".sesskey()."&amp;action=moveit&amp;pageid=$pageid&amp;after=0\"><small>".
-            get_string("movepagehere", "lesson")."</small></a></td></tr>\n";
+        echo html_writer::start_tag('div', array('class' => 'move-page'));
+
+        echo html_writer::start_tag('div', array('class' => 'available-position'));
+        $moveurl = "lesson.php?id=$cm->id&sesskey=".sesskey()."&action=moveit&pageid=$pageid&after=0";
+        echo html_writer::link($moveurl, get_string("movepagehere", "lesson"));
+        echo html_writer::end_tag('div');
+
         while (true) {
             if ($page->id != $pageid) {
                 if (!$title = trim(format_string($page->title))) {
                     $title = "<< ".get_string("notitle", "lesson")."  >>";
                 }
-                echo "<tr><td><b>$title</b></td></tr>\n";
-                echo "<tr><td><a href=\"lesson.php?id=$cm->id&amp;sesskey=".sesskey()."&amp;action=moveit&amp;pageid=$pageid&amp;after={$page->id}\"><small>".
-                    get_string("movepagehere", "lesson")."</small></a></td></tr>\n";
+                echo html_writer::tag('div', $title, array('class' => 'page'));
+
+                echo html_writer::start_tag('div', array('class' => 'available-position'));
+                $moveurl = "lesson.php?id=$cm->id&sesskey=".sesskey()."&action=moveit&pageid=$pageid&after={$page->id}";
+                echo html_writer::link($moveurl, get_string("movepagehere", "lesson"));
+                echo html_writer::end_tag('div');
             }
             if ($page->nextpageid) {
                 if (!$page = $DB->get_record("lesson_pages", array("id" => $page->nextpageid))) {
@@ -109,7 +115,7 @@ switch ($action) {
                 break;
             }
         }
-        echo "</table>\n";
+        echo html_writer::end_tag('div');
 
         break;
     case 'delete':
@@ -120,45 +126,7 @@ switch ($action) {
     case 'moveit':
         $after = (int)required_param('after', PARAM_INT); // target page
 
-        $pages = $lesson->load_all_pages();
-
-        if (!array_key_exists($pageid, $pages) || ($after!=0 && !array_key_exists($after, $pages))) {
-            print_error('cannotfindpages', 'lesson', "$CFG->wwwroot/mod/lesson/edit.php?id=$cm->id");
-        }
-        $pagetomove = clone($pages[$pageid]);
-        unset($pages[$pageid]);
-
-        $pageids = array();
-        if ($after === 0) {
-            $pageids['p0'] = $pageid;
-        }
-        foreach ($pages as $page) {
-            $pageids[] = $page->id;
-            if ($page->id == $after) {
-                $pageids[] = $pageid;
-            }
-        }
-
-        $pageidsref = $pageids;
-        reset($pageidsref);
-        $prev = 0;
-        $next = next($pageidsref);
-        foreach ($pageids as $pid) {
-            if ($pid === $pageid) {
-                $page = $pagetomove;
-            } else {
-                $page = $pages[$pid];
-            }
-            if ($page->prevpageid != $prev || $page->nextpageid != $next) {
-                $page->move($next, $prev);
-            }
-            $prev = $page->id;
-            $next = next($pageidsref);
-            if (!$next) {
-                $next = 0;
-            }
-        }
-
+        $lesson->resort_pages($pageid, $after);
         redirect("$CFG->wwwroot/mod/lesson/edit.php?id=$cm->id");
         break;
     default:

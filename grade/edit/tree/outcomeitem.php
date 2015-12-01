@@ -35,6 +35,9 @@ if ($id !== 0) {
     $url->param('id', $id);
 }
 $PAGE->set_url($url);
+$PAGE->set_pagelayout('admin');
+navigation_node::override_active_url(new moodle_url('/grade/edit/tree/index.php',
+    array('id'=>$courseid)));
 
 if (!$course = $DB->get_record('course', array('id' => $courseid))) {
     print_error('nocourseid');
@@ -101,6 +104,7 @@ if (empty($parent_category)) {
     $item->aggregationcoef = 0;
 } else if ($parent_category->aggregation == GRADE_AGGREGATE_SUM) {
     $item->aggregationcoef = $item->aggregationcoef > 0 ? 1 : 0;
+    $item->aggregationcoef2 = format_float($item->aggregationcoef2 * 100.0);
 } else {
     $item->aggregationcoef = format_float($item->aggregationcoef, 4);
 }
@@ -110,8 +114,18 @@ $mform->set_data($item);
 
 if ($data = $mform->get_data()) {
 
-    if (!isset($data->aggregationcoef)) {
-        $data->aggregationcoef = 0;
+    // This is a new item, and the category chosen is different than the default category.
+    if (empty($grade_item->id) && isset($data->parentcategory) && $parent_category->id != $data->parentcategory) {
+        $parent_category = grade_category::fetch(array('id' => $data->parentcategory));
+    }
+
+    // If unset, give the aggregation values a default based on parent aggregation method.
+    $defaults = grade_category::get_default_aggregation_coefficient_values($parent_category->aggregation);
+    if (!isset($data->aggregationcoef) || $data->aggregationcoef == '') {
+        $data->aggregationcoef = $defaults['aggregationcoef'];
+    }
+    if (!isset($data->weightoverride)) {
+        $data->weightoverride = $defaults['weightoverride'];
     }
 
     if (property_exists($data, 'calculation')) {
@@ -128,11 +142,16 @@ if ($data = $mform->get_data()) {
     unset($data->locked);
     unset($data->locktime);
 
-    $convert = array('gradepass', 'aggregationcoef');
+    $convert = array('gradepass', 'aggregationcoef', 'aggregationcoef2');
     foreach ($convert as $param) {
         if (property_exists($data, $param)) {
             $data->$param = unformat_float($data->$param);
         }
+    }
+    if (isset($data->aggregationcoef2) && $parent_category->aggregation == GRADE_AGGREGATE_SUM) {
+        $data->aggregationcoef2 = $data->aggregationcoef2 / 100.0;
+    } else {
+        $data->aggregationcoef2 = $defaults['aggregationcoef2'];
     }
 
     $grade_item = new grade_item(array('id'=>$id, 'courseid'=>$courseid));
@@ -193,7 +212,7 @@ if ($data = $mform->get_data()) {
         } else {
             // set parent if needed
             if (isset($data->parentcategory)) {
-                $grade_item->set_parent($data->parentcategory, 'gradebook');
+                $grade_item->set_parent($data->parentcategory, false);
             }
         }
 
@@ -214,7 +233,8 @@ if ($data = $mform->get_data()) {
     redirect($returnurl);
 }
 
-print_grade_page_head($courseid, 'edittree', null, $heading);
+$PAGE->navbar->add($heading);
+print_grade_page_head($courseid, 'settings', null, $heading, false, false, false);
 
 if (!grade_outcome::fetch_all_available($COURSE->id)) {
     echo $OUTPUT->confirm(get_string('nooutcomes', 'grades'), $CFG->wwwroot.'/grade/edit/outcome/course.php?id='.$courseid, $returnurl);

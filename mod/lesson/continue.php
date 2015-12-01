@@ -18,8 +18,7 @@
 /**
  * Action for processing page answers by users
  *
- * @package    mod
- * @subpackage lesson
+ * @package mod_lesson
  * @copyright  2009 Sam Hemelryk
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  **/
@@ -37,12 +36,16 @@ $lesson = new lesson($DB->get_record('lesson', array('id' => $cm->instance), '*'
 require_login($course, false, $cm);
 require_sesskey();
 
+// Apply overrides.
+$lesson->update_effective_access($USER->id);
+
 $context = context_module::instance($cm->id);
 $canmanage = has_capability('mod/lesson:manage', $context);
 $lessonoutput = $PAGE->get_renderer('mod_lesson');
 
 $url = new moodle_url('/mod/lesson/continue.php', array('id'=>$cm->id));
 $PAGE->set_url($url);
+$PAGE->set_pagetype('mod-lesson-view');
 $PAGE->navbar->add(get_string('continue', 'lesson'));
 
 // This is the code updates the lesson time for a timed test
@@ -50,8 +53,8 @@ $PAGE->navbar->add(get_string('continue', 'lesson'));
 if (!$canmanage) {
     $lesson->displayleft = lesson_displayleftif($lesson);
     $timer = $lesson->update_timer();
-    if ($lesson->timed) {
-        $timeleft = ($timer->starttime + $lesson->maxtime * 60) - time();
+    if ($lesson->timelimit) {
+        $timeleft = ($timer->starttime + $lesson->timelimit) - time();
         if ($timeleft <= 0) {
             // Out of time
             $lesson->add_message(get_string('eolstudentoutoftime', 'lesson'));
@@ -95,6 +98,8 @@ if (isset($USER->modattempts[$lesson->id])) {
         $attempts = $DB->get_records("lesson_attempts", array("lessonid"=>$lesson->id, "userid"=>$USER->id, "retry"=>$nretakes), "timeseen", "id, pageid");
         $found = false;
         $temppageid = 0;
+        // Make sure that the newpageid always defaults to something valid.
+        $result->newpageid = LESSON_EOL;
         foreach($attempts as $attempt) {
             if ($found && $temppageid != $attempt->pageid) { // now try to find the next page, make sure next few attempts do no belong to current page
                 $result->newpageid = $attempt->pageid;
@@ -155,17 +160,13 @@ if ($canmanage) {
         $lesson->add_message(get_string("teacherjumpwarning", "lesson", $warningvars));
     }
     // Inform teacher that s/he will not see the timer
-    if ($lesson->timed) {
+    if ($lesson->timelimit) {
         $lesson->add_message(get_string("teachertimerwarning", "lesson"));
     }
 }
 // Report attempts remaining
-if ($result->attemptsremaining != 0 && !$lesson->review && !$reviewmode) {
+if ($result->attemptsremaining != 0 && $lesson->review && !$reviewmode) {
     $lesson->add_message(get_string('attemptsremaining', 'lesson', $result->attemptsremaining));
-}
-// Report if max attempts reached
-if ($result->maxattemptsreached != 0 && !$lesson->review && !$reviewmode) {
-    $lesson->add_message('('.get_string("maximumnumberofattemptsreached", "lesson").')');
 }
 
 $PAGE->set_url('/mod/lesson/view.php', array('id' => $cm->id, 'pageid' => $page->id));
@@ -182,7 +183,9 @@ if ($lesson->displayleft) {
 if ($lesson->ongoing && !$reviewmode) {
     echo $lessonoutput->ongoing_score($lesson);
 }
-echo $result->feedback;
+if (!$reviewmode) {
+    echo $result->feedback;
+}
 
 // User is modifying attempts - save button and some instructions
 if (isset($USER->modattempts[$lesson->id])) {
@@ -197,7 +200,7 @@ if (isset($USER->modattempts[$lesson->id])) {
 }
 
 // Review button back
-if (!$result->correctanswer && !$result->noanswer && !$result->isessayquestion && !$reviewmode && $lesson->review) {
+if (!$result->correctanswer && !$result->noanswer && !$result->isessayquestion && !$reviewmode && $lesson->review && !$result->maxattemptsreached) {
     $url = $CFG->wwwroot.'/mod/lesson/view.php';
     $content = html_writer::empty_tag('input', array('type'=>'hidden', 'name'=>'id', 'value'=>$cm->id));
     $content .= html_writer::empty_tag('input', array('type'=>'hidden', 'name'=>'pageid', 'value'=>$page->id));
@@ -206,7 +209,7 @@ if (!$result->correctanswer && !$result->noanswer && !$result->isessayquestion &
 }
 
 $url = new moodle_url('/mod/lesson/view.php', array('id'=>$cm->id, 'pageid'=>$result->newpageid));
-if ($lesson->review && !$result->correctanswer && !$result->noanswer && !$result->isessayquestion) {
+if ($lesson->review && !$result->correctanswer && !$result->noanswer && !$result->isessayquestion && !$result->maxattemptsreached) {
     // Review button continue
     echo $OUTPUT->single_button($url, get_string('reviewquestioncontinue', 'lesson'));
 } else {

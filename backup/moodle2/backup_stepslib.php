@@ -28,25 +28,27 @@
 defined('MOODLE_INTERNAL') || die();
 
 /**
- * create the temp dir where backup/restore will happen,
- * delete old directories and create temp ids table
+ * Create the temp dir where backup/restore will happen and create temp ids table.
  */
 class create_and_clean_temp_stuff extends backup_execution_step {
 
     protected function define_execution() {
+        $progress = $this->task->get_progress();
+        $progress->start_progress('Deleting backup directories');
         backup_helper::check_and_create_backup_dir($this->get_backupid());// Create backup temp dir
-        backup_helper::clear_backup_dir($this->get_backupid());           // Empty temp dir, just in case
-        backup_helper::delete_old_backup_dirs(time() - (4 * 60 * 60));    // Delete > 4 hours temp dirs
+        backup_helper::clear_backup_dir($this->get_backupid(), $progress);           // Empty temp dir, just in case
+        backup_controller_dbops::drop_backup_ids_temp_table($this->get_backupid()); // Drop ids temp table
         backup_controller_dbops::create_backup_ids_temp_table($this->get_backupid()); // Create ids temp table
+        $progress->end_progress();
     }
 }
 
 /**
- * delete the temp dir used by backup/restore (conditionally),
- * delete old directories and drop tem ids table. Note we delete
+ * Delete the temp dir used by backup/restore (conditionally),
+ * delete old directories and drop temp ids table. Note we delete
  * the directory but not the corresponding log file that will be
- * there for, at least, 4 hours - only delete_old_backup_dirs()
- * deletes log files (for easier access to them)
+ * there for, at least, 1 week - only delete_old_backup_dirs() or cron
+ * deletes log files (for easier access to them).
  */
 class drop_and_clean_temp_stuff extends backup_execution_step {
 
@@ -56,12 +58,15 @@ class drop_and_clean_temp_stuff extends backup_execution_step {
         global $CFG;
 
         backup_controller_dbops::drop_backup_ids_temp_table($this->get_backupid()); // Drop ids temp table
-        backup_helper::delete_old_backup_dirs(time() - (4 * 60 * 60));              // Delete > 4 hours temp dirs
+        backup_helper::delete_old_backup_dirs(strtotime('-1 week'));                // Delete > 1 week old temp dirs.
         // Delete temp dir conditionally:
         // 1) If $CFG->keeptempdirectoriesonbackup is not enabled
         // 2) If backup temp dir deletion has been marked to be avoided
         if (empty($CFG->keeptempdirectoriesonbackup) && !$this->skipcleaningtempdir) {
-            backup_helper::delete_backup_dir($this->get_backupid()); // Empty backup dir
+            $progress = $this->task->get_progress();
+            $progress->start_progress('Deleting backup dir');
+            backup_helper::delete_backup_dir($this->get_backupid(), $progress); // Empty backup dir
+            $progress->end_progress();
         }
     }
 
@@ -86,63 +91,9 @@ class create_taskbasepath_directory extends backup_execution_step {
 
 /**
  * Abstract structure step, parent of all the activity structure steps. Used to wrap the
- * activity structure definition within the main <activity ...> tag. Also provides
- * subplugin support for activities (that must be properly declared)
+ * activity structure definition within the main <activity ...> tag.
  */
 abstract class backup_activity_structure_step extends backup_structure_step {
-
-    /**
-     * Add subplugin structure to any element in the activity backup tree
-     *
-     * @param string $subplugintype type of subplugin as defined in activity db/subplugins.php
-     * @param backup_nested_element $element element in the activity backup tree that
-     *                                       we are going to add subplugin information to
-     * @param bool $multiple to define if multiple subplugins can produce information
-     *                       for each instance of $element (true) or no (false)
-     * @return void
-     */
-    protected function add_subplugin_structure($subplugintype, $element, $multiple) {
-
-        global $CFG;
-
-        // Check the requested subplugintype is a valid one
-        $subpluginsfile = $CFG->dirroot . '/mod/' . $this->task->get_modulename() . '/db/subplugins.php';
-        if (!file_exists($subpluginsfile)) {
-             throw new backup_step_exception('activity_missing_subplugins_php_file', $this->task->get_modulename());
-        }
-        include($subpluginsfile);
-        if (!array_key_exists($subplugintype, $subplugins)) {
-             throw new backup_step_exception('incorrect_subplugin_type', $subplugintype);
-        }
-
-        // Arrived here, subplugin is correct, let's create the optigroup
-        $optigroupname = $subplugintype . '_' . $element->get_name() . '_subplugin';
-        $optigroup = new backup_optigroup($optigroupname, null, $multiple);
-        $element->add_child($optigroup); // Add optigroup to stay connected since beginning
-
-        // Get all the optigroup_elements, looking across all the subplugin dirs
-        $subpluginsdirs = get_plugin_list($subplugintype);
-        foreach ($subpluginsdirs as $name => $subpluginsdir) {
-            $classname = 'backup_' . $subplugintype . '_' . $name . '_subplugin';
-            $backupfile = $subpluginsdir . '/backup/moodle2/' . $classname . '.class.php';
-            if (file_exists($backupfile)) {
-                require_once($backupfile);
-                $backupsubplugin = new $classname($subplugintype, $name, $optigroup, $this);
-                // Add subplugin returned structure to optigroup
-                $backupsubplugin->define_subplugin_structure($element->get_name());
-            }
-        }
-    }
-
-    /**
-     * As far as activity backup steps are implementing backup_subplugin stuff, they need to
-     * have the parent task available for wrapping purposes (get course/context....)
-     *
-     * @return backup_activity_task
-     */
-    public function get_task() {
-        return $this->task;
-    }
 
     /**
      * Wraps any activity backup structure within the common 'activity' element
@@ -209,7 +160,7 @@ abstract class backup_questions_activity_structure_step extends backup_activity_
 
         $qas = new backup_nested_element($nameprefix . 'question_attempts');
         $qa = new backup_nested_element($nameprefix . 'question_attempt', array('id'), array(
-                'slot', 'behaviour', 'questionid', 'maxmark', 'minfraction',
+                'slot', 'behaviour', 'questionid', 'variant', 'maxmark', 'minfraction', 'maxfraction',
                 'flagged', 'questionsummary', 'rightanswer', 'responsesummary',
                 'timemodified'));
 
@@ -307,21 +258,16 @@ abstract class backup_block_structure_step extends backup_structure_step {
 class backup_module_structure_step extends backup_structure_step {
 
     protected function define_structure() {
+        global $DB;
 
         // Define each element separated
 
         $module = new backup_nested_element('module', array('id', 'version'), array(
             'modulename', 'sectionid', 'sectionnumber', 'idnumber',
             'added', 'score', 'indent', 'visible',
-            'visibleold', 'groupmode', 'groupingid', 'groupmembersonly',
+            'visibleold', 'groupmode', 'groupingid',
             'completion', 'completiongradeitemnumber', 'completionview', 'completionexpected',
-            'availablefrom', 'availableuntil', 'showavailability', 'showdescription'));
-
-        $availinfo = new backup_nested_element('availability_info');
-        $availability = new backup_nested_element('availability', array('id'), array(
-            'sourcecmid', 'requiredcompletion', 'gradeitemid', 'grademin', 'grademax'));
-        $availabilityfield = new backup_nested_element('availability_field', array('id'), array(
-            'userfield', 'customfield', 'customfieldtype', 'operator', 'value'));
+            'availability', 'showdescription'));
 
         // attach format plugin structure to $module element, only one allowed
         $this->add_plugin_structure('format', $module, false);
@@ -333,25 +279,15 @@ class backup_module_structure_step extends backup_structure_step {
         // attach local plugin structure to $module, multiple allowed
         $this->add_plugin_structure('local', $module, true);
 
-        // Define the tree
-        $module->add_child($availinfo);
-        $availinfo->add_child($availability);
-        $availinfo->add_child($availabilityfield);
-
         // Set the sources
-        $module->set_source_sql('
-            SELECT cm.*, m.version, m.name AS modulename, s.id AS sectionid, s.section AS sectionnumber
+        $concat = $DB->sql_concat("'mod_'", 'm.name');
+        $module->set_source_sql("
+            SELECT cm.*, cp.value AS version, m.name AS modulename, s.id AS sectionid, s.section AS sectionnumber
               FROM {course_modules} cm
               JOIN {modules} m ON m.id = cm.module
+              JOIN {config_plugins} cp ON cp.plugin = $concat AND cp.name = 'version'
               JOIN {course_sections} s ON s.id = cm.section
-             WHERE cm.id = ?', array(backup::VAR_MODID));
-
-        $availability->set_source_table('course_modules_availability', array('coursemoduleid' => backup::VAR_MODID));
-        $availabilityfield->set_source_sql('
-            SELECT cmaf.*, uif.shortname AS customfield, uif.datatype AS customfieldtype
-              FROM {course_modules_avail_fields} cmaf
-         LEFT JOIN {user_info_field} uif ON uif.id = cmaf.customfieldid
-             WHERE cmaf.coursemoduleid = ?', array(backup::VAR_MODID));
+             WHERE cm.id = ?", array(backup::VAR_MODID));
 
         // Define annotations
         $module->annotate_ids('grouping', 'groupingid');
@@ -373,7 +309,7 @@ class backup_section_structure_step extends backup_structure_step {
 
         $section = new backup_nested_element('section', array('id'), array(
                 'number', 'name', 'summary', 'summaryformat', 'sequence', 'visible',
-                'availablefrom', 'availableuntil', 'showavailability', 'groupingid'));
+                'availabilityjson'));
 
         // attach format plugin structure to $section element, only one allowed
         $this->add_plugin_structure('format', $section, false);
@@ -381,27 +317,13 @@ class backup_section_structure_step extends backup_structure_step {
         // attach local plugin structure to $section element, multiple allowed
         $this->add_plugin_structure('local', $section, true);
 
-        // Add nested elements for _availability table
-        $avail = new backup_nested_element('availability', array('id'), array(
-                'sourcecmid', 'requiredcompletion', 'gradeitemid', 'grademin', 'grademax'));
-        $availfield = new backup_nested_element('availability_field', array('id'), array(
-            'userfield', 'operator', 'value', 'customfield', 'customfieldtype'));
-        $section->add_child($avail);
-        $section->add_child($availfield);
-
         // Add nested elements for course_format_options table
         $formatoptions = new backup_nested_element('course_format_options', array('id'), array(
             'format', 'name', 'value'));
         $section->add_child($formatoptions);
 
-        // Define sources
+        // Define sources.
         $section->set_source_table('course_sections', array('id' => backup::VAR_SECTIONID));
-        $avail->set_source_table('course_sections_availability', array('coursesectionid' => backup::VAR_SECTIONID));
-        $availfield->set_source_sql('
-            SELECT csaf.*, uif.shortname AS customfield, uif.datatype AS customfieldtype
-              FROM {course_sections_avail_fields} csaf
-         LEFT JOIN {user_info_field} uif ON uif.id = csaf.customfieldid
-             WHERE csaf.coursesectionid = ?', array(backup::VAR_SECTIONID));
         $formatoptions->set_source_sql('SELECT cfo.id, cfo.format, cfo.name, cfo.value
               FROM {course} c
               JOIN {course_format_options} cfo
@@ -411,9 +333,11 @@ class backup_section_structure_step extends backup_structure_step {
 
         // Aliases
         $section->set_source_alias('section', 'number');
+        // The 'availability' field needs to be renamed because it clashes with
+        // the old nested element structure for availability data.
+        $section->set_source_alias('availability', 'availabilityjson');
 
         // Set annotations
-        $section->annotate_ids('grouping', 'groupingid');
         $section->annotate_files('course', 'section', 'id');
 
         return $section;
@@ -511,6 +435,7 @@ class backup_course_structure_step extends backup_structure_step {
         $course->annotate_ids('grouping', 'defaultgroupingid');
 
         $course->annotate_files('course', 'summary', null);
+        $course->annotate_files('course', 'overviewfiles', null);
         $course->annotate_files('course', 'legacy', null);
 
         // Return root element ($course)
@@ -523,6 +448,14 @@ class backup_course_structure_step extends backup_structure_step {
  * structure step that will generate the enrolments.xml file for the given course
  */
 class backup_enrolments_structure_step extends backup_structure_step {
+
+    /**
+     * Skip enrolments on the front page.
+     * @return bool
+     */
+    protected function execute_condition() {
+        return ($this->get_courseid() != SITEID);
+    }
 
     protected function define_structure() {
 
@@ -537,7 +470,7 @@ class backup_enrolments_structure_step extends backup_structure_step {
 
         $enrol = new backup_nested_element('enrol', array('id'), array(
             'enrol', 'status', 'name', 'enrolperiod', 'enrolstartdate',
-            'enrolenddate', 'expirynotify', 'expirytreshold', 'notifyall',
+            'enrolenddate', 'expirynotify', 'expirythreshold', 'notifyall',
             'password', 'cost', 'currency', 'roleid',
             'customint1', 'customint2', 'customint3', 'customint4', 'customint5', 'customint6', 'customint7', 'customint8',
             'customchar1', 'customchar2', 'customchar3',
@@ -568,7 +501,8 @@ class backup_enrolments_structure_step extends backup_structure_step {
 
         $enrol->annotate_ids('role', 'roleid');
 
-        //TODO: let plugins annotate custom fields too and add more children
+        // Add enrol plugin structure.
+        $this->add_plugin_structure('enrol', $enrol, false);
 
         return $enrolments;
     }
@@ -812,6 +746,83 @@ class backup_comments_structure_step extends backup_structure_step {
 }
 
 /**
+ * structure step in charge of constructing the badges.xml file for all the badges found
+ * in a given context
+ */
+class backup_badges_structure_step extends backup_structure_step {
+
+    protected function execute_condition() {
+        // Check that all activities have been included.
+        if ($this->task->is_excluding_activities()) {
+            return false;
+        }
+        return true;
+    }
+
+    protected function define_structure() {
+
+        // Define each element separated.
+
+        $badges = new backup_nested_element('badges');
+        $badge = new backup_nested_element('badge', array('id'), array('name', 'description',
+                'timecreated', 'timemodified', 'usercreated', 'usermodified', 'issuername',
+                'issuerurl', 'issuercontact', 'expiredate', 'expireperiod', 'type', 'courseid',
+                'message', 'messagesubject', 'attachment', 'notification', 'status', 'nextcron'));
+
+        $criteria = new backup_nested_element('criteria');
+        $criterion = new backup_nested_element('criterion', array('id'), array('badgeid',
+                'criteriatype', 'method', 'description', 'descriptionformat'));
+
+        $parameters = new backup_nested_element('parameters');
+        $parameter = new backup_nested_element('parameter', array('id'), array('critid',
+                'name', 'value', 'criteriatype'));
+
+        $manual_awards = new backup_nested_element('manual_awards');
+        $manual_award = new backup_nested_element('manual_award', array('id'), array('badgeid',
+                'recipientid', 'issuerid', 'issuerrole', 'datemet'));
+
+        // Build the tree.
+
+        $badges->add_child($badge);
+        $badge->add_child($criteria);
+        $criteria->add_child($criterion);
+        $criterion->add_child($parameters);
+        $parameters->add_child($parameter);
+        $badge->add_child($manual_awards);
+        $manual_awards->add_child($manual_award);
+
+        // Define sources.
+
+        $badge->set_source_table('badge', array('courseid' => backup::VAR_COURSEID));
+        $criterion->set_source_table('badge_criteria', array('badgeid' => backup::VAR_PARENTID));
+
+        $parametersql = 'SELECT cp.*, c.criteriatype
+                             FROM {badge_criteria_param} cp JOIN {badge_criteria} c
+                                 ON cp.critid = c.id
+                             WHERE critid = :critid';
+        $parameterparams = array('critid' => backup::VAR_PARENTID);
+        $parameter->set_source_sql($parametersql, $parameterparams);
+
+        $manual_award->set_source_table('badge_manual_award', array('badgeid' => backup::VAR_PARENTID));
+
+        // Define id annotations.
+
+        $badge->annotate_ids('user', 'usercreated');
+        $badge->annotate_ids('user', 'usermodified');
+        $criterion->annotate_ids('badge', 'badgeid');
+        $parameter->annotate_ids('criterion', 'critid');
+        $badge->annotate_files('badges', 'badgeimage', 'id');
+        $manual_award->annotate_ids('badge', 'badgeid');
+        $manual_award->annotate_ids('user', 'recipientid');
+        $manual_award->annotate_ids('user', 'issuerid');
+        $manual_award->annotate_ids('role', 'issuerrole');
+
+        // Return the root element ($badges).
+        return $badges;
+    }
+}
+
+/**
  * structure step in charge of constructing the calender.xml file for all the events found
  * in a given context
  */
@@ -865,10 +876,16 @@ class backup_gradebook_structure_step extends backup_structure_step {
      * the module gradeitems have been already included in backup
      */
     protected function execute_condition() {
-        return backup_plan_dbops::require_gradebook_backup($this->get_courseid(), $this->get_backupid());
+        $courseid = $this->get_courseid();
+        if ($courseid == SITEID) {
+            return false;
+        }
+
+        return backup_plan_dbops::require_gradebook_backup($courseid, $this->get_backupid());
     }
 
     protected function define_structure() {
+        global $CFG, $DB;
 
         // are we including user info?
         $userinfo = $this->get_setting_value('users');
@@ -884,8 +901,8 @@ class backup_gradebook_structure_step extends backup_structure_step {
             'iteminstance', 'itemnumber', 'iteminfo', 'idnumber',
             'calculation', 'gradetype', 'grademax', 'grademin',
             'scaleid', 'outcomeid', 'gradepass', 'multfactor',
-            'plusfactor', 'aggregationcoef', 'sortorder', 'display',
-            'decimals', 'hidden', 'locked', 'locktime',
+            'plusfactor', 'aggregationcoef', 'aggregationcoef2', 'weightoverride',
+            'sortorder', 'display', 'decimals', 'hidden', 'locked', 'locktime',
             'needsupdate', 'timecreated', 'timemodified'));
 
         $grade_grades = new backup_nested_element('grade_grades');
@@ -894,14 +911,15 @@ class backup_gradebook_structure_step extends backup_structure_step {
             'rawscaleid', 'usermodified', 'finalgrade', 'hidden',
             'locked', 'locktime', 'exported', 'overridden',
             'excluded', 'feedback', 'feedbackformat', 'information',
-            'informationformat', 'timecreated', 'timemodified'));
+            'informationformat', 'timecreated', 'timemodified',
+            'aggregationstatus', 'aggregationweight'));
 
         //grade_categories
         $grade_categories = new backup_nested_element('grade_categories');
         $grade_category   = new backup_nested_element('grade_category', array('id'), array(
                 //'courseid',
                 'parent', 'depth', 'path', 'fullname', 'aggregation', 'keephigh',
-                'droplow', 'aggregateonlygraded', 'aggregateoutcomes', 'aggregatesubcats',
+                'droplow', 'aggregateonlygraded', 'aggregateoutcomes',
                 'timecreated', 'timemodified', 'hidden'));
 
         $letters = new backup_nested_element('grade_letters');
@@ -928,6 +946,13 @@ class backup_gradebook_structure_step extends backup_structure_step {
         $gradebook->add_child($grade_settings);
         $grade_settings->add_child($grade_setting);
 
+        // Add attribute with gradebook calculation freeze date if needed.
+        $gradebookcalculationfreeze = get_config('core', 'gradebook_calculations_freeze_' . $this->get_courseid());
+        if ($gradebookcalculationfreeze) {
+            $gradebook->add_attributes(array('calculations_freeze'));
+            $gradebook->get_attribute('calculations_freeze')->set_value($gradebookcalculationfreeze);
+        }
+
         // Define sources
 
         //Include manual, category and the course grade item
@@ -952,7 +977,18 @@ class backup_gradebook_structure_step extends backup_structure_step {
 
         $letter->set_source_table('grade_letters', array('contextid' => backup::VAR_CONTEXTID));
 
-        $grade_setting->set_source_table('grade_settings', array('courseid' => backup::VAR_COURSEID));
+        // Set the grade settings source, forcing the inclusion of minmaxtouse if not present.
+        $settings = array();
+        $rs = $DB->get_recordset('grade_settings', array('courseid' => $this->get_courseid()));
+        foreach ($rs as $record) {
+            $settings[$record->name] = $record;
+        }
+        $rs->close();
+        if (!isset($settings['minmaxtouse'])) {
+            $settings['minmaxtouse'] = (object) array('name' => 'minmaxtouse', 'value' => $CFG->grade_minmaxtouse);
+        }
+        $grade_setting->set_source_array($settings);
+
 
         // Annotations (both as final as far as they are going to be exported in next steps)
         $grade_item->annotate_ids('scalefinal', 'scaleid'); // Straight as scalefinal because it's > 0
@@ -967,10 +1003,82 @@ class backup_gradebook_structure_step extends backup_structure_step {
 }
 
 /**
+ * Step in charge of constructing the grade_history.xml file containing the grade histories.
+ */
+class backup_grade_history_structure_step extends backup_structure_step {
+
+    /**
+     * Limit the execution.
+     *
+     * This applies the same logic than the one applied to {@link backup_gradebook_structure_step},
+     * because we do not want to save the history of items which are not backed up. At least for now.
+     */
+    protected function execute_condition() {
+        $courseid = $this->get_courseid();
+        if ($courseid == SITEID) {
+            return false;
+        }
+
+        return backup_plan_dbops::require_gradebook_backup($courseid, $this->get_backupid());
+    }
+
+    protected function define_structure() {
+
+        // Settings to use.
+        $userinfo = $this->get_setting_value('users');
+        $history = $this->get_setting_value('grade_histories');
+
+        // Create the nested elements.
+        $bookhistory = new backup_nested_element('grade_history');
+        $grades = new backup_nested_element('grade_grades');
+        $grade = new backup_nested_element('grade_grade', array('id'), array(
+            'action', 'oldid', 'source', 'loggeduser', 'itemid', 'userid',
+            'rawgrade', 'rawgrademax', 'rawgrademin', 'rawscaleid',
+            'usermodified', 'finalgrade', 'hidden', 'locked', 'locktime', 'exported', 'overridden',
+            'excluded', 'feedback', 'feedbackformat', 'information',
+            'informationformat', 'timemodified'));
+
+        // Build the tree.
+        $bookhistory->add_child($grades);
+        $grades->add_child($grade);
+
+        // This only happens if we are including user info and history.
+        if ($userinfo && $history) {
+            // Only keep the history of grades related to items which have been backed up, The query is
+            // similar (but not identical) to the one used in backup_gradebook_structure_step::define_structure().
+            $gradesql = "SELECT ggh.*
+                           FROM {grade_grades_history} ggh
+                           JOIN {grade_items} gi ON ggh.itemid = gi.id
+                          WHERE gi.courseid = :courseid
+                            AND (gi.itemtype = 'manual' OR gi.itemtype = 'course' OR gi.itemtype = 'category')";
+            $grade->set_source_sql($gradesql, array('courseid' => backup::VAR_COURSEID));
+        }
+
+        // Annotations. (Final annotations as this step is part of the final task).
+        $grade->annotate_ids('scalefinal', 'rawscaleid');
+        $grade->annotate_ids('userfinal', 'loggeduser');
+        $grade->annotate_ids('userfinal', 'userid');
+        $grade->annotate_ids('userfinal', 'usermodified');
+
+        // Return the root element.
+        return $bookhistory;
+    }
+
+}
+
+/**
  * structure step in charge if constructing the completion.xml file for all the users completion
  * information in a given activity
  */
 class backup_userscompletion_structure_step extends backup_structure_step {
+
+    /**
+     * Skip completion on the front page.
+     * @return bool
+     */
+    protected function execute_condition() {
+        return ($this->get_courseid() != SITEID);
+    }
 
     protected function define_structure() {
 
@@ -1006,8 +1114,10 @@ class backup_groups_structure_step extends backup_structure_step {
 
     protected function define_structure() {
 
-        // To know if we are including users
-        $users = $this->get_setting_value('users');
+        // To know if we are including users.
+        $userinfo = $this->get_setting_value('users');
+        // To know if we are including groups and groupings.
+        $groupinfo = $this->get_setting_value('groups');
 
         // Define each element separated
 
@@ -1047,26 +1157,28 @@ class backup_groups_structure_step extends backup_structure_step {
 
         // Define sources
 
-        $group->set_source_sql("
-            SELECT g.*
-              FROM {groups} g
-              JOIN {backup_ids_temp} bi ON g.id = bi.itemid
-             WHERE bi.backupid = ?
-               AND bi.itemname = 'groupfinal'", array(backup::VAR_BACKUPID));
+        // This only happens if we are including groups/groupings.
+        if ($groupinfo) {
+            $group->set_source_sql("
+                SELECT g.*
+                  FROM {groups} g
+                  JOIN {backup_ids_temp} bi ON g.id = bi.itemid
+                 WHERE bi.backupid = ?
+                   AND bi.itemname = 'groupfinal'", array(backup::VAR_BACKUPID));
 
-        // This only happens if we are including users
-        if ($users) {
-            $member->set_source_table('groups_members', array('groupid' => backup::VAR_PARENTID));
+            $grouping->set_source_sql("
+                SELECT g.*
+                  FROM {groupings} g
+                  JOIN {backup_ids_temp} bi ON g.id = bi.itemid
+                 WHERE bi.backupid = ?
+                   AND bi.itemname = 'groupingfinal'", array(backup::VAR_BACKUPID));
+            $groupinggroup->set_source_table('groupings_groups', array('groupingid' => backup::VAR_PARENTID));
+
+            // This only happens if we are including users.
+            if ($userinfo) {
+                $member->set_source_table('groups_members', array('groupid' => backup::VAR_PARENTID));
+            }
         }
-
-        $grouping->set_source_sql("
-            SELECT g.*
-              FROM {groupings} g
-              JOIN {backup_ids_temp} bi ON g.id = bi.itemid
-             WHERE bi.backupid = ?
-               AND bi.itemname = 'groupingfinal'", array(backup::VAR_BACKUPID));
-
-        $groupinggroup->set_source_table('groupings_groups', array('groupingid' => backup::VAR_PARENTID));
 
         // Define id annotations (as final)
 
@@ -1098,7 +1210,7 @@ class backup_users_structure_step extends backup_structure_step {
         // To know if we are including role assignments
         $roleassignments = $this->get_setting_value('role_assignments');
 
-        // Define each element separated
+        // Define each element separate.
 
         $users = new backup_nested_element('users');
 
@@ -1110,18 +1222,18 @@ class backup_users_structure_step extends backup_structure_step {
             'confirmed', 'policyagreed', 'deleted',
             'lang', 'theme', 'timezone', 'firstaccess',
             'lastaccess', 'lastlogin', 'currentlogin',
-            'mailformat', 'maildigest', 'maildisplay', 'htmleditor',
+            'mailformat', 'maildigest', 'maildisplay',
             'autosubscribe', 'trackforums', 'timecreated',
             'timemodified', 'trustbitmask');
 
         // Then, the fields potentially needing anonymization
         $anonfields = array(
-            'username', 'idnumber', 'firstname', 'lastname',
-            'email', 'icq', 'skype',
+            'username', 'idnumber', 'email', 'icq', 'skype',
             'yahoo', 'aim', 'msn', 'phone1',
             'phone2', 'institution', 'department', 'address',
             'city', 'country', 'lastip', 'picture',
             'url', 'description', 'descriptionformat', 'imagealt', 'auth');
+        $anonfields = array_merge($anonfields, get_all_user_name_fields());
 
         // Add anonymized fields to $userfields with custom final element
         foreach ($anonfields as $field) {
@@ -1285,7 +1397,7 @@ class backup_block_instance_structure_step extends backup_structure_step {
         }
         $blockrec->contextid = $this->task->get_contextid();
         // Get the version of the block
-        $blockrec->version = $DB->get_field('block', 'version', array('name' => $this->task->get_blockname()));
+        $blockrec->version = get_config('block_'.$this->task->get_blockname(), 'version');
 
         // Define sources
 
@@ -1374,6 +1486,36 @@ class backup_activity_logs_structure_step extends backup_structure_step {
 }
 
 /**
+ * Structure step in charge of constructing the logstores.xml file for the course logs.
+ *
+ * This backup step will backup the logs for all the enabled logstore subplugins supporting
+ * it, for logs belonging to the course level.
+ */
+class backup_course_logstores_structure_step extends backup_structure_step {
+
+    protected function define_structure() {
+
+        // Define the structure of logstores container.
+        $logstores = new backup_nested_element('logstores');
+        $logstore = new backup_nested_element('logstore');
+        $logstores->add_child($logstore);
+
+        // Add the tool_log logstore subplugins information to the logstore element.
+        $this->add_subplugin_structure('logstore', $logstore, true, 'tool', 'log');
+
+        return $logstores;
+    }
+}
+
+/**
+ * Structure step in charge of constructing the logstores.xml file for the activity logs.
+ *
+ * Note: Activity structure is completely equivalent to the course one, so just extend it.
+ */
+class backup_activity_logstores_structure_step extends backup_course_logstores_structure_step {
+}
+
+/**
  * structure in charge of constructing the inforef.xml file for all the items we want
  * to have referenced there (users, roles, files...)
  */
@@ -1421,10 +1563,16 @@ class move_inforef_annotations_to_final extends backup_execution_step {
 
         // Items we want to include in the inforef file
         $items = backup_helper::get_inforef_itemnames();
+        $progress = $this->task->get_progress();
+        $progress->start_progress($this->get_name(), count($items));
+        $done = 1;
         foreach ($items as $itemname) {
             // Delegate to dbops
-            backup_structure_dbops::move_annotations_to_final($this->get_backupid(), $itemname);
+            backup_structure_dbops::move_annotations_to_final($this->get_backupid(),
+                    $itemname, $progress);
+            $progress->progress($done++);
         }
+        $progress->end_progress();
     }
 }
 
@@ -1488,12 +1636,14 @@ class backup_main_structure_step extends backup_structure_step {
         $info['backup_date']    = time();
         $info['backup_uniqueid']= $this->get_backupid();
         $info['mnet_remoteusers']=backup_controller_dbops::backup_includes_mnet_remote_users($this->get_backupid());
+        $info['include_files'] = backup_controller_dbops::backup_includes_files($this->get_backupid());
         $info['include_file_references_to_external_content'] =
                 backup_controller_dbops::backup_includes_file_references($this->get_backupid());
         $info['original_wwwroot']=$CFG->wwwroot;
         $info['original_site_identifier_hash'] = md5(get_site_identifier());
         $info['original_course_id'] = $this->get_courseid();
         $originalcourseinfo = backup_controller_dbops::backup_get_original_course_info($this->get_courseid());
+        $info['original_course_format'] = $originalcourseinfo->format;
         $info['original_course_fullname']  = $originalcourseinfo->fullname;
         $info['original_course_shortname'] = $originalcourseinfo->shortname;
         $info['original_course_startdate'] = $originalcourseinfo->startdate;
@@ -1501,7 +1651,8 @@ class backup_main_structure_step extends backup_structure_step {
         $info['original_system_contextid'] = context_system::instance()->id;
 
         // Get more information from controller
-        list($dinfo, $cinfo, $sinfo) = backup_controller_dbops::get_moodle_backup_information($this->get_backupid());
+        list($dinfo, $cinfo, $sinfo) = backup_controller_dbops::get_moodle_backup_information(
+                $this->get_backupid(), $this->get_task()->get_progress());
 
         // Define elements
 
@@ -1509,8 +1660,8 @@ class backup_main_structure_step extends backup_structure_step {
 
         $information = new backup_nested_element('information', null, array(
             'name', 'moodle_version', 'moodle_release', 'backup_version',
-            'backup_release', 'backup_date', 'mnet_remoteusers', 'include_file_references_to_external_content', 'original_wwwroot',
-            'original_site_identifier_hash', 'original_course_id',
+            'backup_release', 'backup_date', 'mnet_remoteusers', 'include_files', 'include_file_references_to_external_content', 'original_wwwroot',
+            'original_site_identifier_hash', 'original_course_id', 'original_course_format',
             'original_course_fullname', 'original_course_shortname', 'original_course_startdate',
             'original_course_contextid', 'original_system_contextid'));
 
@@ -1588,7 +1739,11 @@ class backup_main_structure_step extends backup_structure_step {
 /**
  * Execution step that will generate the final zip (.mbz) file with all the contents
  */
-class backup_zip_contents extends backup_execution_step {
+class backup_zip_contents extends backup_execution_step implements file_progress {
+    /**
+     * @var bool True if we have started tracking progress
+     */
+    protected $startedprogress;
 
     protected function define_execution() {
 
@@ -1612,11 +1767,68 @@ class backup_zip_contents extends backup_execution_step {
         $zipfile = $basepath . '/backup.mbz';
 
         // Get the zip packer
-        $zippacker = get_file_packer('application/zip');
+        $zippacker = get_file_packer('application/vnd.moodle.backup');
+
+        // Track overall progress for the 2 long-running steps (archive to
+        // pathname, get backup information).
+        $reporter = $this->task->get_progress();
+        $reporter->start_progress('backup_zip_contents', 2);
 
         // Zip files
-        $zippacker->archive_to_pathname($files, $zipfile);
+        $result = $zippacker->archive_to_pathname($files, $zipfile, true, $this);
+
+        // If any sub-progress happened, end it.
+        if ($this->startedprogress) {
+            $this->task->get_progress()->end_progress();
+            $this->startedprogress = false;
+        } else {
+            // No progress was reported, manually move it on to the next overall task.
+            $reporter->progress(1);
+        }
+
+        // Something went wrong.
+        if ($result === false) {
+            @unlink($zipfile);
+            throw new backup_step_exception('error_zip_packing', '', 'An error was encountered while trying to generate backup zip');
+        }
+        // Read to make sure it is a valid backup. Refer MDL-37877 . Delete it, if found not to be valid.
+        try {
+            backup_general_helper::get_backup_information_from_mbz($zipfile, $this);
+        } catch (backup_helper_exception $e) {
+            @unlink($zipfile);
+            throw new backup_step_exception('error_zip_packing', '', $e->debuginfo);
+        }
+
+        // If any sub-progress happened, end it.
+        if ($this->startedprogress) {
+            $this->task->get_progress()->end_progress();
+            $this->startedprogress = false;
+        } else {
+            $reporter->progress(2);
+        }
+        $reporter->end_progress();
     }
+
+    /**
+     * Implementation for file_progress interface to display unzip progress.
+     *
+     * @param int $progress Current progress
+     * @param int $max Max value
+     */
+    public function progress($progress = file_progress::INDETERMINATE, $max = file_progress::INDETERMINATE) {
+        $reporter = $this->task->get_progress();
+
+        // Start tracking progress if necessary.
+        if (!$this->startedprogress) {
+            $reporter->start_progress('extract_file_to_dir', ($max == file_progress::INDETERMINATE)
+                    ? \core\progress\base::INDETERMINATE : $max);
+            $this->startedprogress = true;
+        }
+
+        // Pass progress through to whatever handles it.
+        $reporter->progress(($progress == file_progress::INDETERMINATE)
+                ? \core\progress\base::INDETERMINATE : $progress);
+     }
 }
 
 /**
@@ -1635,7 +1847,8 @@ class backup_store_backup_file extends backup_execution_step {
         $has_file_references = backup_controller_dbops::backup_includes_file_references($this->get_backupid());
         // Perform storage and return it (TODO: shouldn't be array but proper result object)
         return array(
-            'backup_destination' => backup_helper::store_backup_file($this->get_backupid(), $zipfile),
+            'backup_destination' => backup_helper::store_backup_file($this->get_backupid(), $zipfile,
+                    $this->task->get_progress()),
             'include_file_references_to_external_content' => $has_file_references
         );
     }
@@ -1659,6 +1872,47 @@ class backup_activity_grade_items_to_ids extends backup_execution_step {
                 backup_structure_dbops::insert_backup_ids_record($this->get_backupid(), 'grade_item', $item->id);
             }
         }
+    }
+}
+
+
+/**
+ * This step allows enrol plugins to annotate custom fields.
+ *
+ * @package   core_backup
+ * @copyright 2014 University of Wisconsin
+ * @author    Matt Petro
+ * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ */
+class backup_enrolments_execution_step extends backup_execution_step {
+
+    /**
+     * Function that will contain all the code to be executed.
+     */
+    protected function define_execution() {
+        global $DB;
+
+        $plugins = enrol_get_plugins(true);
+        $enrols = $DB->get_records('enrol', array(
+                'courseid' => $this->task->get_courseid()));
+
+        // Allow each enrol plugin to add annotations.
+        foreach ($enrols as $enrol) {
+            if (isset($plugins[$enrol->enrol])) {
+                $plugins[$enrol->enrol]->backup_annotate_custom_fields($this, $enrol);
+            }
+        }
+    }
+
+    /**
+     * Annotate a single name/id pair.
+     * This can be called from {@link enrol_plugin::backup_annotate_custom_fields()}.
+     *
+     * @param string $itemname
+     * @param int $itemid
+     */
+    public function annotate_id($itemname, $itemid) {
+        backup_structure_dbops::insert_backup_ids_record($this->get_backupid(), $itemname, $itemid);
     }
 }
 
@@ -1757,13 +2011,22 @@ class backup_annotate_all_question_files extends backup_execution_step {
         $components = backup_qtype_plugin::get_components_and_fileareas();
         // Let's loop
         foreach($rs as $record) {
-            // We don't need to specify filearea nor itemid as far as by
-            // component and context it's enough to annotate the whole bank files
-            // This backups "questiontext", "generalfeedback" and "answerfeedback" fileareas (all them
-            // belonging to the "question" component
-            backup_structure_dbops::annotate_files($this->get_backupid(), $record->contextid, 'question', null, null);
-            // Again, it is enough to pick files only by context and component
-            // Do it for qtype specific components
+            // Backup all the file areas the are managed by the core question component.
+            // That is, by the question_type base class. In particular, we don't want
+            // to include files belonging to responses here.
+            backup_structure_dbops::annotate_files($this->get_backupid(), $record->contextid, 'question', 'questiontext', null);
+            backup_structure_dbops::annotate_files($this->get_backupid(), $record->contextid, 'question', 'generalfeedback', null);
+            backup_structure_dbops::annotate_files($this->get_backupid(), $record->contextid, 'question', 'answer', null);
+            backup_structure_dbops::annotate_files($this->get_backupid(), $record->contextid, 'question', 'answerfeedback', null);
+            backup_structure_dbops::annotate_files($this->get_backupid(), $record->contextid, 'question', 'hint', null);
+            backup_structure_dbops::annotate_files($this->get_backupid(), $record->contextid, 'question', 'correctfeedback', null);
+            backup_structure_dbops::annotate_files($this->get_backupid(), $record->contextid, 'question', 'partiallycorrectfeedback', null);
+            backup_structure_dbops::annotate_files($this->get_backupid(), $record->contextid, 'question', 'incorrectfeedback', null);
+
+            // For files belonging to question types, we make the leap of faith that
+            // all the files belonging to the question type are part of the question definition,
+            // so we can just backup all the files in bulk, without specifying each
+            // file area name separately.
             foreach ($components as $component => $fileareas) {
                 backup_structure_dbops::annotate_files($this->get_backupid(), $record->contextid, $component, null, null);
             }
@@ -1809,6 +2072,10 @@ class backup_questions_structure_step extends backup_structure_step {
         $qhint = new backup_nested_element('question_hint', array('id'), array(
             'hint', 'hintformat', 'shownumcorrect', 'clearwrong', 'options'));
 
+        $tags = new backup_nested_element('tags');
+
+        $tag = new backup_nested_element('tag', array('id'), array('name', 'rawname'));
+
         // Build the tree
 
         $qcategories->add_child($qcategory);
@@ -1816,6 +2083,9 @@ class backup_questions_structure_step extends backup_structure_step {
         $questions->add_child($question);
         $question->add_child($qhints);
         $qhints->add_child($qhint);
+
+        $question->add_child($tags);
+        $tags->add_child($tag);
 
         // Define the sources
 
@@ -1835,6 +2105,12 @@ class backup_questions_structure_step extends backup_structure_step {
                 WHERE questionid = :questionid
                 ORDER BY id',
                 array('questionid' => backup::VAR_PARENTID));
+
+        $tag->set_source_sql("SELECT t.id, t.name, t.rawname
+                              FROM {tag} t
+                              JOIN {tag_instance} ti ON ti.tagid = t.id
+                              WHERE ti.itemid = ?
+                              AND ti.itemtype = 'question'", array(backup::VAR_PARENTID));
 
         // don't need to annotate ids nor files
         // (already done by {@link backup_annotate_all_question_files}
@@ -1863,6 +2139,8 @@ class backup_annotate_all_user_files extends backup_execution_step {
         // Fetch all annotated (final) users
         $rs = $DB->get_recordset('backup_ids_temp', array(
             'backupid' => $this->get_backupid(), 'itemname' => 'userfinal'));
+        $progress = $this->task->get_progress();
+        $progress->start_progress($this->get_name());
         foreach ($rs as $record) {
             $userid = $record->itemid;
             $userctx = context_user::instance($userid, IGNORE_MISSING);
@@ -1874,8 +2152,10 @@ class backup_annotate_all_user_files extends backup_execution_step {
                 // We don't need to specify itemid ($userid - 5th param) as far as by
                 // context we can get all the associated files. See MDL-22092
                 backup_structure_dbops::annotate_files($this->get_backupid(), $userctx->id, 'user', $filearea, null);
+                $progress->progress();
             }
         }
+        $progress->end_progress();
         $rs->close();
     }
 }
@@ -1890,6 +2170,12 @@ class backup_activity_grading_structure_step extends backup_structure_step {
      * Include the grading.xml only if the module supports advanced grading
      */
     protected function execute_condition() {
+
+        // No grades on the front page.
+        if ($this->get_courseid() == SITEID) {
+            return false;
+        }
+
         return plugin_supports('mod', $this->get_task()->get_modulename(), FEATURE_ADVANCED_GRADING, false);
     }
 
@@ -1963,6 +2249,14 @@ class backup_activity_grading_structure_step extends backup_structure_step {
  */
 class backup_activity_grades_structure_step extends backup_structure_step {
 
+    /**
+     * No grades on the front page.
+     * @return bool
+     */
+    protected function execute_condition() {
+        return ($this->get_courseid() != SITEID);
+    }
+
     protected function define_structure() {
 
         // To know if we are including userinfo
@@ -1979,8 +2273,8 @@ class backup_activity_grades_structure_step extends backup_structure_step {
             'iteminstance', 'itemnumber', 'iteminfo', 'idnumber',
             'calculation', 'gradetype', 'grademax', 'grademin',
             'scaleid', 'outcomeid', 'gradepass', 'multfactor',
-            'plusfactor', 'aggregationcoef', 'sortorder', 'display',
-            'decimals', 'hidden', 'locked', 'locktime',
+            'plusfactor', 'aggregationcoef', 'aggregationcoef2', 'weightoverride',
+            'sortorder', 'display', 'decimals', 'hidden', 'locked', 'locktime',
             'needsupdate', 'timecreated', 'timemodified'));
 
         $grades = new backup_nested_element('grade_grades');
@@ -1990,7 +2284,8 @@ class backup_activity_grades_structure_step extends backup_structure_step {
             'rawscaleid', 'usermodified', 'finalgrade', 'hidden',
             'locked', 'locktime', 'exported', 'overridden',
             'excluded', 'feedback', 'feedbackformat', 'information',
-            'informationformat', 'timecreated', 'timemodified'));
+            'informationformat', 'timecreated', 'timemodified',
+            'aggregationstatus', 'aggregationweight'));
 
         $letters = new backup_nested_element('grade_letters');
 
@@ -2038,11 +2333,75 @@ class backup_activity_grades_structure_step extends backup_structure_step {
 }
 
 /**
+ * Structure step in charge of constructing the grade history of an activity.
+ *
+ * This step is added to the task regardless of the setting 'grade_histories'.
+ * The reason is to allow for a more flexible step in case the logic needs to be
+ * split accross different settings to control the history of items and/or grades.
+ */
+class backup_activity_grade_history_structure_step extends backup_structure_step {
+
+    /**
+     * No grades on the front page.
+     * @return bool
+     */
+    protected function execute_condition() {
+        return ($this->get_courseid() != SITEID);
+    }
+
+    protected function define_structure() {
+
+        // Settings to use.
+        $userinfo = $this->get_setting_value('userinfo');
+        $history = $this->get_setting_value('grade_histories');
+
+        // Create the nested elements.
+        $bookhistory = new backup_nested_element('grade_history');
+        $grades = new backup_nested_element('grade_grades');
+        $grade = new backup_nested_element('grade_grade', array('id'), array(
+            'action', 'oldid', 'source', 'loggeduser', 'itemid', 'userid',
+            'rawgrade', 'rawgrademax', 'rawgrademin', 'rawscaleid',
+            'usermodified', 'finalgrade', 'hidden', 'locked', 'locktime', 'exported', 'overridden',
+            'excluded', 'feedback', 'feedbackformat', 'information',
+            'informationformat', 'timemodified'));
+
+        // Build the tree.
+        $bookhistory->add_child($grades);
+        $grades->add_child($grade);
+
+        // This only happens if we are including user info and history.
+        if ($userinfo && $history) {
+            // Define sources. Only select the history related to existing activity items.
+            $grade->set_source_sql("SELECT ggh.*
+                                     FROM {grade_grades_history} ggh
+                                     JOIN {backup_ids_temp} bi ON ggh.itemid = bi.itemid
+                                    WHERE bi.backupid = ?
+                                      AND bi.itemname = 'grade_item'", array(backup::VAR_BACKUPID));
+        }
+
+        // Annotations.
+        $grade->annotate_ids('scalefinal', 'rawscaleid'); // Straight as scalefinal because it's > 0.
+        $grade->annotate_ids('user', 'loggeduser');
+        $grade->annotate_ids('user', 'userid');
+        $grade->annotate_ids('user', 'usermodified');
+
+        // Return the root element.
+        return $bookhistory;
+    }
+}
+
+/**
  * Backups up the course completion information for the course.
  */
 class backup_course_completion_structure_step extends backup_structure_step {
 
     protected function execute_condition() {
+
+        // No completion on front page.
+        if ($this->get_courseid() == SITEID) {
+            return false;
+        }
+
         // Check that all activities have been included
         if ($this->task->is_excluding_activities()) {
             return false;
@@ -2063,7 +2422,8 @@ class backup_course_completion_structure_step extends backup_structure_step {
         $cc = new backup_nested_element('course_completion');
 
         $criteria = new backup_nested_element('course_completion_criteria', array('id'), array(
-            'course','criteriatype', 'module', 'moduleinstance', 'courseinstanceshortname', 'enrolperiod', 'timeend', 'gradepass', 'role'
+            'course', 'criteriatype', 'module', 'moduleinstance', 'courseinstanceshortname', 'enrolperiod',
+            'timeend', 'gradepass', 'role', 'roleshortname'
         ));
 
         $criteriacompletions = new backup_nested_element('course_completion_crit_completions');
@@ -2086,12 +2446,15 @@ class backup_course_completion_structure_step extends backup_structure_step {
         $cc->add_child($coursecompletions);
         $cc->add_child($aggregatemethod);
 
-        // We need to get the courseinstances shortname rather than an ID for restore
-        $criteria->set_source_sql("SELECT ccc.*, c.shortname AS courseinstanceshortname
-                                   FROM {course_completion_criteria} ccc
-                                   LEFT JOIN {course} c ON c.id = ccc.courseinstance
-                                   WHERE ccc.course = ?", array(backup::VAR_COURSEID));
-
+        // We need some extra data for the restore.
+        // - courseinstances shortname rather than an ID.
+        // - roleshortname in case restoring on a different site.
+        $sourcesql = "SELECT ccc.*, c.shortname AS courseinstanceshortname, r.shortname AS roleshortname
+                        FROM {course_completion_criteria} ccc
+                   LEFT JOIN {course} c ON c.id = ccc.courseinstance
+                   LEFT JOIN {role} r ON r.id = ccc.role
+                       WHERE ccc.course = ?";
+        $criteria->set_source_sql($sourcesql, array(backup::VAR_COURSEID));
 
         $aggregatemethod->set_source_table('course_completion_aggr_methd', array('course' => backup::VAR_COURSEID));
 
