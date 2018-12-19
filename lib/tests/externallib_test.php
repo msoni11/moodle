@@ -128,7 +128,9 @@ class core_externallib_testcase extends advanced_testcase {
         $test = '$$ \pi $$';
         $testformat = FORMAT_MARKDOWN;
         $correct = array($test, $testformat);
+        // Function external_format_text should work with context id or context instance.
         $this->assertSame(external_format_text($test, $testformat, $context->id, 'core', '', 0), $correct);
+        $this->assertSame(external_format_text($test, $testformat, $context, 'core', '', 0), $correct);
 
         $settings->set_raw(false);
         $settings->set_filter(true);
@@ -137,48 +139,62 @@ class core_externallib_testcase extends advanced_testcase {
         $testformat = FORMAT_MARKDOWN;
         $correct = array('<span class="filter_mathjaxloader_equation"><p><span class="nolink">$$ \pi $$</span></p>
 </span>', FORMAT_HTML);
+        // Function external_format_text should work with context id or context instance.
         $this->assertSame(external_format_text($test, $testformat, $context->id, 'core', '', 0), $correct);
+        $this->assertSame(external_format_text($test, $testformat, $context, 'core', '', 0), $correct);
 
         // Filters can be opted out from by the developer.
         $test = '$$ \pi $$';
         $testformat = FORMAT_MARKDOWN;
         $correct = array('<p>$$ \pi $$</p>
 ', FORMAT_HTML);
+        // Function external_format_text should work with context id or context instance.
         $this->assertSame(external_format_text($test, $testformat, $context->id, 'core', '', 0, ['filter' => false]), $correct);
+        $this->assertSame(external_format_text($test, $testformat, $context, 'core', '', 0, ['filter' => false]), $correct);
 
         $test = '<p><a id="test"></a><a href="#test">Text</a></p>';
         $testformat = FORMAT_HTML;
         $correct = array($test, FORMAT_HTML);
         $options = array('allowid' => true);
+        // Function external_format_text should work with context id or context instance.
         $this->assertSame(external_format_text($test, $testformat, $context->id, 'core', '', 0, $options), $correct);
+        $this->assertSame(external_format_text($test, $testformat, $context, 'core', '', 0, $options), $correct);
 
         $test = '<p><a id="test"></a><a href="#test">Text</a></p>';
         $testformat = FORMAT_HTML;
         $correct = array('<p><a></a><a href="#test">Text</a></p>', FORMAT_HTML);
         $options = new StdClass();
         $options->allowid = false;
+        // Function external_format_text should work with context id or context instance.
         $this->assertSame(external_format_text($test, $testformat, $context->id, 'core', '', 0, $options), $correct);
+        $this->assertSame(external_format_text($test, $testformat, $context, 'core', '', 0, $options), $correct);
 
         $test = '<p><a id="test"></a><a href="#test">Text</a></p>'."\n".'Newline';
         $testformat = FORMAT_MOODLE;
         $correct = array('<p><a id="test"></a><a href="#test">Text</a></p> Newline', FORMAT_HTML);
         $options = new StdClass();
         $options->newlines = false;
+        // Function external_format_text should work with context id or context instance.
         $this->assertSame(external_format_text($test, $testformat, $context->id, 'core', '', 0, $options), $correct);
+        $this->assertSame(external_format_text($test, $testformat, $context, 'core', '', 0, $options), $correct);
 
         $test = '<p><a id="test"></a><a href="#test">Text</a></p>';
         $testformat = FORMAT_MOODLE;
         $correct = array('<div class="text_to_html">'.$test.'</div>', FORMAT_HTML);
         $options = new StdClass();
         $options->para = true;
+        // Function external_format_text should work with context id or context instance.
         $this->assertSame(external_format_text($test, $testformat, $context->id, 'core', '', 0, $options), $correct);
+        $this->assertSame(external_format_text($test, $testformat, $context, 'core', '', 0, $options), $correct);
 
         $test = '<p><a id="test"></a><a href="#test">Text</a></p>';
         $testformat = FORMAT_MOODLE;
         $correct = array($test, FORMAT_HTML);
         $options = new StdClass();
         $options->context = $context;
+        // Function external_format_text should work with context id or context instance.
         $this->assertSame(external_format_text($test, $testformat, $context->id, 'core', '', 0, $options), $correct);
+        $this->assertSame(external_format_text($test, $testformat, $context, 'core', '', 0, $options), $correct);
 
         $settings->set_raw($currentraw);
         $settings->set_filter($currentfilter);
@@ -203,7 +219,9 @@ class core_externallib_testcase extends advanced_testcase {
         $test = '<span lang="en" class="multilang">EN</span><span lang="fr" class="multilang">FR</span> ' .
             '<script>hi</script> <h3>there</h3>!';
         $correct = $test;
+        // Function external_format_string should work with context id or context instance.
         $this->assertSame($correct, external_format_string($test, $context->id));
+        $this->assertSame($correct, external_format_string($test, $context));
 
         $settings->set_raw(false);
         $settings->set_filter(false);
@@ -211,25 +229,52 @@ class core_externallib_testcase extends advanced_testcase {
         $test = '<span lang="en" class="multilang">EN</span><span lang="fr" class="multilang">FR</span> ' .
             '<script>hi</script> <h3>there</h3>?';
         $correct = 'ENFR hi there?';
+        // Function external_format_string should work with context id or context instance.
         $this->assertSame($correct, external_format_string($test, $context->id));
+        $this->assertSame($correct, external_format_string($test, $context));
 
         $settings->set_filter(true);
 
         $test = '<span lang="en" class="multilang">EN</span><span lang="fr" class="multilang">FR</span> ' .
             '<script>hi</script> <h3>there</h3>@';
         $correct = 'EN hi there@';
+        // Function external_format_string should work with context id or context instance.
         $this->assertSame($correct, external_format_string($test, $context->id));
+        $this->assertSame($correct, external_format_string($test, $context));
 
         // Filters can be opted out.
         $test = '<span lang="en" class="multilang">EN</span><span lang="fr" class="multilang">FR</span> ' .
             '<script>hi</script> <h3>there</h3>%';
         $correct = 'ENFR hi there%';
+        // Function external_format_string should work with context id or context instance.
         $this->assertSame($correct, external_format_string($test, $context->id, false, ['filter' => false]));
+        $this->assertSame($correct, external_format_string($test, $context, false, ['filter' => false]));
 
         $this->assertSame("& < > \" '", format_string("& < > \" '", true, ['escape' => false]));
 
         $settings->set_raw($currentraw);
         $settings->set_filter($currentfilter);
+    }
+
+    /**
+     * Test for clean_returnvalue() for testing that returns the PHP type.
+     */
+    public function test_clean_returnvalue_return_php_type() {
+
+        $returndesc = new external_single_structure(
+            array(
+                'value' => new external_value(PARAM_RAW, 'Some text', VALUE_OPTIONAL, null, NULL_NOT_ALLOWED)
+            )
+        );
+
+        // Check return type on exception because the external values does not allow NULL values.
+        $testdata = array('value' => null);
+        try {
+            $cleanedvalue = external_api::clean_returnvalue($returndesc, $testdata);
+        } catch (moodle_exception $e) {
+            $this->assertInstanceOf('invalid_response_exception', $e);
+            $this->assertContains('of PHP type "NULL"', $e->debuginfo);
+        }
     }
 
     /**
@@ -570,6 +615,32 @@ class core_externallib_testcase extends advanced_testcase {
             $this->assertEquals(VALUE_OPTIONAL, $key->required);
         }
 
+    }
+
+    /**
+     * Test default time for user created tokens.
+     */
+    public function test_user_created_tokens_duration() {
+        global $CFG, $DB;
+        $this->resetAfterTest(true);
+
+        $CFG->enablewebservices = 1;
+        $CFG->enablemobilewebservice = 1;
+        $user1 = $this->getDataGenerator()->create_user();
+        $user2 = $this->getDataGenerator()->create_user();
+        $service = $DB->get_record('external_services', array('shortname' => MOODLE_OFFICIAL_MOBILE_SERVICE, 'enabled' => 1));
+
+        $this->setUser($user1);
+        $timenow = time();
+        $token = external_generate_token_for_current_user($service);
+        $this->assertGreaterThanOrEqual($timenow + $CFG->tokenduration, $token->validuntil);
+
+        // Change token default time.
+        $this->setUser($user2);
+        set_config('tokenduration', DAYSECS);
+        $token = external_generate_token_for_current_user($service);
+        $timenow = time();
+        $this->assertLessThanOrEqual($timenow + DAYSECS, $token->validuntil);
     }
 }
 

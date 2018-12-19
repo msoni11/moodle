@@ -64,15 +64,6 @@ function book_get_nav_classes() {
 }
 
 /**
- * Returns all other caps used in module
- * @return array
- */
-function book_get_extra_capabilities() {
-    // used for group-members-only
-    return array('moodle/site:accessallgroups');
-}
-
-/**
  * Add book instance.
  *
  * @param stdClass $data
@@ -164,7 +155,44 @@ function book_print_recent_activity($course, $viewfullnames, $timestart) {
  * @return array status array
  */
 function book_reset_userdata($data) {
-    return array();
+    global $DB;
+    // Any changes to the list of dates that needs to be rolled should be same during course restore and course reset.
+    // See MDL-9367.
+
+    $status = [];
+
+    if (!empty($data->reset_book_tags)) {
+        // Loop through the books and remove the tags from the chapters.
+        if ($books = $DB->get_records('book', array('course' => $data->courseid))) {
+            foreach ($books as $book) {
+                if (!$cm = get_coursemodule_from_instance('book', $book->id)) {
+                    continue;
+                }
+
+                $context = context_module::instance($cm->id);
+                core_tag_tag::delete_instances('mod_book', null, $context->id);
+            }
+        }
+
+
+        $status[] = [
+            'component' => get_string('modulenameplural', 'book'),
+            'item' => get_string('tagsdeleted', 'book'),
+            'error' => false
+        ];
+    }
+
+    return $status;
+}
+
+/**
+ * The elements to add the course reset form.
+ *
+ * @param moodleform $mform
+ */
+function book_reset_course_form_definition(&$mform) {
+    $mform->addElement('header', 'bookheader', get_string('modulenameplural', 'book'));
+    $mform->addElement('checkbox', 'reset_book_tags', get_string('removeallbooktags', 'book'));
 }
 
 /**
@@ -576,8 +604,8 @@ function book_export_contents($cm, $baseurl) {
         $chapterindexfile['filesize']     = 0;
         $chapterindexfile['fileurl']      = moodle_url::make_webservice_pluginfile_url(
                     $context->id, 'mod_book', 'chapter', $chapter->id, '/', 'index.html')->out(false);
-        $chapterindexfile['timecreated']  = $book->timecreated;
-        $chapterindexfile['timemodified'] = $book->timemodified;
+        $chapterindexfile['timecreated']  = $chapter->timecreated;
+        $chapterindexfile['timemodified'] = $chapter->timemodified;
         $chapterindexfile['content']      = format_string($chapter->title, true, array('context' => $context));
         $chapterindexfile['sortorder']    = 0;
         $chapterindexfile['userid']       = null;
@@ -718,20 +746,34 @@ function mod_book_get_fontawesome_icon_map() {
  *
  * @param calendar_event $event
  * @param \core_calendar\action_factory $factory
+ * @param int $userid User id to use for all capability checks, etc. Set to 0 for current user (default).
  * @return \core_calendar\local\event\entities\action_interface|null
  */
 function mod_book_core_calendar_provide_event_action(calendar_event $event,
-                                                     \core_calendar\action_factory $factory) {
-    $cm = get_fast_modinfo($event->courseid)->instances['book'][$event->instance];
+                                                     \core_calendar\action_factory $factory,
+                                                     int $userid = 0) {
+    global $USER;
+
+    if (empty($userid)) {
+        $userid = $USER->id;
+    }
+
+    $cm = get_fast_modinfo($event->courseid, $userid)->instances['book'][$event->instance];
+
+    if (!$cm->uservisible) {
+        // The module is not visible to the user for any reason.
+        return null;
+    }
+
     $context = context_module::instance($cm->id);
 
-    if (!has_capability('mod/book:read', $context)) {
+    if (!has_capability('mod/book:read', $context, $userid)) {
         return null;
     }
 
     $completion = new \completion_info($cm->get_course());
 
-    $completiondata = $completion->get_data($cm, false);
+    $completiondata = $completion->get_data($cm, false, $userid);
 
     if ($completiondata->completionstate != COMPLETION_INCOMPLETE) {
         return null;

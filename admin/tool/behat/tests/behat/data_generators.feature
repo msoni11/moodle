@@ -221,7 +221,7 @@ Feature: Set up contextual data for tests
     And I should see "Test workshop name"
     And I follow "Test assignment name"
     And I should see "Test assignment description"
-    And I follow "C1"
+    And I am on "Course 1" course homepage
     And I follow "Test assignment name with scale"
     And I follow "Edit settings"
     And the field "Type" matches value "Scale"
@@ -286,7 +286,7 @@ Feature: Set up contextual data for tests
       | student1 | CHSB   |
       | student1 | CHC    |
     When I log in as "admin"
-    And I navigate to "Cohorts" node in "Site administration > Users > Accounts"
+    And I navigate to "Users > Accounts > Cohorts" in site administration
     Then the following should exist in the "cohorts" table:
       | Name            | Cohort size |
       | System cohort A | 1           |
@@ -312,7 +312,6 @@ Feature: Set up contextual data for tests
       | fullname | course | gradecategory |
       | Grade sub category 2 | C1 | Grade category 1 |
     When I log in as "admin"
-    And I am on course index
     And I am on "Course 1" course homepage
     And I navigate to "View > Grader report" in the course gradebook
     Then I should see "Grade category 1"

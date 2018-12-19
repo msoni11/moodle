@@ -121,6 +121,9 @@ class format_topics extends format_base {
             if ($sectionno != 0 && $usercoursedisplay == COURSE_DISPLAY_MULTIPAGE) {
                 $url->param('section', $sectionno);
             } else {
+                if (empty($CFG->linkcoursesections) && !empty($options['navigation'])) {
+                    return null;
+                }
                 $url->set_anchor('section-'.$sectionno);
             }
         }
@@ -395,6 +398,17 @@ class format_topics extends format_base {
         $renderer = $PAGE->get_renderer('format_topics');
         $rv['section_availability'] = $renderer->section_availability($this->get_section($section));
         return $rv;
+    }
+
+    /**
+     * Return the plugin configs for external functions.
+     *
+     * @return array the list of configuration settings
+     * @since Moodle 3.5
+     */
+    public function get_config_for_external() {
+        // Return everything (nothing to hide).
+        return $this->get_format_options();
     }
 }
 

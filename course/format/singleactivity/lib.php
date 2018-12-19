@@ -342,8 +342,7 @@ class format_singleactivity extends format_base {
 
     /**
      * Checks if the activity type has multiple items in the activity chooser.
-     * This may happen as a result of defining callback modulename_get_shortcuts()
-     * or [deprecated] modulename_get_types() - TODO MDL-53697 remove this line.
+     * This may happen as a result of defining callback modulename_get_shortcuts().
      *
      * @return bool|null (null if the check is not possible)
      */
@@ -478,4 +477,14 @@ class format_singleactivity extends format_base {
         return false;
     }
 
+    /**
+     * Return the plugin configs for external functions.
+     *
+     * @return array the list of configuration settings
+     * @since Moodle 3.5
+     */
+    public function get_config_for_external() {
+        // Return everything (nothing to hide).
+        return $this->get_format_options();
+    }
 }

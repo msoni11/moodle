@@ -43,20 +43,30 @@ use moodle_url;
 class api {
 
     /**
-     * Create a google ready OAuth 2 service.
-     * @return core\oauth2\issuer
+     * Build a google ready OAuth 2 service.
+     * @return \core\oauth2\issuer
      */
-    private static function create_google() {
+    private static function init_google() {
         $record = (object) [
             'name' => 'Google',
             'image' => 'https://accounts.google.com/favicon.ico',
-            'baseurl' => 'http://accounts.google.com/',
+            'baseurl' => 'https://accounts.google.com/',
             'loginparamsoffline' => 'access_type=offline&prompt=consent',
             'showonloginpage' => true
         ];
 
         $issuer = new issuer(0, $record);
-        $issuer->create();
+        return $issuer;
+    }
+
+    /**
+     * Create endpoints for google issuers.
+     * @param issuer $issuer issuer the endpoints should be created for.
+     * @return mixed
+     * @throws \coding_exception
+     * @throws \core\invalid_persistent_exception
+     */
+    private static function create_endpoints_for_google($issuer) {
 
         $record = (object) [
             'issuerid' => $issuer->get('id'),
@@ -69,14 +79,14 @@ class api {
     }
 
     /**
-     * Create a facebook ready OAuth 2 service.
-     * @return core\oauth2\issuer
+     * Build a facebook ready OAuth 2 service.
+     * @return \core\oauth2\issuer
      */
-    private static function create_facebook() {
+    private static function init_facebook() {
         // Facebook is a custom setup.
         $record = (object) [
             'name' => 'Facebook',
-            'image' => 'https://facebookbrand.com/wp-content/themes/fb-branding/prj-fb-branding/assets/images/fb-art.png',
+            'image' => 'https://facebookbrand.com/wp-content/uploads/2016/05/flogo_rgb_hex-brc-site-250.png',
             'baseurl' => '',
             'loginscopes' => 'public_profile email',
             'loginscopesoffline' => 'public_profile email',
@@ -84,12 +94,35 @@ class api {
         ];
 
         $issuer = new issuer(0, $record);
-        $issuer->create();
+        return $issuer;
+    }
 
+    /**
+     * Create endpoints for facebook issuers.
+     * @param issuer $issuer issuer the endpoints should be created for.
+     * @return mixed
+     * @throws \coding_exception
+     * @throws \core\invalid_persistent_exception
+     */
+    private static function create_endpoints_for_facebook($issuer) {
+        // The Facebook API version.
+        $apiversion = '2.12';
+        // The Graph API URL.
+        $graphurl = 'https://graph.facebook.com/v' . $apiversion;
+        // User information fields that we want to fetch.
+        $infofields = [
+            'id',
+            'first_name',
+            'last_name',
+            'link',
+            'picture.type(large)',
+            'name',
+            'email',
+        ];
         $endpoints = [
-            'authorization_endpoint' => 'https://www.facebook.com/v2.8/dialog/oauth',
-            'token_endpoint' => 'https://graph.facebook.com/v2.8/oauth/access_token',
-            'userinfo_endpoint' => 'https://graph.facebook.com/v2.8/me?fields=id,first_name,last_name,link,picture,name,email'
+            'authorization_endpoint' => sprintf('https://www.facebook.com/v%s/dialog/oauth', $apiversion),
+            'token_endpoint' => $graphurl . '/oauth/access_token',
+            'userinfo_endpoint' => $graphurl . '/me?fields=' . implode(',', $infofields)
         ];
 
         foreach ($endpoints as $name => $url) {
@@ -124,10 +157,10 @@ class api {
     }
 
     /**
-     * Create a microsoft ready OAuth 2 service.
-     * @return core\oauth2\issuer
+     * Build a microsoft ready OAuth 2 service.
+     * @return \core\oauth2\issuer
      */
-    private static function create_microsoft() {
+    private static function init_microsoft() {
         // Microsoft is a custom setup.
         $record = (object) [
             'name' => 'Microsoft',
@@ -139,7 +172,17 @@ class api {
         ];
 
         $issuer = new issuer(0, $record);
-        $issuer->create();
+        return $issuer;
+    }
+
+    /**
+     * Create endpoints for microsoft issuers.
+     * @param issuer $issuer issuer the endpoints should be created for.
+     * @return mixed
+     * @throws \coding_exception
+     * @throws \core\invalid_persistent_exception
+     */
+    private static function create_endpoints_for_microsoft($issuer) {
 
         $endpoints = [
             'authorization_endpoint' => 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize',
@@ -181,26 +224,152 @@ class api {
     }
 
     /**
-     * Create one of the standard issuers.
-     * @param string $type One of google, facebook, microsoft
+     * Build a nextcloud ready OAuth 2 service.
      * @return \core\oauth2\issuer
      */
-    public static function create_standard_issuer($type) {
+    private static function init_nextcloud() {
+        // Nextcloud has a custom baseurl. Thus, the creation of endpoints has to be done later.
+        $record = (object) [
+            'name' => 'Nextcloud',
+            'image' => 'https://nextcloud.com/wp-content/themes/next/assets/img/common/favicon.png?x16328',
+            'basicauth' => 1,
+        ];
+
+        $issuer = new issuer(0, $record);
+
+        return $issuer;
+    }
+
+    /**
+     * Create endpoints for nextcloud issuers.
+     * @param issuer $issuer issuer the endpoints should be created for.
+     * @return mixed
+     * @throws \coding_exception
+     * @throws \core\invalid_persistent_exception
+     */
+    private static function create_endpoints_for_nextcloud($issuer) {
+        $baseurl = $issuer->get('baseurl');
+        // Add trailing slash to baseurl, if needed.
+        if (substr($baseurl, -1) !== '/') {
+            $baseurl .= '/';
+        }
+
+        $endpoints = [
+            // Baseurl will be prepended later.
+            'authorization_endpoint' => 'index.php/apps/oauth2/authorize',
+            'token_endpoint' => 'index.php/apps/oauth2/api/v1/token',
+            'userinfo_endpoint' => 'ocs/v2.php/cloud/user?format=json',
+            'webdav_endpoint' => 'remote.php/webdav/',
+            'ocs_endpoint' => 'ocs/v1.php/apps/files_sharing/api/v1/shares',
+        ];
+
+        foreach ($endpoints as $name => $url) {
+            $record = (object) [
+                'issuerid' => $issuer->get('id'),
+                'name' => $name,
+                'url' => $baseurl . $url,
+            ];
+            $endpoint = new \core\oauth2\endpoint(0, $record);
+            $endpoint->create();
+        }
+
+        // Create the field mappings.
+        $mapping = [
+            'ocs-data-email' => 'email',
+            'ocs-data-id' => 'username',
+        ];
+        foreach ($mapping as $external => $internal) {
+            $record = (object) [
+                'issuerid' => $issuer->get('id'),
+                'externalfield' => $external,
+                'internalfield' => $internal
+            ];
+            $userfieldmapping = new \core\oauth2\user_field_mapping(0, $record);
+            $userfieldmapping->create();
+        }
+    }
+
+    /**
+     * Initializes a record for one of the standard issuers to be displayed in the settings.
+     * The issuer is not yet created in the database.
+     * @param string $type One of google, facebook, microsoft, nextcloud
+     * @return \core\oauth2\issuer
+     */
+    public static function init_standard_issuer($type) {
         require_capability('moodle/site:config', context_system::instance());
         if ($type == 'google') {
-            return self::create_google();
+            return self::init_google();
         } else if ($type == 'microsoft') {
-            return self::create_microsoft();
+            return self::init_microsoft();
         } else if ($type == 'facebook') {
-            return self::create_facebook();
+            return self::init_facebook();
+        } else if ($type == 'nextcloud') {
+            return self::init_nextcloud();
         } else {
             throw new moodle_exception('OAuth 2 service type not recognised: ' . $type);
         }
     }
 
     /**
+     * Create endpoints for standard issuers, based on the issuer created from submitted data.
+     * @param string $type One of google, facebook, microsoft, nextcloud
+     * @param issuer $issuer issuer the endpoints should be created for.
+     * @return \core\oauth2\issuer
+     */
+    public static function create_endpoints_for_standard_issuer($type, $issuer) {
+        require_capability('moodle/site:config', context_system::instance());
+        if ($type == 'google') {
+            $issuer = self::create_endpoints_for_google($issuer);
+            self::discover_endpoints($issuer);
+            return $issuer;
+        } else if ($type == 'microsoft') {
+            return self::create_endpoints_for_microsoft($issuer);
+        } else if ($type == 'facebook') {
+            return self::create_endpoints_for_facebook($issuer);
+        } else if ($type == 'nextcloud') {
+            return self::create_endpoints_for_nextcloud($issuer);
+        } else {
+            throw new moodle_exception('OAuth 2 service type not recognised: ' . $type);
+        }
+    }
+
+    /**
+     * Create one of the standard issuers.
+     * @param string $type One of google, facebook, microsoft, or nextcloud
+     * @param string|false $baseurl Baseurl (only required for nextcloud)
+     * @return \core\oauth2\issuer
+     */
+    public static function create_standard_issuer($type, $baseurl = false) {
+        require_capability('moodle/site:config', context_system::instance());
+        if ($type == 'google') {
+            $issuer = self::init_google();
+            $issuer->create();
+            return self::create_endpoints_for_google($issuer);
+        } else if ($type == 'microsoft') {
+            $issuer = self::init_microsoft();
+            $issuer->create();
+            return self::create_endpoints_for_microsoft($issuer);
+        } else if ($type == 'facebook') {
+            $issuer = self::init_facebook();
+            $issuer->create();
+            return self::create_endpoints_for_facebook($issuer);
+        } else if ($type == 'nextcloud') {
+            if (!$baseurl) {
+                throw new moodle_exception('Nextcloud service type requires the baseurl parameter.');
+            }
+            $issuer = self::init_nextcloud();
+            $issuer->set('baseurl', $baseurl);
+            $issuer->create();
+            return self::create_endpoints_for_nextcloud($issuer);
+        } else {
+            throw new moodle_exception('OAuth 2 service type not recognised: ' . $type);
+        }
+    }
+
+
+    /**
      * List all the issuers, ordered by the sortorder field
-     * @return core\oauth2\issuer[]
+     * @return \core\oauth2\issuer[]
      */
     public static function get_all_issuers() {
         return issuer::get_records([], 'sortorder');
@@ -210,7 +379,7 @@ class api {
      * Get a single issuer by id.
      *
      * @param int $id
-     * @return core\oauth2\issuer
+     * @return \core\oauth2\issuer
      */
     public static function get_issuer($id) {
         return new issuer($id);
@@ -220,7 +389,7 @@ class api {
      * Get a single endpoint by id.
      *
      * @param int $id
-     * @return core\oauth2\endpoint
+     * @return \core\oauth2\endpoint
      */
     public static function get_endpoint($id) {
         return new endpoint($id);
@@ -230,7 +399,7 @@ class api {
      * Get a single user field mapping by id.
      *
      * @param int $id
-     * @return core\oauth2\user_field_mapping
+     * @return \core\oauth2\user_field_mapping
      */
     public static function get_user_field_mapping($id) {
         return new user_field_mapping($id);
@@ -241,7 +410,7 @@ class api {
      * Never ever ever expose this to a webservice because it contains the refresh token which grants API access.
      *
      * @param \core\oauth2\issuer $issuer
-     * @return \core\oauth2\client
+     * @return system_account|false
      */
     public static function get_system_account(issuer $issuer) {
         return system_account::get_record(['issuerid' => $issuer->get('id')]);
@@ -286,8 +455,9 @@ class api {
      * Get an authenticated oauth2 client using the system account.
      * This call uses the refresh token to get an access token.
      *
-     * @param core\oauth2\issuer $issuer
-     * @return core\oauth2\client
+     * @param \core\oauth2\issuer $issuer
+     * @return \core\oauth2\client|false An authenticated client (or false if the token could not be upgraded)
+     * @throws moodle_exception Request for token upgrade failed for technical reasons
      */
     public static function get_system_oauth_client(issuer $issuer) {
         $systemaccount = self::get_system_account($issuer);
@@ -311,10 +481,10 @@ class api {
      * Get an authenticated oauth2 client using the current user account.
      * This call does the redirect dance back to the current page after authentication.
      *
-     * @param core\oauth2\issuer $issuer The desired OAuth issuer
+     * @param \core\oauth2\issuer $issuer The desired OAuth issuer
      * @param moodle_url $currenturl The url to the current page.
      * @param string $additionalscopes The additional scopes required for authorization.
-     * @return core\oauth2\client
+     * @return \core\oauth2\client
      */
     public static function get_user_oauth_client(issuer $issuer, moodle_url $currenturl, $additionalscopes = '') {
         $client = new \core\oauth2\client($issuer, $currenturl, $additionalscopes);
@@ -325,8 +495,8 @@ class api {
     /**
      * Get the list of defined endpoints for this OAuth issuer
      *
-     * @param core\oauth2\issuer $issuer The desired OAuth issuer
-     * @return core\oauth2\endpoint[]
+     * @param \core\oauth2\issuer $issuer The desired OAuth issuer
+     * @return \core\oauth2\endpoint[]
      */
     public static function get_endpoints(issuer $issuer) {
         return endpoint::get_records(['issuerid' => $issuer->get('id')]);
@@ -335,8 +505,8 @@ class api {
     /**
      * Get the list of defined mapping from OAuth user fields to moodle user fields.
      *
-     * @param core\oauth2\issuer $issuer The desired OAuth issuer
-     * @return core\oauth2\user_field_mapping[]
+     * @param \core\oauth2\issuer $issuer The desired OAuth issuer
+     * @return \core\oauth2\user_field_mapping[]
      */
     public static function get_user_field_mappings(issuer $issuer) {
         return user_field_mapping::get_records(['issuerid' => $issuer->get('id')]);
@@ -345,11 +515,11 @@ class api {
     /**
      * Guess an image from the discovery URL.
      *
-     * @param core\oauth2\issuer $issuer The desired OAuth issuer
+     * @param \core\oauth2\issuer $issuer The desired OAuth issuer
      */
     protected static function guess_image($issuer) {
-        if (empty($issuer->get('image'))) {
-            $baseurl = parse_url($issuer->get('discoveryurl'));
+        if (empty($issuer->get('image')) && !empty($issuer->get('baseurl'))) {
+            $baseurl = parse_url($issuer->get('baseurl'));
             $imageurl = $baseurl['scheme'] . '://' . $baseurl['host'] . '/favicon.ico';
             $issuer->set('image', $imageurl);
             $issuer->update();
@@ -447,7 +617,7 @@ class api {
      * Take the data from the mform and update the issuer.
      *
      * @param stdClass $data
-     * @return core\oauth2\issuer
+     * @return \core\oauth2\issuer
      */
     public static function update_issuer($data) {
         require_capability('moodle/site:config', context_system::instance());
@@ -466,7 +636,7 @@ class api {
      * Take the data from the mform and create the issuer.
      *
      * @param stdClass $data
-     * @return core\oauth2\issuer
+     * @return \core\oauth2\issuer
      */
     public static function create_issuer($data) {
         require_capability('moodle/site:config', context_system::instance());
@@ -485,7 +655,7 @@ class api {
      * Take the data from the mform and update the endpoint.
      *
      * @param stdClass $data
-     * @return core\oauth2\endpoint
+     * @return \core\oauth2\endpoint
      */
     public static function update_endpoint($data) {
         require_capability('moodle/site:config', context_system::instance());
@@ -501,7 +671,7 @@ class api {
      * Take the data from the mform and create the endpoint.
      *
      * @param stdClass $data
-     * @return core\oauth2\endpoint
+     * @return \core\oauth2\endpoint
      */
     public static function create_endpoint($data) {
         require_capability('moodle/site:config', context_system::instance());
@@ -516,7 +686,7 @@ class api {
      * Take the data from the mform and update the user field mapping.
      *
      * @param stdClass $data
-     * @return core\oauth2\user_field_mapping
+     * @return \core\oauth2\user_field_mapping
      */
     public static function update_user_field_mapping($data) {
         require_capability('moodle/site:config', context_system::instance());
@@ -532,7 +702,7 @@ class api {
      * Take the data from the mform and create the user field mapping.
      *
      * @param stdClass $data
-     * @return core\oauth2\user_field_mapping
+     * @return \core\oauth2\user_field_mapping
      */
     public static function create_user_field_mapping($data) {
         require_capability('moodle/site:config', context_system::instance());
@@ -710,7 +880,7 @@ class api {
      *
      * Requires moodle/site:config capability at the system context.
      *
-     * @param core\oauth2\issuer $issuer
+     * @param \core\oauth2\issuer $issuer
      * @param moodle_url $returnurl The url to the current page (we will be redirected back here after authentication).
      * @return boolean
      */
@@ -752,7 +922,7 @@ class api {
         $record->issuerid = $issuer->get('id');
         $record->refreshtoken = $refreshtoken;
         $record->grantedscopes = $scopes;
-        $record->email = $userinfo['email'];
+        $record->email = isset($userinfo['email']) ? $userinfo['email'] : '';
         $record->username = $userinfo['username'];
 
         $systemaccount = new system_account(0, $record);

@@ -59,6 +59,8 @@ class restore_quiz_activity_structure_step extends restore_questions_activity_st
 
         $paths[] = new restore_path_element('quiz_question_instance',
                 '/activity/quiz/question_instances/question_instance');
+        $paths[] = new restore_path_element('quiz_slot_tags',
+                '/activity/quiz/question_instances/question_instance/tags/tag');
         $paths[] = new restore_path_element('quiz_section', '/activity/quiz/sections/section');
         $paths[] = new restore_path_element('quiz_feedback', '/activity/quiz/feedbacks/feedback');
         $paths[] = new restore_path_element('quiz_override', '/activity/quiz/overrides/override');
@@ -101,10 +103,11 @@ class restore_quiz_activity_structure_step extends restore_questions_activity_st
         $oldid = $data->id;
         $data->course = $this->get_courseid();
 
+        // Any changes to the list of dates that needs to be rolled should be same during course restore and course reset.
+        // See MDL-9367.
+
         $data->timeopen = $this->apply_date_offset($data->timeopen);
         $data->timeclose = $this->apply_date_offset($data->timeclose);
-        $data->timecreated = $this->apply_date_offset($data->timecreated);
-        $data->timemodified = $this->apply_date_offset($data->timemodified);
 
         if (property_exists($data, 'questions')) {
             // Needed by {@link process_quiz_attempt_legacy}, in which case it will be present.
@@ -250,9 +253,10 @@ class restore_quiz_activity_structure_step extends restore_questions_activity_st
     }
 
     protected function process_quiz_question_instance($data) {
-        global $DB;
+        global $CFG, $DB;
 
         $data = (object)$data;
+        $oldid = $data->id;
 
         // Backwards compatibility for old field names (MDL-43670).
         if (!isset($data->questionid) && isset($data->question)) {
@@ -289,9 +293,43 @@ class restore_quiz_activity_structure_step extends restore_questions_activity_st
         }
 
         $data->quizid = $this->get_new_parentid('quiz');
-        $data->questionid = $this->get_mappingid('question', $data->questionid);
+        $questionmapping = $this->get_mapping('question', $data->questionid);
+        $data->questionid = $questionmapping ? $questionmapping->newitemid : false;
 
-        $DB->insert_record('quiz_slots', $data);
+        if (isset($data->questioncategoryid)) {
+            $data->questioncategoryid = $this->get_mappingid('question_category', $data->questioncategoryid);
+        } else if ($questionmapping && $questionmapping->info->qtype == 'random') {
+            // Backward compatibility for backups created using Moodle 3.4 or earlier.
+            $data->questioncategoryid = $this->get_mappingid('question_category', $questionmapping->parentitemid);
+            $data->includingsubcategories = $questionmapping->info->questiontext ? 1 : 0;
+        }
+
+        $newitemid = $DB->insert_record('quiz_slots', $data);
+        // Add mapping, restore of slot tags (for random questions) need it.
+        $this->set_mapping('quiz_question_instance', $oldid, $newitemid);
+    }
+
+    /**
+     * Process a quiz_slot_tags restore
+     *
+     * @param stdClass|array $data The quiz_slot_tags data
+     */
+    protected function process_quiz_slot_tags($data) {
+        global $DB;
+
+        $data = (object)$data;
+
+        $data->slotid = $this->get_new_parentid('quiz_question_instance');
+        if ($this->task->is_samesite() && $tag = core_tag_tag::get($data->tagid, 'id, name')) {
+            $data->tagname = $tag->name;
+        } else if ($tag = core_tag_tag::get_by_name(0, $data->tagname, 'id, name')) {
+            $data->tagid = $tag->id;
+        } else {
+            $data->tagid = null;
+            $data->tagname = $tag->name;
+        }
+
+        $DB->insert_record('quiz_slot_tags', $data);
     }
 
     protected function process_quiz_section($data) {
@@ -359,8 +397,6 @@ class restore_quiz_activity_structure_step extends restore_questions_activity_st
         $data->userid = $this->get_mappingid('user', $data->userid);
         $data->grade = $data->gradeval;
 
-        $data->timemodified = $this->apply_date_offset($data->timemodified);
-
         $DB->insert_record('quiz_grades', $data);
     }
 
@@ -371,10 +407,6 @@ class restore_quiz_activity_structure_step extends restore_questions_activity_st
         $data->attempt = $data->attemptnum;
 
         $data->userid = $this->get_mappingid('user', $data->userid);
-
-        $data->timestart = $this->apply_date_offset($data->timestart);
-        $data->timefinish = $this->apply_date_offset($data->timefinish);
-        $data->timemodified = $this->apply_date_offset($data->timemodified);
 
         if (!empty($data->timecheckstate)) {
             $data->timecheckstate = $this->apply_date_offset($data->timecheckstate);

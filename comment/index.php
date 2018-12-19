@@ -26,7 +26,6 @@ require_once('../config.php');
 require_once($CFG->libdir.'/adminlib.php');
 require_once($CFG->dirroot.'/comment/locallib.php');
 
-require_login();
 admin_externalpage_setup('comments', '', null, '', array('pagelayout'=>'report'));
 
 $context = context_system::instance();
@@ -61,7 +60,7 @@ if ($action === 'delete') {
             die;
         } else {
             if ($manager->delete_comment($commentid)) {
-                redirect($CFG->httpswwwroot.'/comment/');
+                redirect($CFG->wwwroot.'/comment/');
             } else {
                 $err = 'cannotdeletecomment';
             }
@@ -81,7 +80,7 @@ echo $OUTPUT->header();
 echo $OUTPUT->heading(get_string('comments'));
 echo $OUTPUT->box_start('generalbox commentsreport');
 if (!empty($err)) {
-    print_error($err, 'error', $CFG->httpswwwroot.'/comment/');
+    print_error($err, 'error', $CFG->wwwroot.'/comment/');
 }
 if (empty($action)) {
     echo '<form method="post">';

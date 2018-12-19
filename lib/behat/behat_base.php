@@ -28,7 +28,8 @@
 
 // NOTE: no MOODLE_INTERNAL test here, this file may be required by behat before including /config.php.
 
-use Behat\Mink\Exception\ExpectationException as ExpectationException,
+use Behat\Mink\Exception\DriverException,
+    Behat\Mink\Exception\ExpectationException as ExpectationException,
     Behat\Mink\Exception\ElementNotFoundException as ElementNotFoundException,
     Behat\Mink\Element\NodeElement as NodeElement;
 
@@ -335,8 +336,6 @@ class behat_base extends Behat\MinkExtension\Context\RawMinkContext {
                 if (!$exception) {
                     $exception = $e;
                 }
-                // We wait until no exception is thrown or timeout expires.
-                continue;
             }
 
             if ($this->running_javascript()) {
@@ -727,7 +726,7 @@ class behat_base extends Behat\MinkExtension\Context\RawMinkContext {
             $pending = '';
             try {
                 $jscode = '
-                    return function() {
+                    return (function() {
                         if (typeof M === "undefined") {
                             if (document.readyState === "complete") {
                                 return "";
@@ -741,7 +740,7 @@ class behat_base extends Behat\MinkExtension\Context\RawMinkContext {
                         } else {
                             return "incomplete"
                         }
-                    }();';
+                    }());';
                 $pending = $this->getSession()->evaluateScript($jscode);
             } catch (NoSuchWindow $nsw) {
                 // We catch an exception here, in case we just closed the window we were interacting with.
@@ -883,6 +882,8 @@ class behat_base extends Behat\MinkExtension\Context\RawMinkContext {
 
         } catch (NoSuchWindow $e) {
             // If we were interacting with a popup window it will not exists after closing it.
+        } catch (DriverException $e) {
+            // Same reason as above.
         }
     }
 
@@ -946,6 +947,34 @@ class behat_base extends Behat\MinkExtension\Context\RawMinkContext {
     }
 
     /**
+     * Set current $USER, reset access cache.
+     *
+     * In some cases, behat will execute the code as admin but in many cases we need to set an specific user as some
+     * API's might rely on the logged user to take some action.
+     *
+     * @param null|int|stdClass $user user record, null or 0 means non-logged-in, positive integer means userid
+     */
+    public static function set_user($user = null) {
+        global $DB;
+
+        if (is_object($user)) {
+            $user = clone($user);
+        } else if (!$user) {
+            // Assign valid data to admin user (some generator-related code needs a valid user).
+            $user = $DB->get_record('user', array('username' => 'admin'));
+        } else {
+            $user = $DB->get_record('user', array('id' => $user));
+        }
+        unset($user->description);
+        unset($user->access);
+        unset($user->preference);
+
+        // Ensure session is empty, as it may contain caches and user specific info.
+        \core\session\manager::init_empty_session();
+
+        \core\session\manager::set_user($user);
+    }
+    /**
      * Trigger click on node via javascript instead of actually clicking on it via pointer.
      *
      * This function resolves the issue of nested elements with click listeners or links - in these cases clicking via
@@ -959,7 +988,12 @@ class behat_base extends Behat\MinkExtension\Context\RawMinkContext {
         }
         $this->ensure_node_is_visible($node); // Ensures hidden elements can't be clicked.
         $xpath = $node->getXpath();
-        $script = "Syn.click({{ELEMENT}})";
-        $this->getSession()->getDriver()->triggerSynScript($xpath, $script);
+        $driver = $this->getSession()->getDriver();
+        if ($driver instanceof \Moodle\BehatExtension\Driver\MoodleSelenium2Driver) {
+            $script = "Syn.click({{ELEMENT}})";
+            $driver->triggerSynScript($xpath, $script);
+        } else {
+            $driver->click($xpath);
+        }
     }
 }

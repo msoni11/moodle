@@ -89,10 +89,7 @@ class manager {
         $validtasks = array();
 
         foreach ($tasks as $taskid => $task) {
-            $classname = get_class($task);
-            if (strpos($classname, '\\') !== 0) {
-                $classname = '\\' . $classname;
-            }
+            $classname = self::get_canonical_class_name($task);
 
             $validtasks[] = $classname;
 
@@ -126,19 +123,53 @@ class manager {
     }
 
     /**
+     * Checks if the task with the same classname, component and customdata is already scheduled
+     *
+     * @param adhoc_task $task
+     * @return bool
+     */
+    protected static function task_is_scheduled($task) {
+        global $DB;
+        $record = self::record_from_adhoc_task($task);
+        $params = [$record->classname, $record->component, $record->customdata];
+        $sql = 'classname = ? AND component = ? AND ' .
+            $DB->sql_compare_text('customdata', \core_text::strlen($record->customdata) + 1) . ' = ?';
+
+        if ($record->userid) {
+            $params[] = $record->userid;
+            $sql .= " AND userid = ? ";
+        }
+        return $DB->record_exists_select('task_adhoc', $sql, $params);
+    }
+
+    /**
      * Queue an adhoc task to run in the background.
      *
      * @param \core\task\adhoc_task $task - The new adhoc task information to store.
+     * @param bool $checkforexisting - If set to true and the task with the same classname, component and customdata
+     *     is already scheduled then it will not schedule a new task. Can be used only for ASAP tasks.
      * @return boolean - True if the config was saved.
      */
-    public static function queue_adhoc_task(adhoc_task $task) {
+    public static function queue_adhoc_task(adhoc_task $task, $checkforexisting = false) {
         global $DB;
+
+        if ($userid = $task->get_userid()) {
+            // User found. Check that they are suitable.
+            \core_user::require_active_user(\core_user::get_user($userid, '*', MUST_EXIST), true, true);
+        }
 
         $record = self::record_from_adhoc_task($task);
         // Schedule it immediately if nextruntime not explicitly set.
         if (!$task->get_next_run_time()) {
             $record->nextruntime = time() - 1;
         }
+
+        // Check if the same task is already scheduled.
+        if ($checkforexisting && self::task_is_scheduled($task)) {
+            return false;
+        }
+
+        // Queue the task.
         $result = $DB->insert_record('task_adhoc', $record);
 
         return $result;
@@ -154,10 +185,7 @@ class manager {
     public static function configure_scheduled_task(scheduled_task $task) {
         global $DB;
 
-        $classname = get_class($task);
-        if (strpos($classname, '\\') !== 0) {
-            $classname = '\\' . $classname;
-        }
+        $classname = self::get_canonical_class_name($task);
 
         $original = $DB->get_record('task_scheduled', array('classname'=>$classname), 'id', MUST_EXIST);
 
@@ -177,10 +205,7 @@ class manager {
      */
     public static function record_from_scheduled_task($task) {
         $record = new \stdClass();
-        $record->classname = get_class($task);
-        if (strpos($record->classname, '\\') !== 0) {
-            $record->classname = '\\' . $record->classname;
-        }
+        $record->classname = self::get_canonical_class_name($task);
         $record->component = $task->get_component();
         $record->blocking = $task->is_blocking();
         $record->customised = $task->is_customised();
@@ -205,16 +230,14 @@ class manager {
      */
     public static function record_from_adhoc_task($task) {
         $record = new \stdClass();
-        $record->classname = get_class($task);
-        if (strpos($record->classname, '\\') !== 0) {
-            $record->classname = '\\' . $record->classname;
-        }
+        $record->classname = self::get_canonical_class_name($task);
         $record->id = $task->get_id();
         $record->component = $task->get_component();
         $record->blocking = $task->is_blocking();
         $record->nextruntime = $task->get_next_run_time();
         $record->faildelay = $task->get_fail_delay();
         $record->customdata = $task->get_custom_data_as_string();
+        $record->userid = $task->get_userid();
 
         return $record;
     }
@@ -226,10 +249,7 @@ class manager {
      * @return \core\task\adhoc_task
      */
     public static function adhoc_task_from_record($record) {
-        $classname = $record->classname;
-        if (strpos($classname, '\\') !== 0) {
-            $classname = '\\' . $classname;
-        }
+        $classname = self::get_canonical_class_name($record->classname);
         if (!class_exists($classname)) {
             debugging("Failed to load task: " . $classname, DEBUG_DEVELOPER);
             return false;
@@ -252,6 +272,10 @@ class manager {
             $task->set_custom_data_as_string($record->customdata);
         }
 
+        if (isset($record->userid)) {
+            $task->set_userid($record->userid);
+        }
+
         return $task;
     }
 
@@ -262,10 +286,7 @@ class manager {
      * @return \core\task\scheduled_task
      */
     public static function scheduled_task_from_record($record) {
-        $classname = $record->classname;
-        if (strpos($classname, '\\') !== 0) {
-            $classname = '\\' . $classname;
-        }
+        $classname = self::get_canonical_class_name($record->classname);
         if (!class_exists($classname)) {
             debugging("Failed to load task: " . $classname, DEBUG_DEVELOPER);
             return false;
@@ -342,15 +363,31 @@ class manager {
     public static function get_scheduled_task($classname) {
         global $DB;
 
-        if (strpos($classname, '\\') !== 0) {
-            $classname = '\\' . $classname;
-        }
+        $classname = self::get_canonical_class_name($classname);
         // We are just reading - so no locks required.
         $record = $DB->get_record('task_scheduled', array('classname'=>$classname), '*', IGNORE_MISSING);
         if (!$record) {
             return false;
         }
         return self::scheduled_task_from_record($record);
+    }
+
+    /**
+     * This function load the adhoc tasks for a given classname.
+     *
+     * @param string $classname
+     * @return \core\task\adhoc_task[]
+     */
+    public static function get_adhoc_tasks($classname) {
+        global $DB;
+
+        $classname = self::get_canonical_class_name($classname);
+        // We are just reading - so no locks required.
+        $records = $DB->get_records('task_adhoc', array('classname' => $classname));
+
+        return array_map(function($record) {
+            return self::adhoc_task_from_record($record);
+        }, $records);
     }
 
     /**
@@ -542,10 +579,7 @@ class manager {
             $delay = 86400;
         }
 
-        $classname = get_class($task);
-        if (strpos($classname, '\\') !== 0) {
-            $classname = '\\' . $classname;
-        }
+        $classname = self::get_canonical_class_name($task);
 
         $task->set_next_run_time(time() + $delay);
         $task->set_fail_delay($delay);
@@ -598,10 +632,7 @@ class manager {
             $delay = 86400;
         }
 
-        $classname = get_class($task);
-        if (strpos($classname, '\\') !== 0) {
-            $classname = '\\' . $classname;
-        }
+        $classname = self::get_canonical_class_name($task);
 
         $record = $DB->get_record('task_scheduled', array('classname' => $classname));
         $record->nextruntime = time() + $delay;
@@ -615,6 +646,23 @@ class manager {
     }
 
     /**
+     * Clears the fail delay for the given task and updates its next run time based on the schedule.
+     *
+     * @param scheduled_task $task Task to reset
+     * @throws \dml_exception If there is a database error
+     */
+    public static function clear_fail_delay(scheduled_task $task) {
+        global $DB;
+
+        $record = new \stdClass();
+        $record->id = $DB->get_field('task_scheduled', 'id',
+                ['classname' => self::get_canonical_class_name($task)]);
+        $record->nextruntime = $task->get_next_scheduled_time();
+        $record->faildelay = 0;
+        $DB->update_record('task_scheduled', $record);
+    }
+
+    /**
      * This function indicates that a scheduled task was completed successfully and should be rescheduled.
      *
      * @param \core\task\scheduled_task $task
@@ -622,10 +670,7 @@ class manager {
     public static function scheduled_task_complete(scheduled_task $task) {
         global $DB;
 
-        $classname = get_class($task);
-        if (strpos($classname, '\\') !== 0) {
-            $classname = '\\' . $classname;
-        }
+        $classname = self::get_canonical_class_name($task);
         $record = $DB->get_record('task_scheduled', array('classname' => $classname));
         if ($record) {
             $record->lastruntime = time();
@@ -671,5 +716,22 @@ class manager {
         global $DB;
         $record = $DB->get_record('config', array('name'=>'scheduledtaskreset'));
         return $record && (intval($record->value) > $starttime);
+    }
+
+    /**
+     * Gets class name for use in database table. Always begins with a \.
+     *
+     * @param string|task_base $taskorstring Task object or a string
+     */
+    protected static function get_canonical_class_name($taskorstring) {
+        if (is_string($taskorstring)) {
+            $classname = $taskorstring;
+        } else {
+            $classname = get_class($taskorstring);
+        }
+        if (strpos($classname, '\\') !== 0) {
+            $classname = '\\' . $classname;
+        }
+        return $classname;
     }
 }

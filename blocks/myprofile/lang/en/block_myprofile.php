@@ -45,6 +45,4 @@ $string['myprofile:addinstance'] = 'Add a new logged in user block';
 $string['myprofile:myaddinstance'] = 'Add a new logged in user block to Dashboard';
 $string['myprofile_settings'] = 'Visible user information';
 $string['pluginname'] = 'Logged in user';
-
-// Deprecated since Moodle 3.2.
-$string['display_un'] = 'Display name';
+$string['privacy:metadata'] = 'The Logged in user block only shows information about the logged in user and does not store data itself.';

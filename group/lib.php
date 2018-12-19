@@ -104,6 +104,14 @@ function groups_add_member($grouporid, $userorid, $component=null, $itemid=0) {
     $DB->set_field('groups', 'timemodified', $member->timeadded, array('id'=>$groupid));
     $group->timemodified = $member->timeadded;
 
+    // Invalidate the group and grouping cache for users.
+    cache_helper::invalidate_by_definition('core', 'user_group_groupings', array(), array($userid));
+
+    // Group conversation messaging.
+    if ($conversation = \core_message\api::get_conversation_by_area('core_group', 'groups', $groupid, $context->id)) {
+        \core_message\api::add_members_to_conversation([$userid], $conversation->id);
+    }
+
     // Trigger group event.
     $params = array(
         'context' => $context,
@@ -205,6 +213,15 @@ function groups_remove_member($grouporid, $userorid) {
     $DB->set_field('groups', 'timemodified', $time, array('id' => $groupid));
     $group->timemodified = $time;
 
+    // Invalidate the group and grouping cache for users.
+    cache_helper::invalidate_by_definition('core', 'user_group_groupings', array(), array($userid));
+
+    // Group conversation messaging.
+    $context = context_course::instance($group->courseid);
+    if ($conversation = \core_message\api::get_conversation_by_area('core_group', 'groups', $groupid, $context->id)) {
+        \core_message\api::remove_members_from_conversation([$userid], $conversation->id);
+    }
+
     // Trigger group event.
     $params = array(
         'context' => context_course::instance($group->courseid),
@@ -227,7 +244,7 @@ function groups_remove_member($grouporid, $userorid) {
  * @return id of group or false if error
  */
 function groups_create_group($data, $editform = false, $editoroptions = false) {
-    global $CFG, $DB;
+    global $CFG, $DB, $USER;
 
     //check that courseid exists
     $course = $DB->get_record('course', array('id' => $data->courseid), '*', MUST_EXIST);
@@ -268,6 +285,21 @@ function groups_create_group($data, $editform = false, $editoroptions = false) {
 
     // Invalidate the grouping cache for the course
     cache_helper::invalidate_by_definition('core', 'groupdata', array(), array($course->id));
+
+    // Group conversation messaging.
+    if (\core_message\api::can_create_group_conversation($USER->id, $context)) {
+        if (!empty($data->enablemessaging)) {
+            \core_message\api::create_conversation(
+                \core_message\api::MESSAGE_CONVERSATION_TYPE_GROUP,
+                [],
+                $group->name,
+                \core_message\api::MESSAGE_CONVERSATION_ENABLED,
+                'core_group',
+                'groups',
+                $group->id,
+                $context->id);
+        }
+    }
 
     // Trigger group event.
     $params = array(
@@ -377,7 +409,7 @@ function groups_update_group_icon($group, $data, $editform) {
  * @return bool true or exception
  */
 function groups_update_group($data, $editform = false, $editoroptions = false) {
-    global $CFG, $DB;
+    global $CFG, $DB, $USER;
 
     $context = context_course::instance($data->courseid);
 
@@ -405,6 +437,43 @@ function groups_update_group($data, $editform = false, $editoroptions = false) {
 
     if ($editform) {
         groups_update_group_icon($group, $data, $editform);
+    }
+
+    // Group conversation messaging.
+    if (\core_message\api::can_create_group_conversation($USER->id, $context)) {
+        if ($conversation = \core_message\api::get_conversation_by_area('core_group', 'groups', $group->id, $context->id)) {
+            if ($data->enablemessaging && $data->enablemessaging != $conversation->enabled) {
+                \core_message\api::enable_conversation($conversation->id);
+            }
+            if (!$data->enablemessaging && $data->enablemessaging != $conversation->enabled) {
+                \core_message\api::disable_conversation($conversation->id);
+            }
+            \core_message\api::update_conversation_name($conversation->id, $group->name);
+        } else {
+            if (!empty($data->enablemessaging)) {
+                $conversation = \core_message\api::create_conversation(
+                    \core_message\api::MESSAGE_CONVERSATION_TYPE_GROUP,
+                    [],
+                    $group->name,
+                    \core_message\api::MESSAGE_CONVERSATION_ENABLED,
+                    'core_group',
+                    'groups',
+                    $group->id,
+                    $context->id
+                );
+
+                // Add members to conversation if they exists in the group.
+                if ($groupmemberroles = groups_get_members_by_role($group->id, $group->courseid, 'u.id')) {
+                    $users = [];
+                    foreach ($groupmemberroles as $roleid => $roledata) {
+                        foreach ($roledata->users as $member) {
+                            $users[] = $member->id;
+                        }
+                    }
+                    \core_message\api::add_members_to_conversation($users, $conversation->id);
+                }
+            }
+        }
     }
 
     // Trigger group event.
@@ -496,6 +565,8 @@ function groups_delete_group($grouporid) {
 
     // Invalidate the grouping cache for the course
     cache_helper::invalidate_by_definition('core', 'groupdata', array(), array($group->courseid));
+    // Purge the group and grouping cache for users.
+    cache_helper::purge_by_definition('core', 'user_group_groupings');
 
     // Trigger group event.
     $params = array(
@@ -547,6 +618,8 @@ function groups_delete_grouping($groupingorid) {
 
     // Invalidate the grouping cache for the course
     cache_helper::invalidate_by_definition('core', 'groupdata', array(), array($grouping->courseid));
+    // Purge the group and grouping cache for users.
+    cache_helper::purge_by_definition('core', 'user_group_groupings');
 
     // Trigger group event.
     $params = array(
@@ -590,14 +663,6 @@ function groups_delete_group_members($courseid, $userid=0, $unused=false) {
     }
     $rs->close();
 
-    // TODO MDL-41312 Remove events_trigger_legacy('groups_members_removed').
-    // This event is kept here for backwards compatibility, because it cannot be
-    // translated to a new event as it is wrong.
-    $eventdata = new stdClass();
-    $eventdata->courseid = $courseid;
-    $eventdata->userid   = $userid;
-    events_trigger_legacy('groups_members_removed', $eventdata);
-
     return true;
 }
 
@@ -618,14 +683,12 @@ function groups_delete_groupings_groups($courseid, $showfeedback=false) {
     foreach ($results as $result) {
         groups_unassign_grouping($result->groupingid, $result->groupid, false);
     }
+    $results->close();
 
     // Invalidate the grouping cache for the course
     cache_helper::invalidate_by_definition('core', 'groupdata', array(), array($courseid));
-
-    // TODO MDL-41312 Remove events_trigger_legacy('groups_groupings_groups_removed').
-    // This event is kept here for backwards compatibility, because it cannot be
-    // translated to a new event as it is wrong.
-    events_trigger_legacy('groups_groupings_groups_removed', $courseid);
+    // Purge the group and grouping cache for users.
+    cache_helper::purge_by_definition('core', 'user_group_groupings');
 
     // no need to show any feedback here - we delete usually first groupings and then groups
 
@@ -646,14 +709,12 @@ function groups_delete_groups($courseid, $showfeedback=false) {
     foreach ($groups as $group) {
         groups_delete_group($group);
     }
+    $groups->close();
 
     // Invalidate the grouping cache for the course
     cache_helper::invalidate_by_definition('core', 'groupdata', array(), array($courseid));
-
-    // TODO MDL-41312 Remove events_trigger_legacy('groups_groups_deleted').
-    // This event is kept here for backwards compatibility, because it cannot be
-    // translated to a new event as it is wrong.
-    events_trigger_legacy('groups_groups_deleted', $courseid);
+    // Purge the group and grouping cache for users.
+    cache_helper::purge_by_definition('core', 'user_group_groupings');
 
     if ($showfeedback) {
         echo $OUTPUT->notification(get_string('deleted').' - '.get_string('groups', 'group'), 'notifysuccess');
@@ -676,14 +737,12 @@ function groups_delete_groupings($courseid, $showfeedback=false) {
     foreach ($groupings as $grouping) {
         groups_delete_grouping($grouping);
     }
+    $groupings->close();
 
     // Invalidate the grouping cache for the course.
     cache_helper::invalidate_by_definition('core', 'groupdata', array(), array($courseid));
-
-    // TODO MDL-41312 Remove events_trigger_legacy('groups_groupings_deleted').
-    // This event is kept here for backwards compatibility, because it cannot be
-    // translated to a new event as it is wrong.
-    events_trigger_legacy('groups_groupings_deleted', $courseid);
+    // Purge the group and grouping cache for users.
+    cache_helper::purge_by_definition('core', 'user_group_groupings');
 
     if ($showfeedback) {
         echo $OUTPUT->notification(get_string('deleted').' - '.get_string('groupings', 'group'), 'notifysuccess');
@@ -818,7 +877,7 @@ function groups_parse_name($format, $groupnumber) {
  * @param int groupingid
  * @param int groupid
  * @param int $timeadded  The time the group was added to the grouping.
- * @param bool $invalidatecache If set to true the course group cache will be invalidated as well.
+ * @param bool $invalidatecache If set to true the course group cache and the user group cache will be invalidated as well.
  * @return bool true or exception
  */
 function groups_assign_grouping($groupingid, $groupid, $timeadded = null, $invalidatecache = true) {
@@ -841,6 +900,8 @@ function groups_assign_grouping($groupingid, $groupid, $timeadded = null, $inval
     if ($invalidatecache) {
         // Invalidate the grouping cache for the course
         cache_helper::invalidate_by_definition('core', 'groupdata', array(), array($courseid));
+        // Purge the group and grouping cache for users.
+        cache_helper::purge_by_definition('core', 'user_group_groupings');
     }
 
     // Trigger event.
@@ -860,7 +921,7 @@ function groups_assign_grouping($groupingid, $groupid, $timeadded = null, $inval
  *
  * @param int groupingid
  * @param int groupid
- * @param bool $invalidatecache If set to true the course group cache will be invalidated as well.
+ * @param bool $invalidatecache If set to true the course group cache and the user group cache will be invalidated as well.
  * @return bool success
  */
 function groups_unassign_grouping($groupingid, $groupid, $invalidatecache = true) {
@@ -871,6 +932,8 @@ function groups_unassign_grouping($groupingid, $groupid, $invalidatecache = true
     if ($invalidatecache) {
         // Invalidate the grouping cache for the course
         cache_helper::invalidate_by_definition('core', 'groupdata', array(), array($courseid));
+        // Purge the group and grouping cache for users.
+        cache_helper::purge_by_definition('core', 'user_group_groupings');
     }
 
     // Trigger event.
@@ -955,6 +1018,7 @@ function groups_calculate_role_people($rs, $context) {
     }
 
     $allroles = role_fix_names(get_all_roles($context), $context);
+    $visibleroles = get_viewable_roles($context);
 
     // Array of all involved roles
     $roles = array();
@@ -1013,14 +1077,15 @@ function groups_calculate_role_people($rs, $context) {
 
     // Now we rearrange the data to store users by role
     foreach ($users as $userid=>$userdata) {
-        $rolecount = count($userdata->roles);
+        $visibleuserroles = array_intersect_key($userdata->roles, $visibleroles);
+        $rolecount = count($visibleuserroles);
         if ($rolecount == 0) {
             // does not have any roles
             $roleid = 0;
         } else if($rolecount > 1) {
             $roleid = '*';
         } else {
-            $userrole = reset($userdata->roles);
+            $userrole = reset($visibleuserroles);
             $roleid = $userrole->id;
         }
         $roles[$roleid]->users[$userid] = $userdata;
@@ -1095,4 +1160,18 @@ function groups_sync_with_enrolment($enrolname, $courseid = 0, $gidfield = 'cust
     $rs->close();
 
     return $affectedusers;
+}
+
+/**
+ * Callback for inplace editable API.
+ *
+ * @param string $itemtype - Only user_groups is supported.
+ * @param string $itemid - Userid and groupid separated by a :
+ * @param string $newvalue - json encoded list of groupids.
+ * @return \core\output\inplace_editable
+ */
+function core_group_inplace_editable($itemtype, $itemid, $newvalue) {
+    if ($itemtype === 'user_groups') {
+        return \core_group\output\user_groups_editable::update($itemid, $newvalue);
+    }
 }

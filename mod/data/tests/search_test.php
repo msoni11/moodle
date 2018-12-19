@@ -257,6 +257,40 @@ class mod_data_search_test extends advanced_testcase {
         $this->assertEquals($this->approvedatarecordcount, count($recordids));
     }
 
+    public function test_advanced_search_tags() {
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        // Setup test data.
+        $datagenerator = $this->getDataGenerator()->get_plugin_generator('mod_data');
+        $course1 = $this->getDataGenerator()->create_course();
+
+        $fieldrecord = new StdClass();
+        $fieldrecord->name = 'field-1';
+        $fieldrecord->type = 'text';
+        $fieldrecord->titlefield = true;
+
+        $data1 = $this->getDataGenerator()->create_module('data', array('course' => $course1->id, 'approval' => true));
+        $field1 = $datagenerator->create_field($fieldrecord, $data1);
+
+        $record11 = $datagenerator->create_entry($data1, [$field1->field->id => 'value11'], 0, ['Cats', 'Dogs']);
+        $record12 = $datagenerator->create_entry($data1, [$field1->field->id => 'value12'], 0, ['Cats', 'mice']);
+        $record13 = $datagenerator->create_entry($data1, [$field1->field->id => 'value13'], 0, ['Bats']);
+
+        $searcharray = [];
+        $searcharray[DATA_TAGS] = new stdClass();
+        $searcharray[DATA_TAGS]->params = [];
+        $searcharray[DATA_TAGS]->rawtagnames = ['Cats'];
+        $searcharray[DATA_TAGS]->sql = '';
+
+        $recordids = data_get_all_recordids($data1->id);
+        $newrecordids = data_get_advance_search_ids($recordids, $searcharray, $data1->id);
+
+        $this->assertContains($record11, $newrecordids);
+        $this->assertContains($record12, $newrecordids);
+        $this->assertNotContains($record13, $newrecordids);
+    }
+
     /**
      * Indexing database entries contents.
      *
@@ -314,6 +348,22 @@ class mod_data_search_test extends advanced_testcase {
         // No new records.
         $this->assertFalse($recordset->valid());
         $recordset->close();
+
+        // Create a second database, also with one record.
+        $data2 = $this->getDataGenerator()->create_module('data', ['course' => $course1->id]);
+        $this->create_default_data_fields($fieldtypes, $data2);
+        $this->create_default_data_record($data2);
+
+        // Test indexing with contexts.
+        $rs = $searcharea->get_document_recordset(0, context_module::instance($data1->cmid));
+        $this->assertEquals(1, iterator_count($rs));
+        $rs->close();
+        $rs = $searcharea->get_document_recordset(0, context_module::instance($data2->cmid));
+        $this->assertEquals(1, iterator_count($rs));
+        $rs->close();
+        $rs = $searcharea->get_document_recordset(0, context_course::instance($course1->id));
+        $this->assertEquals(2, iterator_count($rs));
+        $rs->close();
     }
 
     /**
@@ -523,6 +573,77 @@ class mod_data_search_test extends advanced_testcase {
         $this->assertEquals($data10doc->get('content'), 'text area testing');
         $this->assertEquals($data10doc->get('description1'), 'multimenu1 multimenu2 multimenu3 multimenu4');
 
+    }
+
+    /**
+     * Group support for data entries.
+     */
+    public function test_data_entries_group_support() {
+        global $DB;
+
+        // Get the search area and test generators.
+        $searcharea = \core_search\manager::get_search_area($this->databaseentryareaid);
+        $generator = $this->getDataGenerator();
+        $datagenerator = $generator->get_plugin_generator('mod_data');
+
+        // Create a course, a user, and two groups.
+        $course = $generator->create_course();
+        $user = $generator->create_user();
+        $generator->enrol_user($user->id, $course->id, 'teacher');
+        $group1 = $generator->create_group(['courseid' => $course->id]);
+        $group2 = $generator->create_group(['courseid' => $course->id]);
+
+        // Separate groups database.
+        $data = self::getDataGenerator()->create_module('data', ['course' => $course->id,
+                'groupmode' => SEPARATEGROUPS]);
+        $fieldtypes = ['text', 'textarea'];
+        $this->create_default_data_fields($fieldtypes, $data);
+        $fields = $DB->get_records('data_fields', array('dataid' => $data->id));
+        foreach ($fields as $field) {
+            switch ($field->type) {
+                case 'text' :
+                    $textid = $field->id;
+                    break;
+                case 'textarea' :
+                    $textareaid = $field->id;
+                    break;
+            }
+        }
+
+        // As admin, create entries with each group and all groups.
+        $this->setAdminUser();
+        $fieldvalues = [$textid => 'Title', $textareaid => 'Content'];
+        $e1 = $datagenerator->create_entry($data, $fieldvalues, $group1->id);
+        $e2 = $datagenerator->create_entry($data, $fieldvalues, $group2->id);
+        $e3 = $datagenerator->create_entry($data, $fieldvalues);
+
+        // Do the indexing of all 3 entries.
+        $rs = $searcharea->get_recordset_by_timestamp(0);
+        $results = [];
+        foreach ($rs as $rec) {
+            $results[$rec->id] = $rec;
+        }
+        $rs->close();
+        $this->assertCount(3, $results);
+
+        // Check each has the correct groupid.
+        $doc = $searcharea->get_document($results[$e1]);
+        $this->assertTrue($doc->is_set('groupid'));
+        $this->assertEquals($group1->id, $doc->get('groupid'));
+        $doc = $searcharea->get_document($results[$e2]);
+        $this->assertTrue($doc->is_set('groupid'));
+        $this->assertEquals($group2->id, $doc->get('groupid'));
+        $doc = $searcharea->get_document($results[$e3]);
+        $this->assertFalse($doc->is_set('groupid'));
+
+        // While we're here, also test that the search area requests restriction by group.
+        $modinfo = get_fast_modinfo($course);
+        $this->assertTrue($searcharea->restrict_cm_access_by_group($modinfo->get_cm($data->cmid)));
+
+        // In visible groups mode, it won't request restriction by group.
+        set_coursemodule_groupmode($data->cmid, VISIBLEGROUPS);
+        $modinfo = get_fast_modinfo($course);
+        $this->assertFalse($searcharea->restrict_cm_access_by_group($modinfo->get_cm($data->cmid)));
     }
 
     /**

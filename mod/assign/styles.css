@@ -56,9 +56,8 @@
     padding: 0;
 }
 
-.path-mod-assign .gradingbatchoperationsform .mform fieldset {
-    margin: 0;
-    padding: 0;
+.path-mod-assign textarea.quickgrade {
+    resize: both;
 }
 
 .path-mod-assign td.submissionstatus,
@@ -117,6 +116,12 @@
 .path-mod-assign div.earlysubmission {
     color: black;
     background-color: #cfefcf;
+}
+
+.path-mod-assign td.gradingreminder,
+.path-mod-assign div.gradingreminder {
+    color: black;
+    background-color: #efcfcf;
 }
 
 .path-mod-assign .gradingtable .c0 {
@@ -546,9 +551,9 @@
 
 .path-mod-assign [data-region="review-panel"].collapsed [data-region="review-panel-content"] {
     visibility: hidden;
-    -webkit-transition: visibility 0 0.5s;
-    -moz-transition: visibility 0 0.5s;
-    transition: visibility 0 0.5s;
+    -webkit-transition: visibility 0s 0.5s;
+    -moz-transition: visibility 0s 0.5s;
+    transition: visibility 0s 0.5s;
 }
 
 .path-mod-assign [data-region="review-panel"].collapsed [data-region="review-panel-toggle"] .expand-icon {
@@ -598,9 +603,9 @@
     left: calc(100% - 30px);
     right: calc(30px - 100%);
     visibility: hidden;
-    -webkit-transition: right 0.5s, left 0.5s, visibility 0 0.5s;
-    -moz-transition: right 0.5s, left 0.5s, visibility 0 0.5s;
-    transition: right 0.5s, left 0.5s, visibility 0 0.5s;
+    -webkit-transition: right 0.5s, left 0.5s, visibility 0s 0.5s;
+    -moz-transition: right 0.5s, left 0.5s, visibility 0s 0.5s;
+    transition: right 0.5s, left 0.5s, visibility 0s 0.5s;
 }
 
 .path-mod-assign [data-region="grade-panel"].fullwidth {
@@ -648,6 +653,15 @@
 .path-mod-assign [data-region="grade-panel"] div.submissionnotgraded {
     color: red;
     background-color: transparent;
+}
+
+.path-mod-assign div.fileuploadsubmission {
+    float: left;
+    min-width: 300px;
+}
+
+.path-mod-assign div.fileuploadsubmissiontime {
+    float: right;
 }
 
 /***** End submission status *****/
@@ -1103,9 +1117,9 @@
         visibility: visible;
         opacity: 1;
         height: auto;
-        -webkit-transition: visibility 0 0.25s, opacity 0 0.25s;
-        -moz-transition: visibility 0 0.25s, opacity 0 0.25s;
-        transition: visibility 0 0.25s, opacity 0 0.25s;
+        -webkit-transition: visibility 0s 0.25s, opacity 0s 0.25s;
+        -moz-transition: visibility 0s 0.25s, opacity 0s 0.25s;
+        transition: visibility 0s 0.25s, opacity 0s 0.25s;
     }
 
     .path-mod-assign [data-region="review-panel"] [data-region="review-panel-toggle"] .expand-icon .rtl-icon {
@@ -1125,9 +1139,9 @@
     .path-mod-assign [data-region="review-panel"].collapsed [data-region="review-panel-toggle"] {
         width: 100%;
         border-radius: 0 0 0 0;
-        -webkit-transition: all 0 0.25s;
-        -moz-transition: all 0 0.25s;
-        transition: all 0 0.25s;
+        -webkit-transition: all 0s 0.25s;
+        -moz-transition: all 0s 0.25s;
+        transition: all 0s 0.25s;
     }
 
     .path-mod-assign [data-region="review-panel"].collapsed [data-region="review-panel-toggle"] img {
@@ -1218,3 +1232,10 @@
     position: inherit;
 }
 /** End of base fixes **/
+
+/** Fix to YUI tree (which is a table) when displayed within grading table. **/
+.path-mod-assign table.generaltable table td.ygtvcell {
+    border: 0;
+    padding: 0;
+}
+/** End of YUI tree fix **/

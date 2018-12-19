@@ -32,6 +32,7 @@ define ('DATA_LASTNAME', -2);
 define ('DATA_APPROVED', -3);
 define ('DATA_TIMEADDED', 0);
 define ('DATA_TIMEMODIFIED', -4);
+define ('DATA_TAGS', -5);
 
 define ('DATA_CAP_EXPORT', 'mod/data:viewalluserpresets');
 
@@ -622,6 +623,17 @@ function data_generate_default_template(&$data, $template, $recordid=0, $form=fa
                 $token
             );
         }
+
+        if (core_tag_tag::is_enabled('mod_data', 'data_records')) {
+            $label = new html_table_cell(get_string('tags') . ':');
+            if ($form) {
+                $cell = data_generate_tag_form();
+            } else {
+                $cell = new html_table_cell('##tags##');
+            }
+            $table->data[] = new html_table_row(array($label, $cell));
+        }
+
         if ($template == 'listtemplate') {
             $cell = new html_table_cell('##edit##  ##more##  ##delete##  ##approve##  ##disapprove##  ##export##');
             $cell->colspan = 2;
@@ -664,6 +676,75 @@ function data_generate_default_template(&$data, $template, $recordid=0, $form=fa
 
         return $str;
     }
+}
+
+/**
+ * Build the form elements to manage tags for a record.
+ *
+ * @param int|bool $recordid
+ * @param string[] $selected raw tag names
+ * @return string
+ */
+function data_generate_tag_form($recordid = false, $selected = []) {
+    global $CFG, $DB, $OUTPUT, $PAGE;
+
+    $tagtypestoshow = \core_tag_area::get_showstandard('mod_data', 'data_records');
+    $showstandard = ($tagtypestoshow != core_tag_tag::HIDE_STANDARD);
+    $typenewtags = ($tagtypestoshow != core_tag_tag::STANDARD_ONLY);
+
+    $str = html_writer::start_tag('div', array('class' => 'datatagcontrol'));
+
+    $namefield = empty($CFG->keeptagnamecase) ? 'name' : 'rawname';
+
+    $tagcollid = \core_tag_area::get_collection('mod_data', 'data_records');
+    $tags = [];
+    $selectedtags = [];
+
+    if ($showstandard) {
+        $tags += $DB->get_records_menu('tag', array('isstandard' => 1, 'tagcollid' => $tagcollid),
+            $namefield, 'id,' . $namefield . ' as fieldname');
+    }
+
+    if ($recordid) {
+        $selectedtags += core_tag_tag::get_item_tags_array('mod_data', 'data_records', $recordid);
+    }
+
+    if (!empty($selected)) {
+        list($sql, $params) = $DB->get_in_or_equal($selected, SQL_PARAMS_NAMED);
+        $params['tagcollid'] = $tagcollid;
+        $sql = "SELECT id, $namefield FROM {tag} WHERE tagcollid = :tagcollid AND rawname $sql";
+        $selectedtags += $DB->get_records_sql_menu($sql, $params);
+    }
+
+    $tags += $selectedtags;
+
+    $str .= '<select class="custom-select" name="tags[]" id="tags" multiple>';
+    foreach ($tags as $tagid => $tag) {
+        $selected = key_exists($tagid, $selectedtags) ? 'selected' : '';
+        $str .= "<option value='$tag' $selected>$tag</option>";
+    }
+    $str .= '</select>';
+
+    if (has_capability('moodle/tag:manage', context_system::instance()) && $showstandard) {
+        $url = new moodle_url('/tag/manage.php', array('tc' => core_tag_area::get_collection('mod_data',
+            'data_records')));
+        $str .= ' ' . $OUTPUT->action_link($url, get_string('managestandardtags', 'tag'));
+    }
+
+    $PAGE->requires->js_call_amd('core/form-autocomplete', 'enhance', $params = array(
+            '#tags',
+            $typenewtags,
+            '',
+            get_string('entertags', 'tag'),
+            false,
+            $showstandard,
+            get_string('noselection', 'form')
+        )
+    );
+
+    $str .= html_writer::end_tag('div');
+
+    return $str;
 }
 
 
@@ -982,6 +1063,9 @@ function data_add_instance($data, $mform = null) {
 
     // Add calendar events if necessary.
     data_set_events($data);
+    if (!empty($data->completionexpected)) {
+        \core_completion\api::update_completion_date_event($data->coursemodule, 'data', $data->id, $data->completionexpected);
+    }
 
     data_grade_item_update($data);
 
@@ -1019,6 +1103,8 @@ function data_update_instance($data) {
 
     // Add calendar events if necessary.
     data_set_events($data);
+    $completionexpected = (!empty($data->completionexpected)) ? $data->completionexpected : null;
+    \core_completion\api::update_completion_date_event($data->coursemodule, 'data', $data->id, $completionexpected);
 
     data_grade_item_update($data);
 
@@ -1437,6 +1523,12 @@ function data_print_template($template, $records, $data, $search='', $page=0, $r
             $replacement[] = '';
         }
 
+        if (core_tag_tag::is_enabled('mod_data', 'data_records')) {
+            $patterns[] = "##tags##";
+            $replacement[] = $OUTPUT->tag_list(
+                core_tag_tag::get_item_tags('mod_data', 'data_records', $record->id), '', 'data-tags');
+        }
+
         // actual replacement of the tags
         $newtext = str_ireplace($patterns, $replacement, $data->{$template});
 
@@ -1819,14 +1911,19 @@ function data_print_preference_form($data, $perpage, $search, $sort='', $order='
     $replacement[] = '<label class="accesshide" for="u_ln">' . get_string('authorlastname', 'data') . '</label>' .
                      '<input type="text" class="form-control" size="16" id="u_ln" name="u_ln" value="' . s($ln) . '" />';
 
+    if (core_tag_tag::is_enabled('mod_data', 'data_records')) {
+        $patterns[] = "/##tags##/";
+        $selectedtags = isset($search_array[DATA_TAGS]->rawtagnames) ? $search_array[DATA_TAGS]->rawtagnames : [];
+        $replacement[] = data_generate_tag_form(false, $selectedtags);
+    }
+
     // actual replacement of the tags
-    $newtext = preg_replace($patterns, $replacement, $data->asearchtemplate);
 
     $options = new stdClass();
     $options->para=false;
     $options->noclean=true;
     echo '<tr><td>';
-    echo format_text($newtext, FORMAT_HTML, $options);
+    echo preg_replace($patterns, $replacement, format_text($data->asearchtemplate, FORMAT_HTML, $options));
     echo '</td></tr>';
 
     echo '<tr><td colspan="4"><br/>' .
@@ -2702,6 +2799,9 @@ function data_reset_course_form_definition(&$mform) {
 
     $mform->addElement('checkbox', 'reset_data_comments', get_string('deleteallcomments'));
     $mform->disabledIf('reset_data_comments', 'reset_data', 'checked');
+
+    $mform->addElement('checkbox', 'reset_data_tags', get_string('removealldatatags', 'data'));
+    $mform->disabledIf('reset_data_tags', 'reset_data', 'checked');
 }
 
 /**
@@ -2786,6 +2886,8 @@ function data_reset_userdata($data) {
 
                 $ratingdeloptions->contextid = $datacontext->id;
                 $rm->delete_ratings($ratingdeloptions);
+
+                core_tag_tag::delete_instances('mod_data', null, $datacontext->id);
             }
         }
 
@@ -2828,6 +2930,8 @@ function data_reset_userdata($data) {
                 }
                 $notenrolled[$record->userid] = true;
 
+                core_tag_tag::remove_all_item_tags('mod_data', 'data_records', $record->id);
+
                 $DB->delete_records('comments', array('itemid' => $record->id, 'commentarea' => 'database_entry'));
                 $DB->delete_records('data_content', array('recordid' => $record->id));
                 $DB->delete_records('data_records', array('id' => $record->id));
@@ -2865,9 +2969,28 @@ function data_reset_userdata($data) {
         $status[] = array('component'=>$componentstr, 'item'=>get_string('deleteallcomments'), 'error'=>false);
     }
 
+    // Remove all the tags.
+    if (!empty($data->reset_data_tags)) {
+        if ($datas = $DB->get_records_sql($alldatassql, array($data->courseid))) {
+            foreach ($datas as $dataid => $unused) {
+                if (!$cm = get_coursemodule_from_instance('data', $dataid)) {
+                    continue;
+                }
+
+                $context = context_module::instance($cm->id);
+                core_tag_tag::delete_instances('mod_data', null, $context->id);
+
+            }
+        }
+        $status[] = array('component' => $componentstr, 'item' => get_string('tagsdeleted', 'data'), 'error' => false);
+    }
+
     // updating dates - shift may be negative too
     if ($data->timeshift) {
-        shift_course_mod_dates('data', array('timeavailablefrom', 'timeavailableto', 'timeviewfrom', 'timeviewto'), $data->timeshift, $data->courseid);
+        // Any changes to the list of dates that needs to be rolled should be same during course restore and course reset.
+        // See MDL-9367.
+        shift_course_mod_dates('data', array('timeavailablefrom', 'timeavailableto',
+            'timeviewfrom', 'timeviewto', 'assesstimestart', 'assesstimefinish'), $data->timeshift, $data->courseid);
         $status[] = array('component'=>$componentstr, 'item'=>get_string('datechanged'), 'error'=>false);
     }
 
@@ -2880,7 +3003,8 @@ function data_reset_userdata($data) {
  * @return array
  */
 function data_get_extra_capabilities() {
-    return array('moodle/site:accessallgroups', 'moodle/site:viewfullnames', 'moodle/rating:view', 'moodle/rating:viewany', 'moodle/rating:viewall', 'moodle/rating:rate', 'moodle/comment:view', 'moodle/comment:post', 'moodle/comment:delete');
+    return ['moodle/rating:view', 'moodle/rating:viewany', 'moodle/rating:viewall', 'moodle/rating:rate',
+            'moodle/comment:view', 'moodle/comment:post', 'moodle/comment:delete'];
 }
 
 /**
@@ -3008,10 +3132,11 @@ function data_export_ods($export, $dataname, $count) {
  * @param bool $userdetails whether to include the details of the record author
  * @param bool $time whether to include time created/modified
  * @param bool $approval whether to include approval status
+ * @param bool $tags whether to include tags
  * @return array
  */
 function data_get_exportdata($dataid, $fields, $selectedfields, $currentgroup=0, $context=null,
-                             $userdetails=false, $time=false, $approval=false) {
+                             $userdetails=false, $time=false, $approval=false, $tags = false) {
     global $DB;
 
     if (is_null($context)) {
@@ -3030,6 +3155,9 @@ function data_get_exportdata($dataid, $fields, $selectedfields, $currentgroup=0,
         } else {
             $exportdata[0][] = $field->field->name;
         }
+    }
+    if ($tags) {
+        $exportdata[0][] = get_string('tags', 'data');
     }
     if ($userdetails) {
         $exportdata[0][] = get_string('user');
@@ -3064,6 +3192,10 @@ function data_get_exportdata($dataid, $fields, $selectedfields, $currentgroup=0,
                     $contents = $field->export_text_value($content[$field->field->id]);
                 }
                 $exportdata[$line][] = $contents;
+            }
+            if ($tags) {
+                $itemtags = \core_tag_tag::get_item_tags_array('mod_data', 'data_records', $record->id);
+                $exportdata[$line][] = implode(', ', $itemtags);
             }
             if ($userdetails) { // Add user details to the export data
                 $userdata = get_complete_user_data('id', $record->userid);
@@ -3775,14 +3907,14 @@ function data_get_recordids($alias, $searcharray, $dataid, $recordids) {
     }
     list($insql, $params) = $DB->get_in_or_equal($recordids, SQL_PARAMS_NAMED);
     $nestselect = 'SELECT c' . $alias . '.recordid
-                     FROM {data_content} c' . $alias . ',
-                          {data_fields} f,
-                          {data_records} r,
-                          {user} u ';
-    $nestwhere = 'WHERE u.id = r.userid
-                    AND f.id = c' . $alias . '.fieldid
-                    AND r.id = c' . $alias . '.recordid
-                    AND r.dataid = :dataid
+                     FROM {data_content} c' . $alias . '
+               INNER JOIN {data_fields} f
+                       ON f.id = c' . $alias . '.fieldid
+               INNER JOIN {data_records} r
+                       ON r.id = c' . $alias . '.recordid
+               INNER JOIN {user} u
+                       ON u.id = r.userid ';
+    $nestwhere = 'WHERE r.dataid = :dataid
                     AND c' . $alias .'.recordid ' . $insql . '
                     AND ';
 
@@ -3793,6 +3925,25 @@ function data_get_recordids($alias, $searcharray, $dataid, $recordids) {
     } else if ($searchcriteria == DATA_TIMEMODIFIED) {
         $nestsql = $nestselect . $nestwhere . $nestsearch->field . ' >= :timemodified GROUP BY c' . $alias . '.recordid';
         $params['timemodified'] = $nestsearch->data;
+    } else if ($searchcriteria == DATA_TAGS) {
+        if (empty($nestsearch->rawtagnames)) {
+            return [];
+        }
+        $i = 0;
+        $tagwhere = [];
+        $tagselect = '';
+        foreach ($nestsearch->rawtagnames as $tagrawname) {
+            $tagselect .= " INNER JOIN {tag_instance} ti_$i
+                                    ON ti_$i.component = 'mod_data'
+                                   AND ti_$i.itemtype = 'data_records'
+                                   AND ti_$i.itemid = r.id
+                            INNER JOIN {tag} t_$i
+                                    ON ti_$i.tagid = t_$i.id ";
+            $tagwhere[] = " t_$i.rawname = :trawname_$i ";
+            $params["trawname_$i"] = $tagrawname;
+            $i++;
+        }
+        $nestsql = $nestselect . $tagselect . $nestwhere . implode(' AND ', $tagwhere);
     } else {    // First name or last name.
         $thing = $DB->sql_like($nestsearch->field, ':search1', false);
         $nestsql = $nestselect . $nestwhere . $thing . ' GROUP BY c' . $alias . '.recordid';
@@ -3939,6 +4090,8 @@ function data_delete_record($recordid, $data, $courseid, $cmid) {
                     data_rss_delete_file($data);
                 }
 
+                core_tag_tag::remove_all_item_tags('mod_data', 'data_records', $recordid);
+
                 // Trigger an event for deleting this record.
                 $event = \mod_data\event\record_deleted::create(array(
                     'objectid' => $deleterecord->id,
@@ -4071,11 +4224,22 @@ function data_process_submission(stdClass $mod, $fields, stdClass $datarecord) {
  * This function is used, in its new format, by restore_refresh_events()
  *
  * @param int $courseid
+ * @param int|stdClass $instance Data module instance or ID.
+ * @param int|stdClass $cm Course module object or ID (not used in this module).
  * @return bool
  */
-function data_refresh_events($courseid = 0) {
+function data_refresh_events($courseid = 0, $instance = null, $cm = null) {
     global $DB, $CFG;
     require_once($CFG->dirroot.'/mod/data/locallib.php');
+
+    // If we have instance information then we can just update the one event instead of updating all events.
+    if (isset($instance)) {
+        if (!is_object($instance)) {
+            $instance = $DB->get_record('data', array('id' => $instance), '*', MUST_EXIST);
+        }
+        data_set_events($instance);
+        return true;
+    }
 
     if ($courseid) {
         if (! $data = $DB->get_records("data", array("course" => $courseid))) {
@@ -4294,12 +4458,25 @@ function data_check_updates_since(cm_info $cm, $from, $filter = array()) {
  *
  * @param calendar_event $event
  * @param \core_calendar\action_factory $factory
+ * @param int $userid User id to use for all capability checks, etc. Set to 0 for current user (default).
  * @return \core_calendar\local\event\entities\action_interface|null
  */
 function mod_data_core_calendar_provide_event_action(calendar_event $event,
-                                                       \core_calendar\action_factory $factory) {
+                                                     \core_calendar\action_factory $factory,
+                                                     int $userid = 0) {
+    global $USER;
 
-    $cm = get_fast_modinfo($event->courseid)->instances['data'][$event->instance];
+    if (!$userid) {
+        $userid = $USER->id;
+    }
+
+    $cm = get_fast_modinfo($event->courseid, $userid)->instances['data'][$event->instance];
+
+    if (!$cm->uservisible) {
+        // The module is not visible to the user for any reason.
+        return null;
+    }
+
     $now = time();
 
     if (!empty($cm->customdata['timeavailableto']) && $cm->customdata['timeavailableto'] < $now) {
@@ -4379,14 +4556,127 @@ function mod_data_get_completion_active_rule_descriptions($cm) {
     foreach ($cm->customdata['customcompletionrules'] as $key => $val) {
         switch ($key) {
             case 'completionentries':
-                if (empty($val)) {
-                    continue;
+                if (!empty($val)) {
+                    $descriptions[] = get_string('completionentriesdesc', 'data', $val);
                 }
-                $descriptions[] = get_string('completionentriesdesc', 'data', $val);
                 break;
             default:
                 break;
         }
     }
     return $descriptions;
+}
+
+/**
+ * This function calculates the minimum and maximum cutoff values for the timestart of
+ * the given event.
+ *
+ * It will return an array with two values, the first being the minimum cutoff value and
+ * the second being the maximum cutoff value. Either or both values can be null, which
+ * indicates there is no minimum or maximum, respectively.
+ *
+ * If a cutoff is required then the function must return an array containing the cutoff
+ * timestamp and error string to display to the user if the cutoff value is violated.
+ *
+ * A minimum and maximum cutoff return value will look like:
+ * [
+ *     [1505704373, 'The due date must be after the sbumission start date'],
+ *     [1506741172, 'The due date must be before the cutoff date']
+ * ]
+ *
+ * @param calendar_event $event The calendar event to get the time range for
+ * @param stdClass $instance The module instance to get the range from
+ * @return array
+ */
+function mod_data_core_calendar_get_valid_event_timestart_range(\calendar_event $event, \stdClass $instance) {
+    $mindate = null;
+    $maxdate = null;
+
+    if ($event->eventtype == DATA_EVENT_TYPE_OPEN) {
+        // The start time of the open event can't be equal to or after the
+        // close time of the database activity.
+        if (!empty($instance->timeavailableto)) {
+            $maxdate = [
+                $instance->timeavailableto,
+                get_string('openafterclose', 'data')
+            ];
+        }
+    } else if ($event->eventtype == DATA_EVENT_TYPE_CLOSE) {
+        // The start time of the close event can't be equal to or earlier than the
+        // open time of the database activity.
+        if (!empty($instance->timeavailablefrom)) {
+            $mindate = [
+                $instance->timeavailablefrom,
+                get_string('closebeforeopen', 'data')
+            ];
+        }
+    }
+
+    return [$mindate, $maxdate];
+}
+
+/**
+ * This function will update the data module according to the
+ * event that has been modified.
+ *
+ * It will set the timeopen or timeclose value of the data instance
+ * according to the type of event provided.
+ *
+ * @throws \moodle_exception
+ * @param \calendar_event $event
+ * @param stdClass $data The module instance to get the range from
+ */
+function mod_data_core_calendar_event_timestart_updated(\calendar_event $event, \stdClass $data) {
+    global $DB;
+
+    if (empty($event->instance) || $event->modulename != 'data') {
+        return;
+    }
+
+    if ($event->instance != $data->id) {
+        return;
+    }
+
+    if (!in_array($event->eventtype, [DATA_EVENT_TYPE_OPEN, DATA_EVENT_TYPE_CLOSE])) {
+        return;
+    }
+
+    $courseid = $event->courseid;
+    $modulename = $event->modulename;
+    $instanceid = $event->instance;
+    $modified = false;
+
+    $coursemodule = get_fast_modinfo($courseid)->instances[$modulename][$instanceid];
+    $context = context_module::instance($coursemodule->id);
+
+    // The user does not have the capability to modify this activity.
+    if (!has_capability('moodle/course:manageactivities', $context)) {
+        return;
+    }
+
+    if ($event->eventtype == DATA_EVENT_TYPE_OPEN) {
+        // If the event is for the data activity opening then we should
+        // set the start time of the data activity to be the new start
+        // time of the event.
+        if ($data->timeavailablefrom != $event->timestart) {
+            $data->timeavailablefrom = $event->timestart;
+            $data->timemodified = time();
+            $modified = true;
+        }
+    } else if ($event->eventtype == DATA_EVENT_TYPE_CLOSE) {
+        // If the event is for the data activity closing then we should
+        // set the end time of the data activity to be the new start
+        // time of the event.
+        if ($data->timeavailableto != $event->timestart) {
+            $data->timeavailableto = $event->timestart;
+            $modified = true;
+        }
+    }
+
+    if ($modified) {
+        $data->timemodified = time();
+        $DB->update_record('data', $data);
+        $event = \core\event\course_module_updated::create_from_cm($coursemodule, $context);
+        $event->trigger();
+    }
 }

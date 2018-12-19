@@ -47,16 +47,25 @@ class entry extends \core_search\base_mod {
      * Returns recordset containing required data for indexing database entries.
      *
      * @param int $modifiedfrom timestamp
-     * @return moodle_recordset
+     * @param \context|null $context Optional context to restrict scope of returned results
+     * @return moodle_recordset|null Recordset (or null if no results)
      */
-    public function get_recordset_by_timestamp($modifiedfrom = 0) {
+    public function get_document_recordset($modifiedfrom = 0, \context $context = null) {
         global $DB;
+
+        list ($contextjoin, $contextparams) = $this->get_context_restriction_sql(
+                $context, 'data', 'd', SQL_PARAMS_NAMED);
+        if ($contextjoin === null) {
+            return null;
+        }
 
         $sql = "SELECT dr.*, d.course
                   FROM {data_records} dr
                   JOIN {data} d ON d.id = dr.dataid
+          $contextjoin
                  WHERE dr.timemodified >= :timemodified";
-        return $DB->get_recordset_sql($sql, array('timemodified' => $modifiedfrom));
+        return $DB->get_recordset_sql($sql,
+                array_merge($contextparams, ['timemodified' => $modifiedfrom]));
     }
 
     /**
@@ -67,8 +76,6 @@ class entry extends \core_search\base_mod {
      * @return \core_search\document
      */
     public function get_document($entry, $options = array()) {
-        global $DB;
-
         try {
             $cm = $this->get_cm('data', $entry->dataid, $entry->course);
             $context = \context_module::instance($cm->id);
@@ -88,6 +95,9 @@ class entry extends \core_search\base_mod {
         $doc->set('contextid', $context->id);
         $doc->set('courseid', $entry->course);
         $doc->set('userid', $entry->userid);
+        if ($entry->groupid > 0) {
+            $doc->set('groupid', $entry->groupid);
+        }
         $doc->set('owneruserid', \core_search\manager::NO_OWNER_ID);
         $doc->set('modified', $entry->timemodified);
 
@@ -343,5 +353,14 @@ class entry extends \core_search\base_mod {
         $fieldtype = trim($fieldtype);
         require_once($CFG->dirroot . '/mod/data/field/' . $fieldtype . '/field.class.php');
         return 'data_field_' . $fieldtype;
+    }
+
+    /**
+     * Confirms that data entries support group restrictions.
+     *
+     * @return bool True
+     */
+    public function supports_group_restriction() {
+        return true;
     }
 }

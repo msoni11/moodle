@@ -45,35 +45,25 @@
     {{$togglelabel}}{{#str}} shownotificationwindownonew, message {{/str}}{{/togglelabel}}
     {{$togglecontent}}
         {{#pix}} i/notifications, core, {{#str}} togglenotificationmenu, message {{/str}} {{/pix}}
-        <div class="count-container hidden" data-region="count-container"></div>
+        <div class="count-container {{^unreadcount}}hidden{{/unreadcount}}" data-region="count-container">{{unreadcount}}</div>
     {{/togglecontent}}
 
     {{$containerlabel}}{{#str}} notificationwindow, message {{/str}}{{/containerlabel}}
 
     {{$headertext}}{{#str}} notifications, message {{/str}}{{/headertext}}
     {{$headeractions}}
-        {{< core/hover_tooltip }}
-            {{$anchor}}
-                <a class="mark-all-read-button"
-                    href="#"
-                    title="{{#str}} markallread {{/str}}"
-                    data-action="mark-all-read"
-                    role="button">
-                    <span class="normal-icon">{{#pix}} t/markasread, core, {{#str}} markallread {{/str}} {{/pix}}</span>
-                    {{> core/loading }}
-                </a>
-            {{/anchor}}
-            {{$tooltip}}{{#str}} markallread {{/str}}{{/tooltip}}
-        {{/ core/hover_tooltip }}
-        {{< core/hover_tooltip }}
-            {{$anchor}}
-                <a href="{{{urls.preferences}}}"
-                    title="{{#str}} notificationpreferences, message {{/str}}">
-                    {{#pix}} i/settings, core, {{#str}} notificationpreferences, message {{/str}} {{/pix}}
-                </a>
-            {{/anchor}}
-            {{$tooltip}}{{#str}} notificationpreferences, message {{/str}}{{/tooltip}}
-        {{/ core/hover_tooltip }}
+        <a class="mark-all-read-button"
+           href="#"
+           title="{{#str}} markallread {{/str}}"
+           data-action="mark-all-read"
+           role="button">
+            <span class="normal-icon">{{#pix}} t/markasread, core, {{#str}} markallread {{/str}} {{/pix}}</span>
+            {{> core/loading }}
+        </a>
+        <a href="{{{urls.preferences}}}"
+           title="{{#str}} notificationpreferences, message {{/str}}">
+            {{#pix}} i/settings, core, {{#str}} notificationpreferences, message {{/str}} {{/pix}}
+        </a>
     {{/headeractions}}
 
     {{$content}}

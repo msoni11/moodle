@@ -13,9 +13,13 @@
     /* Make videos as wide as possible without being wider than their containers */
     width: 100vw;
     max-width: 100%;
-    height: auto;
 }
 
 .mediaplugin > div {
     margin: auto;
+}
+
+/* Make media plugin behave properly in mod summaries and labels */
+.mod-indent-outer .mediaplugin {
+    display: table-cell;
 }

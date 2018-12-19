@@ -39,6 +39,7 @@ $string['aggregationmethod'] = 'Aggregation method';
 $string['all'] = 'All';
 $string['any'] = 'Any';
 $string['approval'] = 'Approval';
+$string['areyousureoverridecompletion'] = 'Are you sure you want to override the current completion state of this activity for this user and mark it "{$a}"?';
 $string['badautocompletion'] = 'When you select automatic completion, you must also enable at least one requirement (below).';
 $string['bulkactivitycompletion'] = 'Bulk edit activity completion';
 $string['bulkactivitydetail'] = 'Select the activities you wish to bulk edit.';
@@ -60,15 +61,21 @@ $string['completion'] = 'Completion tracking';
 $string['completion-alt-auto-enabled'] = 'The system marks this item complete according to conditions: {$a}';
 $string['completion-alt-auto-fail'] = 'Completed: {$a} (did not achieve pass grade)';
 $string['completion-alt-auto-n'] = 'Not completed: {$a}';
+$string['completion-alt-auto-n-override'] = 'Not completed: {$a->modname} (set by {$a->overrideuser})';
 $string['completion-alt-auto-pass'] = 'Completed: {$a} (achieved pass grade)';
 $string['completion-alt-auto-y'] = 'Completed: {$a}';
+$string['completion-alt-auto-y-override'] = 'Completed: {$a->modname} (set by {$a->overrideuser})';
 $string['completion-alt-manual-enabled'] = 'Students can manually mark this item complete: {$a}';
 $string['completion-alt-manual-n'] = 'Not completed: {$a}. Select to mark as complete.';
+$string['completion-alt-manual-n-override'] = 'Not completed: {$a->modname} (set by {$a->overrideuser}). Select to mark as complete.';
 $string['completion-alt-manual-y'] = 'Completed: {$a}. Select to mark as not complete.';
+$string['completion-alt-manual-y-override'] = 'Completed: {$a->modname} (set by {$a->overrideuser}). Select to mark as not complete.';
 $string['completion-fail'] = 'Completed (did not achieve pass grade)';
 $string['completion-n'] = 'Not completed';
+$string['completion-n-override'] = 'Not completed (set by {$a})';
 $string['completion-pass'] = 'Completed (achieved pass grade)';
 $string['completion-y'] = 'Completed';
+$string['completion-y-override'] = 'Completed (set by {$a})';
 $string['completion_automatic'] = 'Show activity as complete when conditions are met';
 $string['completion_help'] = 'If enabled, activity completion is tracked, either manually or automatically, based on certain conditions. Multiple conditions may be set if desired. If so, the activity will only be considered complete when ALL conditions are met.
 
@@ -89,7 +96,7 @@ $string['completionicons_help'] = 'A tick next to an activity name may be used t
 
 If a box with a dotted border is shown, a tick will appear automatically when you have completed the activity according to conditions set by the teacher.
 
-If a box with a solid border is shown, you can click it to tick the box when you think you have completed the activity. (Clicking it again removes the tick if you change your mind.) The tick is optional and is simply a way of tracking your progress through the course.';
+If a box with a solid border is shown, you can click it to tick the box when you think you have completed the activity. (Clicking it again removes the tick if you change your mind.)';
 $string['completionmenuitem'] = 'Completion';
 $string['completionnotenabled'] = 'Completion is not enabled';
 $string['completionnotenabledforcourse'] = 'Completion is not enabled for this course';
@@ -174,6 +181,22 @@ $string['overallaggregation_all'] = 'Course is complete when ALL conditions are 
 $string['overallaggregation_any'] = 'Course is complete when ANY of the conditions are met';
 $string['pending'] = 'Pending';
 $string['periodpostenrolment'] = 'Period post enrolment';
+$string['privacy:metadata:completionstate'] = 'If the activity has been completed';
+$string['privacy:metadata:course'] = 'A course identifier';
+$string['privacy:metadata:coursecompletedsummary'] = 'Stores information about users who have completed criteria in a course';
+$string['privacy:metadata:coursemoduleid'] = 'The activity ID';
+$string['privacy:metadata:coursemodulesummary'] = 'Stores activity completion data for a user';
+$string['privacy:metadata:coursesummary'] = 'Stores the course completion data for a user.';
+$string['privacy:metadata:gradefinal'] = 'Final grade received for course completion';
+$string['privacy:metadata:overrideby'] = 'The user ID of the person who overrode the activity completion';
+$string['privacy:metadata:reaggregate'] = 'If the course completion was reaggregated.';
+$string['privacy:metadata:timecompleted'] = 'The time that the course was completed.';
+$string['privacy:metadata:timeenrolled'] = 'The time that the user was enrolled in the course';
+$string['privacy:metadata:timemodified'] = 'The time that the activity completion was modified';
+$string['privacy:metadata:timestarted'] = 'The time the course was started.';
+$string['privacy:metadata:viewed'] = 'If the activity was viewed';
+$string['privacy:metadata:userid'] = 'The user ID of the person with course and activity completion data';
+$string['privacy:metadata:unenroled'] = 'If the user has been unenrolled from the course';
 $string['progress'] = 'Student progress';
 $string['progress-title'] = '{$a->user}, {$a->activity}: {$a->state} {$a->date}';
 $string['progresstotal'] = 'Progress: {$a->complete} / {$a->total}';

@@ -304,6 +304,50 @@ class core_course_courselib_testcase extends advanced_testcase {
     }
 
     /**
+     * Create module associated blog and tags.
+     *
+     * @param object $course Course.
+     * @param object $modulecontext The context of the module.
+     */
+    private function create_module_asscociated_blog($course, $modulecontext) {
+        global $DB, $CFG;
+
+        // Create default group.
+        $group = new stdClass();
+        $group->courseid = $course->id;
+        $group->name = 'Group';
+        $group->id = $DB->insert_record('groups', $group);
+
+        // Create default user.
+        $user = $this->getDataGenerator()->create_user(array(
+            'username' => 'testuser',
+            'firstname' => 'Firsname',
+            'lastname' => 'Lastname'
+        ));
+
+        // Create default post.
+        $post = new stdClass();
+        $post->userid = $user->id;
+        $post->groupid = $group->id;
+        $post->content = 'test post content text';
+        $post->module = 'blog';
+        $post->id = $DB->insert_record('post', $post);
+
+        // Create default tag.
+        $tag = $this->getDataGenerator()->create_tag(array('userid' => $user->id,
+            'rawname' => 'Testtagname', 'isstandard' => 1));
+        // Apply the tag to the blog.
+        $DB->insert_record('tag_instance', array('tagid' => $tag->id, 'itemtype' => 'user',
+            'component' => 'core', 'itemid' => $post->id, 'ordering' => 0));
+
+        require_once($CFG->dirroot . '/blog/locallib.php');
+        $blog = new blog_entry($post->id);
+        $blog->add_association($modulecontext->id);
+
+        return $blog;
+    }
+
+    /**
      * Test create_module() for multiple modules defined in the $modules array (first declaration of the function).
      */
     public function test_create_module() {
@@ -863,7 +907,7 @@ class core_course_courselib_testcase extends advanced_testcase {
         // Test move the marked section down..
         move_section_to($course, 2, 4);
 
-        // Verify that the coruse marker has been moved along with the section..
+        // Verify that the course marker has been moved along with the section..
         $course = $DB->get_record('course', array('id' => $course->id));
         $this->assertEquals(4, $course->marker);
 
@@ -941,7 +985,6 @@ class core_course_courselib_testcase extends advanced_testcase {
         $modulecontext = context_module::instance($assign1->cmid);
         assign_capability('moodle/course:manageactivities', CAP_PROHIBIT, $roleids['editingteacher'],
             $modulecontext);
-        $modulecontext->mark_dirty();
         $this->assertFalse(course_can_delete_section($courseweeks, 1));
         $this->assertTrue(course_can_delete_section($courseweeks, 2));
 
@@ -1521,6 +1564,8 @@ class core_course_courselib_testcase extends advanced_testcase {
         // Get the module context.
         $modcontext = context_module::instance($module->cmid);
 
+        $assocblog = $this->create_module_asscociated_blog($course, $modcontext);
+
         // Verify context exists.
         $this->assertInstanceOf('context_module', $modcontext);
 
@@ -1564,6 +1609,18 @@ class core_course_courselib_testcase extends advanced_testcase {
         // Verify the course_module record has been deleted.
         $cmcount = $DB->count_records('course_modules', array('id' => $module->cmid));
         $this->assertEmpty($cmcount);
+
+        // Verify the blog_association record has been deleted.
+        $this->assertCount(0, $DB->get_records('blog_association',
+                array('contextid' => $modcontext->id)));
+
+        // Verify the blog post record has been deleted.
+        $this->assertCount(0, $DB->get_records('post',
+                array('id' => $assocblog->id)));
+
+        // Verify the tag instance record has been deleted.
+        $this->assertCount(0, $DB->get_records('tag_instance',
+                array('itemid' => $assocblog->id)));
 
         // Test clean up of module specific messes.
         switch ($type) {
@@ -1898,6 +1955,52 @@ class core_course_courselib_testcase extends advanced_testcase {
         $expectedlog = array(SITEID, 'category', 'delete', 'index.php', $category2->name . '(ID ' . $category2->id . ')');
         $this->assertEventLegacyLogData($expectedlog, $event);
         $this->assertEventContextNotUsed($event);
+    }
+
+    /**
+     * Test that triggering a course_backup_created event works as expected.
+     */
+    public function test_course_backup_created_event() {
+        global $CFG;
+
+        // Get the necessary files to perform backup and restore.
+        require_once($CFG->dirroot . '/backup/util/includes/backup_includes.php');
+        require_once($CFG->dirroot . '/backup/util/includes/restore_includes.php');
+
+        $this->resetAfterTest();
+
+        // Set to admin user.
+        $this->setAdminUser();
+
+        // The user id is going to be 2 since we are the admin user.
+        $userid = 2;
+
+        // Create a course.
+        $course = $this->getDataGenerator()->create_course();
+
+        // Create backup file and save it to the backup location.
+        $bc = new backup_controller(backup::TYPE_1COURSE, $course->id, backup::FORMAT_MOODLE,
+            backup::INTERACTIVE_NO, backup::MODE_GENERAL, $userid);
+        $sink = $this->redirectEvents();
+        $bc->execute_plan();
+
+        // Capture the event.
+        $events = $sink->get_events();
+        $sink->close();
+
+        // Validate the event.
+        $event = array_pop($events);
+        $this->assertInstanceOf('\core\event\course_backup_created', $event);
+        $this->assertEquals('course', $event->objecttable);
+        $this->assertEquals($bc->get_courseid(), $event->objectid);
+        $this->assertEquals(context_course::instance($bc->get_courseid())->id, $event->contextid);
+
+        $url = new moodle_url('/course/view.php', array('id' => $event->objectid));
+        $this->assertEquals($url, $event->get_url());
+        $this->assertEventContextNotUsed($event);
+
+        // Destroy the resource controller since we are done using it.
+        $bc->destroy();
     }
 
     /**
@@ -2749,6 +2852,10 @@ class core_course_courselib_testcase extends advanced_testcase {
                 // Ignore obviously different properties.
                 continue;
             }
+            if ($prop == 'name') {
+                // We expect ' (copy)' to be added to the original name since MDL-59227.
+                $value = get_string('duplicatedmodule', 'moodle', $value);
+            }
             $this->assertEquals($value, $newcm->$prop);
         }
     }
@@ -2978,23 +3085,6 @@ class core_course_courselib_testcase extends advanced_testcase {
         $this->assertTrue($navoptions->tags);
         $this->assertTrue($navoptions->search);
         $this->assertTrue($navoptions->calendar);
-
-        // Standar using viewing frontpage settings from a course where is enrolled.
-        $course = self::getDataGenerator()->create_course();
-        // Create a viewer user.
-        $viewer = self::getDataGenerator()->create_user();
-        $studentrole = $DB->get_record('role', array('shortname' => 'student'));
-        $this->getDataGenerator()->enrol_user($viewer->id, $course->id, $studentrole->id);
-        $this->setUser($viewer);
-
-        $navoptions = course_get_user_navigation_options($context, $course);
-        $this->assertTrue($navoptions->blogs);
-        $this->assertFalse($navoptions->notes);
-        $this->assertTrue($navoptions->participants);
-        $this->assertTrue($navoptions->badges);
-        $this->assertTrue($navoptions->tags);
-        $this->assertTrue($navoptions->search);
-        $this->assertTrue($navoptions->calendar);
     }
 
     /**
@@ -3040,7 +3130,6 @@ class core_course_courselib_testcase extends advanced_testcase {
         $CFG->enableblogs = 0;
         // Disable view participants capability.
         assign_capability('moodle/course:viewparticipants', CAP_PROHIBIT, $roleid, $context);
-        $context->mark_dirty();
 
         $navoptions = course_get_user_navigation_options($context);
         $this->assertFalse($navoptions->blogs);
@@ -3237,6 +3326,8 @@ class core_course_courselib_testcase extends advanced_testcase {
 
         $this->resetAfterTest(true);
 
+        $this->setAdminUser();
+
         $CFG->enablecompletion = true;
 
         $this->setTimezone('UTC');
@@ -3332,6 +3423,39 @@ class core_course_courselib_testcase extends advanced_testcase {
                 $time + YEARSECS
             ]
         ];
+    }
+
+    /**
+     * Test reset_course_userdata() with reset_roles_overrides enabled.
+     */
+    public function test_course_roles_reset() {
+        global $DB;
+
+        $this->resetAfterTest(true);
+
+        $generator = $this->getDataGenerator();
+
+        // Create test course and user, enrol one in the other.
+        $course = $generator->create_course();
+        $user = $generator->create_user();
+        $roleid = $DB->get_field('role', 'id', array('shortname' => 'student'), MUST_EXIST);
+        $generator->enrol_user($user->id, $course->id, $roleid);
+
+        // Override course so it does NOT allow students 'mod/forum:viewdiscussion'.
+        $coursecontext = context_course::instance($course->id);
+        assign_capability('mod/forum:viewdiscussion', CAP_PREVENT, $roleid, $coursecontext->id);
+
+        // Check expected capabilities so far.
+        $this->assertFalse(has_capability('mod/forum:viewdiscussion', $coursecontext, $user));
+
+        // Oops, preventing student from viewing forums was a mistake, let's reset the course.
+        $resetdata = new stdClass();
+        $resetdata->id = $course->id;
+        $resetdata->reset_roles_overrides = true;
+        reset_course_userdata($resetdata);
+
+        // Check new expected capabilities - override at the course level should be reset.
+        $this->assertTrue(has_capability('mod/forum:viewdiscussion', $coursecontext, $user));
     }
 
     public function test_course_check_module_updates_since() {
@@ -3714,6 +3838,8 @@ class core_course_courselib_testcase extends advanced_testcase {
         require_once($CFG->dirroot.'/completion/criteria/completion_criteria_self.php');
 
         set_config('enablecompletion', COMPLETION_ENABLED);
+        set_config('coursegraceperiodbefore', 0);
+        set_config('coursegraceperiodafter', 0);
 
         $this->resetAfterTest(true);
         $this->setAdminUser();
@@ -3754,5 +3880,1173 @@ class core_course_courselib_testcase extends advanced_testcase {
         $this->assertEquals(COURSE_TIMELINE_FUTURE, course_classify_for_timeline($futurecourse));
         $this->assertEquals(COURSE_TIMELINE_PAST, course_classify_for_timeline($completedcourse));
         $this->assertEquals(COURSE_TIMELINE_INPROGRESS, course_classify_for_timeline($inprogresscourse));
+
+        // Test grace period.
+        set_config('coursegraceperiodafter', 1);
+        set_config('coursegraceperiodbefore', 1);
+        $this->assertEquals(COURSE_TIMELINE_INPROGRESS, course_classify_for_timeline($pastcourse));
+        $this->assertEquals(COURSE_TIMELINE_INPROGRESS, course_classify_for_timeline($futurecourse));
+        $this->assertEquals(COURSE_TIMELINE_PAST, course_classify_for_timeline($completedcourse));
+        $this->assertEquals(COURSE_TIMELINE_INPROGRESS, course_classify_for_timeline($inprogresscourse));
+    }
+
+    /**
+     * Test the main function for updating all calendar events for a module.
+     */
+    public function test_course_module_calendar_event_update_process() {
+        global $DB;
+
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        $completionexpected = time();
+        $duedate = time();
+
+        $course = $this->getDataGenerator()->create_course(['enablecompletion' => COMPLETION_ENABLED]);
+        $assign = $this->getDataGenerator()->create_module('assign', [
+                    'course' => $course,
+                    'completionexpected' => $completionexpected,
+                    'duedate' => $duedate
+                ]);
+
+        $cm = get_coursemodule_from_instance('assign', $assign->id, $course->id);
+        $events = $DB->get_records('event', ['courseid' => $course->id, 'instance' => $assign->id]);
+        // Check that both events are using the expected dates.
+        foreach ($events as $event) {
+            if ($event->eventtype == \core_completion\api::COMPLETION_EVENT_TYPE_DATE_COMPLETION_EXPECTED) {
+                $this->assertEquals($completionexpected, $event->timestart);
+            }
+            if ($event->eventtype == ASSIGN_EVENT_TYPE_DUE) {
+                $this->assertEquals($duedate, $event->timestart);
+            }
+        }
+
+        // We have to manually update the module and the course module.
+        $newcompletionexpected = time() + DAYSECS * 60;
+        $newduedate = time() + DAYSECS * 45;
+        $newmodulename = 'Assign - new name';
+
+        $moduleobject = (object)array('id' => $assign->id, 'duedate' => $newduedate, 'name' => $newmodulename);
+        $DB->update_record('assign', $moduleobject);
+        $cmobject = (object)array('id' => $cm->id, 'completionexpected' => $newcompletionexpected);
+        $DB->update_record('course_modules', $cmobject);
+
+        $assign = $DB->get_record('assign', ['id' => $assign->id]);
+        $cm = get_coursemodule_from_instance('assign', $assign->id, $course->id);
+
+        course_module_calendar_event_update_process($assign, $cm);
+
+        $events = $DB->get_records('event', ['courseid' => $course->id, 'instance' => $assign->id]);
+        // Now check that the details have been updated properly from the function.
+        foreach ($events as $event) {
+            if ($event->eventtype == \core_completion\api::COMPLETION_EVENT_TYPE_DATE_COMPLETION_EXPECTED) {
+                $this->assertEquals($newcompletionexpected, $event->timestart);
+                $this->assertEquals(get_string('completionexpectedfor', 'completion', (object)['instancename' => $newmodulename]),
+                        $event->name);
+            }
+            if ($event->eventtype == ASSIGN_EVENT_TYPE_DUE) {
+                $this->assertEquals($newduedate, $event->timestart);
+                $this->assertEquals(get_string('calendardue', 'assign', $newmodulename), $event->name);
+            }
+        }
+    }
+
+    /**
+     * Test the higher level checks for updating calendar events for an instance.
+     */
+    public function test_course_module_update_calendar_events() {
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        $completionexpected = time();
+        $duedate = time();
+
+        $course = $this->getDataGenerator()->create_course(['enablecompletion' => COMPLETION_ENABLED]);
+        $assign = $this->getDataGenerator()->create_module('assign', [
+                    'course' => $course,
+                    'completionexpected' => $completionexpected,
+                    'duedate' => $duedate
+                ]);
+
+        $cm = get_coursemodule_from_instance('assign', $assign->id, $course->id);
+
+        // Both the instance and cm objects are missing.
+        $this->assertFalse(course_module_update_calendar_events('assign'));
+        // Just using the assign instance.
+        $this->assertTrue(course_module_update_calendar_events('assign', $assign));
+        // Just using the course module object.
+        $this->assertTrue(course_module_update_calendar_events('assign', null, $cm));
+        // Using both the assign instance and the course module object.
+        $this->assertTrue(course_module_update_calendar_events('assign', $assign, $cm));
+    }
+
+    /**
+     * Test the higher level checks for updating calendar events for a module.
+     */
+    public function test_course_module_bulk_update_calendar_events() {
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        $completionexpected = time();
+        $duedate = time();
+
+        $course = $this->getDataGenerator()->create_course(['enablecompletion' => COMPLETION_ENABLED]);
+        $course2 = $this->getDataGenerator()->create_course(['enablecompletion' => COMPLETION_ENABLED]);
+        $assign = $this->getDataGenerator()->create_module('assign', [
+                    'course' => $course,
+                    'completionexpected' => $completionexpected,
+                    'duedate' => $duedate
+                ]);
+
+        // No assign instances in this course.
+        $this->assertFalse(course_module_bulk_update_calendar_events('assign', $course2->id));
+        // No book instances for the site.
+        $this->assertFalse(course_module_bulk_update_calendar_events('book'));
+        // Update all assign instances.
+        $this->assertTrue(course_module_bulk_update_calendar_events('assign'));
+        // Update the assign instances for this course.
+        $this->assertTrue(course_module_bulk_update_calendar_events('assign', $course->id));
+    }
+
+    /**
+     * Test that a student can view participants in a course they are enrolled in.
+     */
+    public function test_course_can_view_participants_as_student() {
+        $this->resetAfterTest();
+
+        $course = $this->getDataGenerator()->create_course();
+        $coursecontext = context_course::instance($course->id);
+
+        $user = $this->getDataGenerator()->create_user();
+        $this->getDataGenerator()->enrol_user($user->id, $course->id);
+
+        $this->setUser($user);
+
+        $this->assertTrue(course_can_view_participants($coursecontext));
+    }
+
+    /**
+     * Test that a student in a course can not view participants on the site.
+     */
+    public function test_course_can_view_participants_as_student_on_site() {
+        $this->resetAfterTest();
+
+        $course = $this->getDataGenerator()->create_course();
+
+        $user = $this->getDataGenerator()->create_user();
+        $this->getDataGenerator()->enrol_user($user->id, $course->id);
+
+        $this->setUser($user);
+
+        $this->assertFalse(course_can_view_participants(context_system::instance()));
+    }
+
+    /**
+     * Test that an admin can view participants on the site.
+     */
+    public function test_course_can_view_participants_as_admin_on_site() {
+        $this->resetAfterTest();
+
+        $this->setAdminUser();
+
+        $this->assertTrue(course_can_view_participants(context_system::instance()));
+    }
+
+    /**
+     * Test teachers can view participants in a course they are enrolled in.
+     */
+    public function test_course_can_view_participants_as_teacher() {
+        global $DB;
+
+        $this->resetAfterTest();
+
+        $course = $this->getDataGenerator()->create_course();
+        $coursecontext = context_course::instance($course->id);
+
+        $user = $this->getDataGenerator()->create_user();
+        $roleid = $DB->get_field('role', 'id', array('shortname' => 'editingteacher'));
+        $this->getDataGenerator()->enrol_user($user->id, $course->id, $roleid);
+
+        $this->setUser($user);
+
+        $this->assertTrue(course_can_view_participants($coursecontext));
+    }
+
+    /**
+     * Check the teacher can still view the participants page without the 'viewparticipants' cap.
+     */
+    public function test_course_can_view_participants_as_teacher_without_view_participants_cap() {
+        global $DB;
+
+        $this->resetAfterTest();
+
+        $course = $this->getDataGenerator()->create_course();
+        $coursecontext = context_course::instance($course->id);
+
+        $user = $this->getDataGenerator()->create_user();
+        $roleid = $DB->get_field('role', 'id', array('shortname' => 'editingteacher'));
+        $this->getDataGenerator()->enrol_user($user->id, $course->id, $roleid);
+
+        $this->setUser($user);
+
+        // Disable one of the capabilties.
+        assign_capability('moodle/course:viewparticipants', CAP_PROHIBIT, $roleid, $coursecontext);
+
+        // Should still be able to view the page as they have the 'moodle/course:enrolreview' cap.
+        $this->assertTrue(course_can_view_participants($coursecontext));
+    }
+
+    /**
+     * Check the teacher can still view the participants page without the 'moodle/course:enrolreview' cap.
+     */
+    public function test_course_can_view_participants_as_teacher_without_enrol_review_cap() {
+        global $DB;
+
+        $this->resetAfterTest();
+
+        $course = $this->getDataGenerator()->create_course();
+        $coursecontext = context_course::instance($course->id);
+
+        $user = $this->getDataGenerator()->create_user();
+        $roleid = $DB->get_field('role', 'id', array('shortname' => 'editingteacher'));
+        $this->getDataGenerator()->enrol_user($user->id, $course->id, $roleid);
+
+        $this->setUser($user);
+
+        // Disable one of the capabilties.
+        assign_capability('moodle/course:enrolreview', CAP_PROHIBIT, $roleid, $coursecontext);
+
+        // Should still be able to view the page as they have the 'moodle/course:viewparticipants' cap.
+        $this->assertTrue(course_can_view_participants($coursecontext));
+    }
+
+    /**
+     * Check the teacher can not view the participants page without the required caps.
+     */
+    public function test_course_can_view_participants_as_teacher_without_required_caps() {
+        global $DB;
+
+        $this->resetAfterTest();
+
+        $course = $this->getDataGenerator()->create_course();
+        $coursecontext = context_course::instance($course->id);
+
+        $user = $this->getDataGenerator()->create_user();
+        $roleid = $DB->get_field('role', 'id', array('shortname' => 'editingteacher'));
+        $this->getDataGenerator()->enrol_user($user->id, $course->id, $roleid);
+
+        $this->setUser($user);
+
+        // Disable the capabilities.
+        assign_capability('moodle/course:viewparticipants', CAP_PROHIBIT, $roleid, $coursecontext);
+        assign_capability('moodle/course:enrolreview', CAP_PROHIBIT, $roleid, $coursecontext);
+
+        $this->assertFalse(course_can_view_participants($coursecontext));
+    }
+
+    /**
+     * Check that an exception is not thrown if we can view the participants page.
+     */
+    public function test_course_require_view_participants() {
+        $this->resetAfterTest();
+
+        $course = $this->getDataGenerator()->create_course();
+        $coursecontext = context_course::instance($course->id);
+
+        $user = $this->getDataGenerator()->create_user();
+        $this->getDataGenerator()->enrol_user($user->id, $course->id);
+
+        $this->setUser($user);
+
+        course_require_view_participants($coursecontext);
+    }
+
+    /**
+     * Check that an exception is thrown if we can't view the participants page.
+     */
+    public function test_course_require_view_participants_as_student_on_site() {
+        $this->resetAfterTest();
+
+        $course = $this->getDataGenerator()->create_course();
+
+        $user = $this->getDataGenerator()->create_user();
+        $this->getDataGenerator()->enrol_user($user->id, $course->id);
+
+        $this->setUser($user);
+
+        $this->expectException('required_capability_exception');
+        course_require_view_participants(context_system::instance());
+    }
+
+    /**
+     *  Testing the can_download_from_backup_filearea fn.
+     */
+    public function test_can_download_from_backup_filearea() {
+        global $DB;
+        $this->resetAfterTest();
+        $course = $this->getDataGenerator()->create_course();
+        $context = context_course::instance($course->id);
+        $user = $this->getDataGenerator()->create_user();
+        $teacherrole = $DB->get_record('role', array('shortname' => 'teacher'));
+        $this->getDataGenerator()->enrol_user($user->id, $course->id, $teacherrole->id);
+
+        // The 'automated' backup area. Downloading from this area requires two capabilities.
+        // If the user has only the 'backup:downloadfile' capability.
+        unassign_capability('moodle/restore:userinfo', $teacherrole->id, $context);
+        assign_capability('moodle/backup:downloadfile', CAP_ALLOW, $teacherrole->id, $context);
+        $this->assertFalse(can_download_from_backup_filearea('automated', $context, $user));
+
+        // If the user has only the 'restore:userinfo' capability.
+        unassign_capability('moodle/backup:downloadfile', $teacherrole->id, $context);
+        assign_capability('moodle/restore:userinfo', CAP_ALLOW, $teacherrole->id, $context);
+        $this->assertFalse(can_download_from_backup_filearea('automated', $context, $user));
+
+        // If the user has both capabilities.
+        assign_capability('moodle/backup:downloadfile', CAP_ALLOW, $teacherrole->id, $context);
+        assign_capability('moodle/restore:userinfo', CAP_ALLOW, $teacherrole->id, $context);
+        $this->assertTrue(can_download_from_backup_filearea('automated', $context, $user));
+
+        // Is the user has neither of the capabilities.
+        unassign_capability('moodle/backup:downloadfile', $teacherrole->id, $context);
+        unassign_capability('moodle/restore:userinfo', $teacherrole->id, $context);
+        $this->assertFalse(can_download_from_backup_filearea('automated', $context, $user));
+
+        // The 'course ' and 'backup' backup file areas. These are governed by the same download capability.
+        // User has the capability.
+        unassign_capability('moodle/restore:userinfo', $teacherrole->id, $context);
+        assign_capability('moodle/backup:downloadfile', CAP_ALLOW, $teacherrole->id, $context);
+        $this->assertTrue(can_download_from_backup_filearea('course', $context, $user));
+        $this->assertTrue(can_download_from_backup_filearea('backup', $context, $user));
+
+        // User doesn't have the capability.
+        unassign_capability('moodle/backup:downloadfile', $teacherrole->id, $context);
+        $this->assertFalse(can_download_from_backup_filearea('course', $context, $user));
+        $this->assertFalse(can_download_from_backup_filearea('backup', $context, $user));
+
+        // A file area that doesn't exist. No permissions, regardless of capabilities.
+        assign_capability('moodle/backup:downloadfile', CAP_ALLOW, $teacherrole->id, $context);
+        $this->assertFalse(can_download_from_backup_filearea('testing', $context, $user));
+    }
+
+    /**
+     * Test cases for the course_classify_courses_for_timeline test.
+     */
+    public function get_course_classify_courses_for_timeline_test_cases() {
+        $now = time();
+        $day = 86400;
+
+        return [
+            'no courses' => [
+                'coursesdata' => [],
+                'expected' => [
+                    COURSE_TIMELINE_PAST => [],
+                    COURSE_TIMELINE_FUTURE => [],
+                    COURSE_TIMELINE_INPROGRESS => []
+                ]
+            ],
+            'only past' => [
+                'coursesdata' => [
+                    [
+                        'shortname' => 'past1',
+                        'startdate' => $now - ($day * 2),
+                        'enddate' => $now - $day
+                    ],
+                    [
+                        'shortname' => 'past2',
+                        'startdate' => $now - ($day * 2),
+                        'enddate' => $now - $day
+                    ]
+                ],
+                'expected' => [
+                    COURSE_TIMELINE_PAST => ['past1', 'past2'],
+                    COURSE_TIMELINE_FUTURE => [],
+                    COURSE_TIMELINE_INPROGRESS => []
+                ]
+            ],
+            'only in progress' => [
+                'coursesdata' => [
+                    [
+                        'shortname' => 'inprogress1',
+                        'startdate' => $now - $day,
+                        'enddate' => $now + $day
+                    ],
+                    [
+                        'shortname' => 'inprogress2',
+                        'startdate' => $now - $day,
+                        'enddate' => $now + $day
+                    ]
+                ],
+                'expected' => [
+                    COURSE_TIMELINE_PAST => [],
+                    COURSE_TIMELINE_FUTURE => [],
+                    COURSE_TIMELINE_INPROGRESS => ['inprogress1', 'inprogress2']
+                ]
+            ],
+            'only future' => [
+                'coursesdata' => [
+                    [
+                        'shortname' => 'future1',
+                        'startdate' => $now + $day
+                    ],
+                    [
+                        'shortname' => 'future2',
+                        'startdate' => $now + $day
+                    ]
+                ],
+                'expected' => [
+                    COURSE_TIMELINE_PAST => [],
+                    COURSE_TIMELINE_FUTURE => ['future1', 'future2'],
+                    COURSE_TIMELINE_INPROGRESS => []
+                ]
+            ],
+            'combination' => [
+                'coursesdata' => [
+                    [
+                        'shortname' => 'past1',
+                        'startdate' => $now - ($day * 2),
+                        'enddate' => $now - $day
+                    ],
+                    [
+                        'shortname' => 'past2',
+                        'startdate' => $now - ($day * 2),
+                        'enddate' => $now - $day
+                    ],
+                    [
+                        'shortname' => 'inprogress1',
+                        'startdate' => $now - $day,
+                        'enddate' => $now + $day
+                    ],
+                    [
+                        'shortname' => 'inprogress2',
+                        'startdate' => $now - $day,
+                        'enddate' => $now + $day
+                    ],
+                    [
+                        'shortname' => 'future1',
+                        'startdate' => $now + $day
+                    ],
+                    [
+                        'shortname' => 'future2',
+                        'startdate' => $now + $day
+                    ]
+                ],
+                'expected' => [
+                    COURSE_TIMELINE_PAST => ['past1', 'past2'],
+                    COURSE_TIMELINE_FUTURE => ['future1', 'future2'],
+                    COURSE_TIMELINE_INPROGRESS => ['inprogress1', 'inprogress2']
+                ]
+            ],
+        ];
+    }
+
+    /**
+     * Test the course_classify_courses_for_timeline function.
+     *
+     * @dataProvider get_course_classify_courses_for_timeline_test_cases()
+     * @param array $coursesdata Courses to create
+     * @param array $expected Expected test results.
+     */
+    public function test_course_classify_courses_for_timeline($coursesdata, $expected) {
+        $this->resetAfterTest();
+        $generator = $this->getDataGenerator();
+
+        $courses = array_map(function($coursedata) use ($generator) {
+            return $generator->create_course($coursedata);
+        }, $coursesdata);
+
+        sort($expected[COURSE_TIMELINE_PAST]);
+        sort($expected[COURSE_TIMELINE_FUTURE]);
+        sort($expected[COURSE_TIMELINE_INPROGRESS]);
+
+        $results = course_classify_courses_for_timeline($courses);
+
+        $actualpast = array_map(function($result) {
+            return $result->shortname;
+        }, $results[COURSE_TIMELINE_PAST]);
+
+        $actualfuture = array_map(function($result) {
+            return $result->shortname;
+        }, $results[COURSE_TIMELINE_FUTURE]);
+
+        $actualinprogress = array_map(function($result) {
+            return $result->shortname;
+        }, $results[COURSE_TIMELINE_INPROGRESS]);
+
+        sort($actualpast);
+        sort($actualfuture);
+        sort($actualinprogress);
+
+        $this->assertEquals($expected[COURSE_TIMELINE_PAST], $actualpast);
+        $this->assertEquals($expected[COURSE_TIMELINE_FUTURE], $actualfuture);
+        $this->assertEquals($expected[COURSE_TIMELINE_INPROGRESS], $actualinprogress);
+    }
+
+    /**
+     * Test cases for the course_get_enrolled_courses_for_logged_in_user tests.
+     */
+    public function get_course_get_enrolled_courses_for_logged_in_user_test_cases() {
+        $buildexpectedresult = function($limit, $offset) {
+            $result = [];
+            for ($i = $offset; $i < $offset + $limit; $i++) {
+                $result[] = "testcourse{$i}";
+            }
+            return $result;
+        };
+
+        return [
+            'zero records' => [
+                'dbquerylimit' => 3,
+                'totalcourses' => 0,
+                'limit' => 0,
+                'offset' => 0,
+                'expecteddbqueries' => 1,
+                'expectedresult' => $buildexpectedresult(0, 0)
+            ],
+            'less than query limit' => [
+                'dbquerylimit' => 3,
+                'totalcourses' => 2,
+                'limit' => 0,
+                'offset' => 0,
+                'expecteddbqueries' => 1,
+                'expectedresult' => $buildexpectedresult(2, 0)
+            ],
+            'more than query limit' => [
+                'dbquerylimit' => 3,
+                'totalcourses' => 7,
+                'limit' => 0,
+                'offset' => 0,
+                'expecteddbqueries' => 3,
+                'expectedresult' => $buildexpectedresult(7, 0)
+            ],
+            'limit less than query limit' => [
+                'dbquerylimit' => 3,
+                'totalcourses' => 7,
+                'limit' => 2,
+                'offset' => 0,
+                'expecteddbqueries' => 1,
+                'expectedresult' => $buildexpectedresult(2, 0)
+            ],
+            'limit less than query limit with offset' => [
+                'dbquerylimit' => 3,
+                'totalcourses' => 7,
+                'limit' => 2,
+                'offset' => 2,
+                'expecteddbqueries' => 1,
+                'expectedresult' => $buildexpectedresult(2, 2)
+            ],
+            'limit less than total' => [
+                'dbquerylimit' => 3,
+                'totalcourses' => 9,
+                'limit' => 6,
+                'offset' => 0,
+                'expecteddbqueries' => 2,
+                'expectedresult' => $buildexpectedresult(6, 0)
+            ],
+            'less results than limit' => [
+                'dbquerylimit' => 4,
+                'totalcourses' => 9,
+                'limit' => 20,
+                'offset' => 0,
+                'expecteddbqueries' => 3,
+                'expectedresult' => $buildexpectedresult(9, 0)
+            ],
+            'less results than limit exact divisible' => [
+                'dbquerylimit' => 3,
+                'totalcourses' => 9,
+                'limit' => 20,
+                'offset' => 0,
+                'expecteddbqueries' => 4,
+                'expectedresult' => $buildexpectedresult(9, 0)
+            ],
+            'less results than limit with offset' => [
+                'dbquerylimit' => 3,
+                'totalcourses' => 9,
+                'limit' => 10,
+                'offset' => 5,
+                'expecteddbqueries' => 2,
+                'expectedresult' => $buildexpectedresult(4, 5)
+            ],
+        ];
+    }
+
+    /**
+     * Test the course_get_enrolled_courses_for_logged_in_user function.
+     *
+     * @dataProvider get_course_get_enrolled_courses_for_logged_in_user_test_cases()
+     * @param int $dbquerylimit Number of records to load per DB request
+     * @param int $totalcourses Number of courses to create
+     * @param int $limit Maximum number of results to get.
+     * @param int $offset Skip this number of results from the start of the result set.
+     * @param int $expecteddbqueries The number of DB queries expected during the test.
+     * @param array $expectedresult Expected test results.
+     */
+    public function test_course_get_enrolled_courses_for_logged_in_user(
+        $dbquerylimit,
+        $totalcourses,
+        $limit,
+        $offset,
+        $expecteddbqueries,
+        $expectedresult
+    ) {
+        global $DB;
+
+        $this->resetAfterTest();
+        $generator = $this->getDataGenerator();
+        $student = $generator->create_user();
+
+        for ($i = 0; $i < $totalcourses; $i++) {
+            $shortname = "testcourse{$i}";
+            $course = $generator->create_course(['shortname' => $shortname]);
+            $generator->enrol_user($student->id, $course->id, 'student');
+        }
+
+        $this->setUser($student);
+
+        $initialquerycount = $DB->perf_get_queries();
+        $courses = course_get_enrolled_courses_for_logged_in_user($limit, $offset, 'shortname ASC', 'shortname', $dbquerylimit);
+
+        // Loop over the result set to force the lazy loading to kick in so that we can check the
+        // number of DB queries.
+        $actualresult = array_map(function($course) {
+            return $course->shortname;
+        }, iterator_to_array($courses, false));
+
+        sort($expectedresult);
+
+        $this->assertEquals($expectedresult, $actualresult);
+        $this->assertEquals($expecteddbqueries, $DB->perf_get_queries() - $initialquerycount);
+    }
+
+    /**
+     * Test cases for the course_filter_courses_by_timeline_classification tests.
+     */
+    public function get_course_filter_courses_by_timeline_classification_test_cases() {
+        $now = time();
+        $day = 86400;
+
+        $coursedata = [
+            [
+                'shortname' => 'apast',
+                'startdate' => $now - ($day * 2),
+                'enddate' => $now - $day
+            ],
+            [
+                'shortname' => 'bpast',
+                'startdate' => $now - ($day * 2),
+                'enddate' => $now - $day
+            ],
+            [
+                'shortname' => 'cpast',
+                'startdate' => $now - ($day * 2),
+                'enddate' => $now - $day
+            ],
+            [
+                'shortname' => 'dpast',
+                'startdate' => $now - ($day * 2),
+                'enddate' => $now - $day
+            ],
+            [
+                'shortname' => 'epast',
+                'startdate' => $now - ($day * 2),
+                'enddate' => $now - $day
+            ],
+            [
+                'shortname' => 'ainprogress',
+                'startdate' => $now - $day,
+                'enddate' => $now + $day
+            ],
+            [
+                'shortname' => 'binprogress',
+                'startdate' => $now - $day,
+                'enddate' => $now + $day
+            ],
+            [
+                'shortname' => 'cinprogress',
+                'startdate' => $now - $day,
+                'enddate' => $now + $day
+            ],
+            [
+                'shortname' => 'dinprogress',
+                'startdate' => $now - $day,
+                'enddate' => $now + $day
+            ],
+            [
+                'shortname' => 'einprogress',
+                'startdate' => $now - $day,
+                'enddate' => $now + $day
+            ],
+            [
+                'shortname' => 'afuture',
+                'startdate' => $now + $day
+            ],
+            [
+                'shortname' => 'bfuture',
+                'startdate' => $now + $day
+            ],
+            [
+                'shortname' => 'cfuture',
+                'startdate' => $now + $day
+            ],
+            [
+                'shortname' => 'dfuture',
+                'startdate' => $now + $day
+            ],
+            [
+                'shortname' => 'efuture',
+                'startdate' => $now + $day
+            ]
+        ];
+
+        // Raw enrolled courses result set should be returned in this order:
+        // afuture, ainprogress, apast, bfuture, binprogress, bpast, cfuture, cinprogress, cpast,
+        // dfuture, dinprogress, dpast, efuture, einprogress, epast
+        //
+        // By classification the offset values for each record should be:
+        // COURSE_TIMELINE_FUTURE
+        // 0 (afuture), 3 (bfuture), 6 (cfuture), 9 (dfuture), 12 (efuture)
+        // COURSE_TIMELINE_INPROGRESS
+        // 1 (ainprogress), 4 (binprogress), 7 (cinprogress), 10 (dinprogress), 13 (einprogress)
+        // COURSE_TIMELINE_PAST
+        // 2 (apast), 5 (bpast), 8 (cpast), 11 (dpast), 14 (epast).
+        return [
+            'empty set' => [
+                'coursedata' => [],
+                'classification' => COURSE_TIMELINE_FUTURE,
+                'limit' => 2,
+                'offset' => 0,
+                'expectedcourses' => [],
+                'expectedprocessedcount' => 0
+            ],
+            // COURSE_TIMELINE_FUTURE.
+            'future not limit no offset' => [
+                'coursedata' => $coursedata,
+                'classification' => COURSE_TIMELINE_FUTURE,
+                'limit' => 0,
+                'offset' => 0,
+                'expectedcourses' => ['afuture', 'bfuture', 'cfuture', 'dfuture', 'efuture'],
+                'expectedprocessedcount' => 15
+            ],
+            'future no offset' => [
+                'coursedata' => $coursedata,
+                'classification' => COURSE_TIMELINE_FUTURE,
+                'limit' => 2,
+                'offset' => 0,
+                'expectedcourses' => ['afuture', 'bfuture'],
+                'expectedprocessedcount' => 4
+            ],
+            'future offset' => [
+                'coursedata' => $coursedata,
+                'classification' => COURSE_TIMELINE_FUTURE,
+                'limit' => 2,
+                'offset' => 2,
+                'expectedcourses' => ['bfuture', 'cfuture'],
+                'expectedprocessedcount' => 5
+            ],
+            'future exact limit' => [
+                'coursedata' => $coursedata,
+                'classification' => COURSE_TIMELINE_FUTURE,
+                'limit' => 5,
+                'offset' => 0,
+                'expectedcourses' => ['afuture', 'bfuture', 'cfuture', 'dfuture', 'efuture'],
+                'expectedprocessedcount' => 13
+            ],
+            'future limit less results' => [
+                'coursedata' => $coursedata,
+                'classification' => COURSE_TIMELINE_FUTURE,
+                'limit' => 10,
+                'offset' => 0,
+                'expectedcourses' => ['afuture', 'bfuture', 'cfuture', 'dfuture', 'efuture'],
+                'expectedprocessedcount' => 15
+            ],
+            'future limit less results with offset' => [
+                'coursedata' => $coursedata,
+                'classification' => COURSE_TIMELINE_FUTURE,
+                'limit' => 10,
+                'offset' => 5,
+                'expectedcourses' => ['cfuture', 'dfuture', 'efuture'],
+                'expectedprocessedcount' => 10
+            ],
+        ];
+    }
+
+    /**
+     * Test the course_filter_courses_by_timeline_classification function.
+     *
+     * @dataProvider get_course_filter_courses_by_timeline_classification_test_cases()
+     * @param array $coursedata Course test data to create.
+     * @param string $classification Timeline classification.
+     * @param int $limit Maximum number of results to return.
+     * @param int $offset Results to skip at the start of the result set.
+     * @param string[] $expectedcourses Expected courses in results.
+     * @param int $expectedprocessedcount Expected number of course records to be processed.
+     */
+    public function test_course_filter_courses_by_timeline_classification(
+        $coursedata,
+        $classification,
+        $limit,
+        $offset,
+        $expectedcourses,
+        $expectedprocessedcount
+    ) {
+        $this->resetAfterTest();
+        $generator = $this->getDataGenerator();
+
+        $courses = array_map(function($coursedata) use ($generator) {
+            return $generator->create_course($coursedata);
+        }, $coursedata);
+
+        $student = $generator->create_user();
+
+        foreach ($courses as $course) {
+            $generator->enrol_user($student->id, $course->id, 'student');
+        }
+
+        $this->setUser($student);
+
+        $coursesgenerator = course_get_enrolled_courses_for_logged_in_user(0, $offset, 'shortname ASC', 'shortname');
+        list($result, $processedcount) = course_filter_courses_by_timeline_classification(
+            $coursesgenerator,
+            $classification,
+            $limit
+        );
+
+        $actual = array_map(function($course) {
+            return $course->shortname;
+        }, $result);
+
+        $this->assertEquals($expectedcourses, $actual);
+        $this->assertEquals($expectedprocessedcount, $processedcount);
+    }
+
+    /**
+     * Test cases for the course_filter_courses_by_timeline_classification w/ hidden courses tests.
+     */
+    public function get_course_filter_courses_by_timeline_classification_hidden_courses_test_cases() {
+        $now = time();
+        $day = 86400;
+
+        $coursedata = [
+            [
+                'shortname' => 'apast',
+                'startdate' => $now - ($day * 2),
+                'enddate' => $now - $day
+            ],
+            [
+                'shortname' => 'bpast',
+                'startdate' => $now - ($day * 2),
+                'enddate' => $now - $day
+            ],
+            [
+                'shortname' => 'cpast',
+                'startdate' => $now - ($day * 2),
+                'enddate' => $now - $day
+            ],
+            [
+                'shortname' => 'dpast',
+                'startdate' => $now - ($day * 2),
+                'enddate' => $now - $day
+            ],
+            [
+                'shortname' => 'epast',
+                'startdate' => $now - ($day * 2),
+                'enddate' => $now - $day
+            ],
+            [
+                'shortname' => 'ainprogress',
+                'startdate' => $now - $day,
+                'enddate' => $now + $day
+            ],
+            [
+                'shortname' => 'binprogress',
+                'startdate' => $now - $day,
+                'enddate' => $now + $day
+            ],
+            [
+                'shortname' => 'cinprogress',
+                'startdate' => $now - $day,
+                'enddate' => $now + $day
+            ],
+            [
+                'shortname' => 'dinprogress',
+                'startdate' => $now - $day,
+                'enddate' => $now + $day
+            ],
+            [
+                'shortname' => 'einprogress',
+                'startdate' => $now - $day,
+                'enddate' => $now + $day
+            ],
+            [
+                'shortname' => 'afuture',
+                'startdate' => $now + $day
+            ],
+            [
+                'shortname' => 'bfuture',
+                'startdate' => $now + $day
+            ],
+            [
+                'shortname' => 'cfuture',
+                'startdate' => $now + $day
+            ],
+            [
+                'shortname' => 'dfuture',
+                'startdate' => $now + $day
+            ],
+            [
+                'shortname' => 'efuture',
+                'startdate' => $now + $day
+            ]
+        ];
+
+        // Raw enrolled courses result set should be returned in this order:
+        // afuture, ainprogress, apast, bfuture, binprogress, bpast, cfuture, cinprogress, cpast,
+        // dfuture, dinprogress, dpast, efuture, einprogress, epast
+        //
+        // By classification the offset values for each record should be:
+        // COURSE_TIMELINE_FUTURE
+        // 0 (afuture), 3 (bfuture), 6 (cfuture), 9 (dfuture), 12 (efuture)
+        // COURSE_TIMELINE_INPROGRESS
+        // 1 (ainprogress), 4 (binprogress), 7 (cinprogress), 10 (dinprogress), 13 (einprogress)
+        // COURSE_TIMELINE_PAST
+        // 2 (apast), 5 (bpast), 8 (cpast), 11 (dpast), 14 (epast).
+        return [
+            'empty set' => [
+                'coursedata' => [],
+                'classification' => COURSE_TIMELINE_FUTURE,
+                'limit' => 2,
+                'offset' => 0,
+                'expectedcourses' => [],
+                'expectedprocessedcount' => 0,
+                'hiddencourse' => ''
+            ],
+            // COURSE_TIMELINE_FUTURE.
+            'future not limit no offset' => [
+                'coursedata' => $coursedata,
+                'classification' => COURSE_TIMELINE_FUTURE,
+                'limit' => 0,
+                'offset' => 0,
+                'expectedcourses' => ['afuture', 'cfuture', 'dfuture', 'efuture'],
+                'expectedprocessedcount' => 15,
+                'hiddencourse' => 'bfuture'
+            ],
+            'future no offset' => [
+                'coursedata' => $coursedata,
+                'classification' => COURSE_TIMELINE_FUTURE,
+                'limit' => 2,
+                'offset' => 0,
+                'expectedcourses' => ['afuture', 'cfuture'],
+                'expectedprocessedcount' => 7,
+                'hiddencourse' => 'bfuture'
+            ],
+            'future offset' => [
+                'coursedata' => $coursedata,
+                'classification' => COURSE_TIMELINE_FUTURE,
+                'limit' => 2,
+                'offset' => 2,
+                'expectedcourses' => ['bfuture', 'dfuture'],
+                'expectedprocessedcount' => 8,
+                'hiddencourse' => 'cfuture'
+            ],
+            'future exact limit' => [
+                'coursedata' => $coursedata,
+                'classification' => COURSE_TIMELINE_FUTURE,
+                'limit' => 5,
+                'offset' => 0,
+                'expectedcourses' => ['afuture', 'cfuture', 'dfuture', 'efuture'],
+                'expectedprocessedcount' => 15,
+                'hiddencourse' => 'bfuture'
+            ],
+            'future limit less results' => [
+                'coursedata' => $coursedata,
+                'classification' => COURSE_TIMELINE_FUTURE,
+                'limit' => 10,
+                'offset' => 0,
+                'expectedcourses' => ['afuture', 'cfuture', 'dfuture', 'efuture'],
+                'expectedprocessedcount' => 15,
+                'hiddencourse' => 'bfuture'
+            ],
+            'future limit less results with offset' => [
+                'coursedata' => $coursedata,
+                'classification' => COURSE_TIMELINE_FUTURE,
+                'limit' => 10,
+                'offset' => 5,
+                'expectedcourses' => ['cfuture', 'efuture'],
+                'expectedprocessedcount' => 10,
+                'hiddencourse' => 'dfuture'
+            ],
+        ];
+    }
+
+    /**
+     * Test the course_filter_courses_by_timeline_classification function hidden courses.
+     *
+     * @dataProvider get_course_filter_courses_by_timeline_classification_hidden_courses_test_cases()
+     * @param array $coursedata Course test data to create.
+     * @param string $classification Timeline classification.
+     * @param int $limit Maximum number of results to return.
+     * @param int $offset Results to skip at the start of the result set.
+     * @param string[] $expectedcourses Expected courses in results.
+     * @param int $expectedprocessedcount Expected number of course records to be processed.
+     * @param int $hiddencourse The course to hide as part of this process
+     */
+    public function test_course_filter_courses_by_timeline_classification_with_hidden_courses(
+        $coursedata,
+        $classification,
+        $limit,
+        $offset,
+        $expectedcourses,
+        $expectedprocessedcount,
+        $hiddencourse
+    ) {
+        $this->resetAfterTest();
+        $generator = $this->getDataGenerator();
+        $student = $generator->create_user();
+        $this->setUser($student);
+
+        $courses = array_map(function($coursedata) use ($generator, $hiddencourse) {
+            $course = $generator->create_course($coursedata);
+            if ($course->shortname == $hiddencourse) {
+                set_user_preference('block_myoverview_hidden_course_' . $course->id, true);
+            }
+            return $course;
+        }, $coursedata);
+
+        foreach ($courses as $course) {
+            $generator->enrol_user($student->id, $course->id, 'student');
+        }
+
+        $coursesgenerator = course_get_enrolled_courses_for_logged_in_user(0, $offset, 'shortname ASC', 'shortname');
+        list($result, $processedcount) = course_filter_courses_by_timeline_classification(
+            $coursesgenerator,
+            $classification,
+            $limit
+        );
+
+        $actual = array_map(function($course) {
+            return $course->shortname;
+        }, $result);
+
+        $this->assertEquals($expectedcourses, $actual);
+        $this->assertEquals($expectedprocessedcount, $processedcount);
+    }
+
+
+    /**
+     * Testing core_course_core_calendar_get_valid_event_timestart_range when the course has no end date.
+     */
+    public function test_core_course_core_calendar_get_valid_event_timestart_range_no_enddate() {
+        global $CFG;
+        require_once($CFG->dirroot . "/calendar/lib.php");
+
+        $this->resetAfterTest(true);
+        $this->setAdminUser();
+        $generator = $this->getDataGenerator();
+        $now = time();
+        $course = $generator->create_course(['startdate' => $now - 86400]);
+
+        // Create a course event.
+        $event = new \calendar_event([
+            'name' => 'Test course event',
+            'eventtype' => 'course',
+            'courseid' => $course->id,
+        ]);
+
+        list ($min, $max) = core_course_core_calendar_get_valid_event_timestart_range($event, $course);
+        $this->assertEquals($course->startdate, $min[0]);
+        $this->assertNull($max);
+    }
+
+    /**
+     * Testing core_course_core_calendar_get_valid_event_timestart_range when the course has end date.
+     */
+    public function test_core_course_core_calendar_get_valid_event_timestart_range_with_enddate() {
+        global $CFG;
+        require_once($CFG->dirroot . "/calendar/lib.php");
+
+        $this->resetAfterTest(true);
+        $this->setAdminUser();
+        $generator = $this->getDataGenerator();
+        $now = time();
+        $course = $generator->create_course(['startdate' => $now - 86400, 'enddate' => $now + 86400]);
+
+        // Create a course event.
+        $event = new \calendar_event([
+            'name' => 'Test course event',
+            'eventtype' => 'course',
+            'courseid' => $course->id,
+        ]);
+
+        list ($min, $max) = core_course_core_calendar_get_valid_event_timestart_range($event, $course);
+        $this->assertEquals($course->startdate, $min[0]);
+        $this->assertNull($max);
+    }
+
+    /**
+     * Test the course_get_recent_courses function.
+     */
+    public function test_course_get_recent_courses() {
+
+        $this->resetAfterTest();
+        $generator = $this->getDataGenerator();
+
+        $courses = array();
+        for ($i = 1; $i < 4; $i++) {
+            $courses[]  = $generator->create_course();
+        };
+
+        $student = $generator->create_user();
+
+        foreach ($courses as $course) {
+            $generator->enrol_user($student->id, $course->id, 'student');
+        }
+
+        $this->setUser($student);
+
+        $result = course_get_recent_courses($student->id);
+
+        // No course accessed.
+        $this->assertCount(0, $result);
+
+        foreach ($courses as $course) {
+            $context = context_course::instance($course->id);
+            course_view($context);
+        }
+
+        // Every course accessed.
+        $result = course_get_recent_courses($student->id);
+        $this->assertCount(3, $result);
+
+        // Every course accessed, result limited to 2 courses.
+        $result = course_get_recent_courses($student->id, 2);
+        $this->assertCount(2, $result);
+
+        // Every course accessed, with limit and offset. Should return only the last created course ($course[2]).
+        $result = course_get_recent_courses($student->id, 3, 2);
+        $this->assertCount(1, $result);
+        $this->assertArrayHasKey($courses[2]->id, $result);
+
+        // Every course accessed, order by shortname DESC. The last create course ($course[2]) should have the greater shortname.
+        $result = course_get_recent_courses($student->id, 0, 0, 'shortname DESC');
+        $this->assertCount(3, $result);
+        $this->assertEquals($courses[2]->id, array_shift($result)->id);
+
+        $guestcourse = $generator->create_course(
+            (object)array('shortname' => 'guestcourse',
+                'enrol_guest_status_0' => ENROL_INSTANCE_ENABLED,
+                'enrol_guest_password_0' => ''));
+        $context = context_course::instance($guestcourse->id);
+        course_view($context);
+
+        // Every course accessed, even the not enrolled one.
+        $result = course_get_recent_courses($student->id);
+        $this->assertCount(4, $result);
+
+        // Suspended student.
+        $this->getDataGenerator()->enrol_user($student->id, $courses[0]->id, 'student', 'manual', 0, 0, ENROL_USER_SUSPENDED);
+
+        // The course with suspended enrolment is not returned by the function.
+        $result = course_get_recent_courses($student->id);
+        $this->assertCount(3, $result);
+        $this->assertArrayNotHasKey($courses[0]->id, $result);
     }
 }

@@ -31,7 +31,6 @@ use preferences_groups;
 use action_menu;
 use help_icon;
 use single_button;
-use paging_bar;
 use context_course;
 use pix_icon;
 
@@ -62,7 +61,7 @@ class core_renderer extends \core_renderer {
         if (is_array($classes)) {
             $classes = implode(' ', $classes);
         }
-        return parent::box_start($classes . ' p-y-1', $id, $attributes);
+        return parent::box_start($classes . ' py-3', $id, $attributes);
     }
 
     /**
@@ -73,29 +72,14 @@ class core_renderer extends \core_renderer {
     public function full_header() {
         global $PAGE;
 
-        $html = html_writer::start_tag('header', array('id' => 'page-header', 'class' => 'row'));
-        $html .= html_writer::start_div('col-xs-12 p-a-1');
-        $html .= html_writer::start_div('card');
-        $html .= html_writer::start_div('card-block');
-        $html .= html_writer::div($this->context_header_settings_menu(), 'pull-xs-right context-header-settings-menu');
-        $html .= html_writer::start_div('pull-xs-left');
-        $html .= $this->context_header();
-        $html .= html_writer::end_div();
-        $pageheadingbutton = $this->page_heading_button();
-        if (empty($PAGE->layout_options['nonavbar'])) {
-            $html .= html_writer::start_div('clearfix w-100 pull-xs-left', array('id' => 'page-navbar'));
-            $html .= html_writer::tag('div', $this->navbar(), array('class' => 'breadcrumb-nav'));
-            $html .= html_writer::div($pageheadingbutton, 'breadcrumb-button pull-xs-right');
-            $html .= html_writer::end_div();
-        } else if ($pageheadingbutton) {
-            $html .= html_writer::div($pageheadingbutton, 'breadcrumb-button nonavbar pull-xs-right');
-        }
-        $html .= html_writer::tag('div', $this->course_header(), array('id' => 'course-header'));
-        $html .= html_writer::end_div();
-        $html .= html_writer::end_div();
-        $html .= html_writer::end_div();
-        $html .= html_writer::end_tag('header');
-        return $html;
+        $header = new stdClass();
+        $header->settingsmenu = $this->context_header_settings_menu();
+        $header->contextheader = $this->context_header();
+        $header->hasnavbar = empty($PAGE->layout_options['nonavbar']);
+        $header->navbar = $this->navbar();
+        $header->pageheadingbutton = $this->page_heading_button();
+        $header->courseheader = $this->course_header();
+        return $this->render_from_template('theme_boost/header', $header);
     }
 
     /**
@@ -433,37 +417,30 @@ class core_renderer extends \core_renderer {
     }
 
     /**
-     * Renders a paging bar.
-     *
-     * @param paging_bar $pagingbar The object.
-     * @return string HTML
-     */
-    protected function render_paging_bar(paging_bar $pagingbar) {
-        // Any more than 10 is not usable and causes wierd wrapping of the pagination in this theme.
-        $pagingbar->maxdisplay = 10;
-        return $this->render_from_template('core/paging_bar', $pagingbar->export_for_template($this));
-    }
-
-    /**
      * Renders the login form.
      *
      * @param \core_auth\output\login $form The renderable.
      * @return string
      */
     public function render_login(\core_auth\output\login $form) {
-        global $SITE;
+        global $CFG, $SITE;
 
         $context = $form->export_for_template($this);
 
         // Override because rendering is not supported in template yet.
-        $context->cookieshelpiconformatted = $this->help_icon('cookiesenabled');
+        if ($CFG->rememberusername == 0) {
+            $context->cookieshelpiconformatted = $this->help_icon('cookiesenabledonlysession');
+        } else {
+            $context->cookieshelpiconformatted = $this->help_icon('cookiesenabled');
+        }
         $context->errorformatted = $this->error_text($context->error);
         $url = $this->get_logo_url();
         if ($url) {
             $url = $url->out(false);
         }
         $context->logourl = $url;
-        $context->sitename = format_string($SITE->fullname, true, ['context' => context_course::instance(SITEID), "escape" => false]);
+        $context->sitename = format_string($SITE->fullname, true,
+            ['context' => context_course::instance(SITEID), "escape" => false]);
 
         return $this->render_from_template('core/loginform', $context);
     }
@@ -483,7 +460,8 @@ class core_renderer extends \core_renderer {
             $url = $url->out(false);
         }
         $context['logourl'] = $url;
-        $context['sitename'] = format_string($SITE->fullname, true, ['context' => context_course::instance(SITEID), "escape" => false]);
+        $context['sitename'] = format_string($SITE->fullname, true,
+            ['context' => context_course::instance(SITEID), "escape" => false]);
 
         return $this->render_from_template('core/signup_form_layout', $context);
     }
@@ -546,7 +524,6 @@ class core_renderer extends \core_renderer {
                 ($currentnode->key === 'myprofile')) {
             $showusermenu = true;
         }
-
 
         if ($showfrontpagemenu) {
             $settingsnode = $this->page->settingsnav->find('frontpage', navigation_node::TYPE_SETTING);
@@ -662,7 +639,7 @@ class core_renderer extends \core_renderer {
      * @param boolean $onlytopleafnodes
      * @return boolean nodesskipped - True if nodes were skipped in building the menu
      */
-    private function build_action_menu_from_navigation(action_menu $menu,
+    protected function build_action_menu_from_navigation(action_menu $menu,
                                                        navigation_node $node,
                                                        $indent = false,
                                                        $onlytopleafnodes = false) {
@@ -692,7 +669,7 @@ class core_renderer extends \core_renderer {
                     $link = new action_link(new moodle_url('#'), $menuitem->text, null, ['disabled' => true], $menuitem->icon);
                 }
                 if ($indent) {
-                    $link->add_class('m-l-1');
+                    $link->add_class('ml-4');
                 }
                 if (!empty($menuitem->classes)) {
                     $link->add_class(implode(" ", $menuitem->classes));

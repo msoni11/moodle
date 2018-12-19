@@ -7,11 +7,14 @@ if ($hassiteconfig) { // speedup for non-admins, add all caps used on this page
 
 // "systempaths" settingpage
 $temp = new admin_settingpage('systempaths', new lang_string('systempaths','admin'));
-
+$temp->add(new admin_setting_configexecutable('pathtophp', new lang_string('pathtophp', 'admin'),
+    new lang_string('configpathtophp', 'admin'), ''));
 $temp->add(new admin_setting_configexecutable('pathtodu', new lang_string('pathtodu', 'admin'), new lang_string('configpathtodu', 'admin'), ''));
 $temp->add(new admin_setting_configexecutable('aspellpath', new lang_string('aspellpath', 'admin'), new lang_string('edhelpaspellpath'), ''));
 $temp->add(new admin_setting_configexecutable('pathtodot', new lang_string('pathtodot', 'admin'), new lang_string('pathtodot_help', 'admin'), ''));
 $temp->add(new admin_setting_configexecutable('pathtogs', new lang_string('pathtogs', 'admin'), new lang_string('pathtogs_help', 'admin'), '/usr/bin/gs'));
+$temp->add(new admin_setting_configexecutable('pathtopython', new lang_string('pathtopython', 'admin'),
+    new lang_string('pathtopythondesc', 'admin'), ''));
 $ADMIN->add('server', $temp);
 
 
@@ -208,9 +211,6 @@ $temp->add(new admin_setting_configtext('curltimeoutkbitrate', new lang_string('
 
 $ADMIN->add('server', $temp);
 
-
-$ADMIN->add('server', new admin_externalpage('adminregistration', new lang_string('hubs', 'admin'),
-    "$CFG->wwwroot/$CFG->admin/registration/index.php"));
 
 // E-mail settings.
 $ADMIN->add('server', new admin_category('email', new lang_string('categoryemail', 'admin')));

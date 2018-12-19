@@ -23,7 +23,7 @@ Feature: Enable the calendar block in a course and test it's functionality
     Given I log in as "teacher1"
     And I am on "Course 1" course homepage with editing mode on
     When I add the "Calendar" block
-    Then I should see "Events key" in the "Calendar" "block"
+    Then "Calendar" "block" should exist
 
   @javascript
   Scenario: View a global event in the calendar block
@@ -81,7 +81,6 @@ Feature: Enable the calendar block in a course and test it's functionality
     And I create a calendar event with form data:
       | id_eventtype | User |
       | id_name | User Event |
-    When I am on homepage
     And I am on "Course 1" course homepage
     And I follow "Hide course events"
     And I hover over today in the calendar
@@ -96,8 +95,7 @@ Feature: Enable the calendar block in a course and test it's functionality
     And I create a calendar event with form data:
       | id_eventtype | User |
       | id_name | User Event |
-    When I am on homepage
-    And I am on "Course 1" course homepage
+    When I am on "Course 1" course homepage
     And I hover over today in the calendar
     Then I should see "User Event"
 
@@ -113,8 +111,7 @@ Feature: Enable the calendar block in a course and test it's functionality
     And I create a calendar event with form data:
       | id_eventtype | User |
       | id_name | User Event |
-    When I am on homepage
-    And I am on "Course 1" course homepage
+    When I am on "Course 1" course homepage
     And I follow "Hide user events"
     And I hover over today in the calendar
     Then I should not see "User Event"
@@ -132,17 +129,21 @@ Feature: Enable the calendar block in a course and test it's functionality
       | student2 | G2 |
     When I log in as "teacher1"
     And I am on "Course 1" course homepage
-    And I navigate to "Edit settings" node in "Course administration"
+    And I navigate to "Edit settings" in current page administration
     And I set the following fields to these values:
       | id_groupmode | Separate groups |
       | id_groupmodeforce | Yes |
     And I press "Save and display"
     And I turn editing mode on
     And I add the "Calendar" block
-    And I create a calendar event with form data:
+    And I click on "This month" "link"
+    And I click on "New event" "button"
+    And I set the following fields to these values:
       | id_eventtype | Group |
-      | id_groupid | Group 1 |
       | id_name | Group Event |
+    And I set the following fields to these values:
+      | Group | Group 1 |
+    And I press "Save"
     And I log out
     Then I log in as "student1"
     And I am on "Course 1" course homepage
@@ -166,7 +167,7 @@ Feature: Enable the calendar block in a course and test it's functionality
       | student2 | G2 |
     When I log in as "teacher1"
     And I am on "Course 1" course homepage
-    And I navigate to "Edit settings" node in "Course administration"
+    And I navigate to "Edit settings" in current page administration
     And I set the following fields to these values:
       | id_groupmode | Separate groups |
       | id_groupmodeforce | Yes |
@@ -177,10 +178,14 @@ Feature: Enable the calendar block in a course and test it's functionality
       | id_eventtype | Course |
       | id_name | Course Event 1 |
     And I am on "Course 1" course homepage
-    And I create a calendar event with form data:
+    And I click on "This month" "link"
+    And I click on "New event" "button"
+    And I set the following fields to these values:
       | id_eventtype | Group |
-      | id_groupid | Group 1 |
       | id_name | Group Event 1 |
+    And I set the following fields to these values:
+      | Group | Group 1 |
+    And I press "Save"
     And I log out
     Then I log in as "student1"
     And I am on "Course 1" course homepage

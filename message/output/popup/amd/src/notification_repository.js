@@ -22,7 +22,7 @@
  * @copyright  2016 Ryan Wyllie <ryan@moodle.com>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-define(['core/ajax', 'core/notification', 'core/log'], function(Ajax, Notification, Log) {
+define(['core/ajax', 'core/notification'], function(Ajax, Notification) {
     /**
      * Retrieve a list of notifications from the server.
      *
@@ -64,9 +64,7 @@ define(['core/ajax', 'core/notification', 'core/log'], function(Ajax, Notificati
 
         var promise = Ajax.call([request])[0];
 
-        promise.fail(function(e) {
-            Log.error('Could not retrieve notifications count: ' + e.message);
-        });
+        promise.fail(Notification.exception);
 
         return promise;
     };
@@ -99,7 +97,7 @@ define(['core/ajax', 'core/notification', 'core/log'], function(Ajax, Notificati
      */
     var markAsRead = function(id, timeread) {
         var args = {
-            messageid: id,
+            notificationid: id,
         };
 
         if (timeread) {
@@ -107,7 +105,7 @@ define(['core/ajax', 'core/notification', 'core/log'], function(Ajax, Notificati
         }
 
         var request = {
-            methodname: 'core_message_mark_message_read',
+            methodname: 'core_message_mark_notification_read',
             args: args
         };
 

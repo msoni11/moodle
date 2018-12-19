@@ -288,6 +288,18 @@ abstract class format_base {
     }
 
     /**
+     * Method used to get the maximum number of sections for this course format.
+     * @return int
+     */
+    public function get_max_sections() {
+        $maxsections = get_config('moodlecourse', 'maxsections');
+        if (!isset($maxsections) || !is_numeric($maxsections)) {
+            $maxsections = 52;
+        }
+        return $maxsections;
+    }
+
+    /**
      * Returns true if the course has a front page.
      *
      * This function is called to determine if the course has a view page, whether or not
@@ -708,9 +720,14 @@ abstract class format_base {
         }
 
         if (!$forsection && empty($this->courseid)) {
-            // At this stage (this is called from definition_after_data) course data is already set as default.
-            // We can not overwrite what is in the database.
-            $mform->setDefault('enddate', $this->get_default_course_enddate($mform));
+            // Check if course end date form field should be enabled by default.
+            // If a default date is provided to the form element, it is magically enabled by default in the
+            // MoodleQuickForm_date_time_selector class, otherwise it's disabled by default.
+            if (get_config('moodlecourse', 'courseenddateenabled')) {
+                // At this stage (this is called from definition_after_data) course data is already set as default.
+                // We can not overwrite what is in the database.
+                $mform->setDefault('enddate', $this->get_default_course_enddate($mform));
+            }
         }
 
         return $elements;
@@ -731,6 +748,43 @@ abstract class format_base {
     }
 
     /**
+     * Prepares values of course or section format options before storing them in DB
+     *
+     * If an option has invalid value it is not returned
+     *
+     * @param array $rawdata associative array of the proposed course/section format options
+     * @param int|null $sectionid null if it is course format option
+     * @return array array of options that have valid values
+     */
+    protected function validate_format_options(array $rawdata, int $sectionid = null) : array {
+        if (!$sectionid) {
+            $allformatoptions = $this->course_format_options(true);
+        } else {
+            $allformatoptions = $this->section_format_options(true);
+        }
+        $data = array_intersect_key($rawdata, $allformatoptions);
+        foreach ($data as $key => $value) {
+            $option = $allformatoptions[$key] + ['type' => PARAM_RAW, 'element_type' => null, 'element_attributes' => [[]]];
+            $data[$key] = clean_param($value, $option['type']);
+            if ($option['element_type'] === 'select' && !array_key_exists($data[$key], $option['element_attributes'][0])) {
+                // Value invalid for select element, skip.
+                unset($data[$key]);
+            }
+        }
+        return $data;
+    }
+
+    /**
+     * Validates format options for the course
+     *
+     * @param array $data data to insert/update
+     * @return array array of options that have valid values
+     */
+    public function validate_course_format_options(array $data) : array {
+        return $this->validate_format_options($data);
+    }
+
+    /**
      * Updates format options for a course or section
      *
      * If $data does not contain property with the option name, the option will not be updated
@@ -742,6 +796,7 @@ abstract class format_base {
      */
     protected function update_format_options($data, $sectionid = null) {
         global $DB;
+        $data = $this->validate_format_options((array)$data, $sectionid);
         if (!$sectionid) {
             $allformatoptions = $this->course_format_options();
             $sectionid = 0;
@@ -767,7 +822,6 @@ abstract class format_base {
                       'sectionid' => $sectionid
                     ), '', 'name,id,value');
         $changed = $needrebuild = false;
-        $data = (array)$data;
         foreach ($defaultoptions as $key => $value) {
             if (isset($records[$key])) {
                 if (array_key_exists($key, $data) && $records[$key]->value !== $data[$key]) {
@@ -1255,6 +1309,17 @@ abstract class format_base {
         }
 
         return ['modules' => $modules];
+    }
+
+    /**
+     * Return the plugin config settings for external functions,
+     * in some cases the configs will need formatting or be returned only if the current user has some capabilities enabled.
+     *
+     * @return array the list of configs
+     * @since Moodle 3.5
+     */
+    public function get_config_for_external() {
+        return array();
     }
 }
 

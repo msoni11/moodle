@@ -24,6 +24,6 @@
 defined('MOODLE_INTERNAL') || die();
 
 $plugin->component  = 'tool_installaddon';
-$plugin->version    = 2017051500;
-$plugin->requires   = 2017050500;
+$plugin->version    = 2018120300;
+$plugin->requires   = 2018112800;
 $plugin->maturity   = MATURITY_STABLE;

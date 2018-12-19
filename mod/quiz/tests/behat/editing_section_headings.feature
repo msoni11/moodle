@@ -349,17 +349,17 @@ Feature: Edit quiz page - section headings
     And I follow "Quiz 1"
     And I navigate to "Edit quiz" in current page administration
     And I click on the "Add" page break icon after question "TF1"
-    And I click on "Add" "link" in the "Page 1" "list_item"
+    And I open the action menu in "Page 1" "list_item"
     Then "a new section heading" "link" in the "Page 1" "list_item" should not be visible
     # Click away to close the menu.
     And I click on ".numberofquestions" "css_element"
-    And I click on "Add" "link" in the "Page 2" "list_item"
+    And I open the action menu in "Page 2" "list_item"
     And "a new section heading" "link" in the "Page 2" "list_item" should be visible
     And I click on ".numberofquestions" "css_element"
-    And I click on "Add" "link" in the "Page 3" "list_item"
+    And I open the action menu in "Page 3" "list_item"
     And "a new section heading" "link" in the "Page 3" "list_item" should be visible
     And I click on ".numberofquestions" "css_element"
-    And I click on "Add" "link" in the ".last-add-menu" "css_element"
+    And I open the action menu in ".last-add-menu" "css_element"
     And "a new section heading" "link" in the ".last-add-menu" "css_element" should not be visible
 
   @javascript
@@ -386,7 +386,7 @@ Feature: Edit quiz page - section headings
     And I click on the "Remove" page break icon after question "TF1"
     And I open the "Page 2" add to quiz menu
     And I choose "a new section heading" in the open action menu
-    Then "TF3" "list_item" should exist in the "Section heading ..." "list_item"
+    Then "TF3" "list_item" should exist in the "New heading" "list_item"
 
   @javascript
   Scenario: Add section works after removing a page break with more than 10 pages
@@ -425,4 +425,4 @@ Feature: Edit quiz page - section headings
     And I click on the "Remove" page break icon after question "TF10"
     And I open the "Page 10" add to quiz menu
     And I choose "a new section heading" in the open action menu
-    Then "TF10" "list_item" should exist in the "Section heading ..." "list_item"
+    Then "TF10" "list_item" should exist in the "New heading" "list_item"

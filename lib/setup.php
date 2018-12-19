@@ -36,6 +36,7 @@
  *  - $CFG->dataroot - Path to moodle data files directory on server's filesystem.
  *  - $CFG->dirroot  - Path to moodle's library folder on server's filesystem.
  *  - $CFG->libdir   - Path to moodle's library folder on server's filesystem.
+ *  - $CFG->backuptempdir  - Path to moodle's backup temp file directory on server's filesystem.
  *  - $CFG->tempdir  - Path to moodle's temp file directory on server's filesystem.
  *  - $CFG->cachedir - Path to moodle's cache directory on server's filesystem (shared by cluster nodes).
  *  - $CFG->localcachedir - Path to moodle's local cache directory (not shared by cluster nodes).
@@ -190,6 +191,11 @@ $CFG->libdir = $CFG->dirroot .'/lib';
 // Allow overriding of tempdir but be backwards compatible
 if (!isset($CFG->tempdir)) {
     $CFG->tempdir = "$CFG->dataroot/temp";
+}
+
+// Allow overriding of backuptempdir but be backwards compatible
+if (!isset($CFG->backuptempdir)) {
+    $CFG->backuptempdir = "$CFG->tempdir/backup";
 }
 
 // Allow overriding of cachedir but be backwards compatible
@@ -528,8 +534,8 @@ global $FULLSCRIPT;
  */
 global $SCRIPT;
 
-// Set httpswwwroot default value (this variable will replace $CFG->wwwroot
-// inside some URLs used in HTTPSPAGEREQUIRED pages.
+// Set httpswwwroot to $CFG->wwwroot for backwards compatibility
+// The loginhttps option is deprecated, so httpswwwroot is no longer necessary. See MDL-42834.
 $CFG->httpswwwroot = $CFG->wwwroot;
 
 require_once($CFG->libdir .'/setuplib.php');        // Functions that MUST be loaded first
@@ -600,7 +606,6 @@ require_once($CFG->libdir .'/moodlelib.php');       // Other general-purpose fun
 require_once($CFG->libdir .'/enrollib.php');        // Enrolment related functions
 require_once($CFG->libdir .'/pagelib.php');         // Library that defines the moodle_page class, used for $PAGE
 require_once($CFG->libdir .'/blocklib.php');        // Library for controlling blocks
-require_once($CFG->libdir .'/eventslib.php');       // Events functions
 require_once($CFG->libdir .'/grouplib.php');        // Groups functions
 require_once($CFG->libdir .'/sessionlib.php');      // All session and cookie related stuff
 require_once($CFG->libdir .'/editorlib.php');       // All text editor related functions and classes

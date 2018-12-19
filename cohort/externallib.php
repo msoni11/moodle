@@ -23,6 +23,8 @@
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
+defined('MOODLE_INTERNAL') || die();
+
 require_once("$CFG->libdir/externallib.php");
 
 class core_cohort_external extends external_api {
@@ -52,6 +54,10 @@ class core_cohort_external extends external_api {
                             'description' => new external_value(PARAM_RAW, 'cohort description', VALUE_OPTIONAL),
                             'descriptionformat' => new external_format_value('description', VALUE_DEFAULT),
                             'visible' => new external_value(PARAM_BOOL, 'cohort visible', VALUE_OPTIONAL, true),
+                            'theme' => new external_value(PARAM_THEME,
+                                'the cohort theme. The allowcohortthemes setting must be enabled on Moodle',
+                                VALUE_OPTIONAL
+                            ),
                         )
                     )
                 )
@@ -71,6 +77,8 @@ class core_cohort_external extends external_api {
         require_once("$CFG->dirroot/cohort/lib.php");
 
         $params = self::validate_parameters(self::create_cohorts_parameters(), array('cohorts' => $cohorts));
+
+        $availablethemes = cohort_get_list_of_themes();
 
         $transaction = $DB->start_delegated_transaction();
 
@@ -105,6 +113,15 @@ class core_cohort_external extends external_api {
             self::validate_context($context);
             require_capability('moodle/cohort:manage', $context);
 
+            // Make sure theme is valid.
+            if (isset($cohort->theme)) {
+                if (!empty($CFG->allowcohortthemes)) {
+                    if (empty($availablethemes[$cohort->theme])) {
+                        throw new moodle_exception('errorinvalidparam', 'webservice', '', 'theme');
+                    }
+                }
+            }
+
             // Validate format.
             $cohort->descriptionformat = external_validate_format($cohort->descriptionformat);
             $cohort->id = cohort_add_cohort($cohort);
@@ -135,6 +152,7 @@ class core_cohort_external extends external_api {
                     'description' => new external_value(PARAM_RAW, 'cohort description'),
                     'descriptionformat' => new external_format_value('description'),
                     'visible' => new external_value(PARAM_BOOL, 'cohort visible'),
+                    'theme' => new external_value(PARAM_THEME, 'cohort theme', VALUE_OPTIONAL),
                 )
             )
         );
@@ -221,7 +239,7 @@ class core_cohort_external extends external_api {
      * @since Moodle 2.5
      */
     public static function get_cohorts($cohortids = array()) {
-        global $DB;
+        global $DB, $CFG;
 
         $params = self::validate_parameters(self::get_cohorts_parameters(), array('cohortids' => $cohortids));
 
@@ -241,6 +259,11 @@ class core_cohort_external extends external_api {
             self::validate_context($context);
             if (!has_any_capability(array('moodle/cohort:manage', 'moodle/cohort:view'), $context)) {
                 throw new required_capability_exception($context, 'moodle/cohort:view', 'nopermissions', '');
+            }
+
+            // Only return theme when $CFG->allowcohortthemes is enabled.
+            if (!empty($cohort->theme) && empty($CFG->allowcohortthemes)) {
+                $cohort->theme = null;
             }
 
             list($cohort->description, $cohort->descriptionformat) =
@@ -269,10 +292,148 @@ class core_cohort_external extends external_api {
                     'description' => new external_value(PARAM_RAW, 'cohort description'),
                     'descriptionformat' => new external_format_value('description'),
                     'visible' => new external_value(PARAM_BOOL, 'cohort visible'),
+                    'theme' => new external_value(PARAM_THEME, 'cohort theme', VALUE_OPTIONAL),
                 )
             )
         );
     }
+
+    /**
+     * Returns the description of external function parameters.
+     *
+     * @return external_function_parameters
+     */
+    public static function search_cohorts_parameters() {
+        $query = new external_value(
+            PARAM_RAW,
+            'Query string'
+        );
+        $includes = new external_value(
+            PARAM_ALPHA,
+            'What other contexts to fetch the frameworks from. (all, parents, self)',
+            VALUE_DEFAULT,
+            'parents'
+        );
+        $limitfrom = new external_value(
+            PARAM_INT,
+            'limitfrom we are fetching the records from',
+            VALUE_DEFAULT,
+            0
+        );
+        $limitnum = new external_value(
+            PARAM_INT,
+            'Number of records to fetch',
+            VALUE_DEFAULT,
+            25
+        );
+        return new external_function_parameters(array(
+            'query' => $query,
+            'context' => self::get_context_parameters(),
+            'includes' => $includes,
+            'limitfrom' => $limitfrom,
+            'limitnum' => $limitnum
+        ));
+    }
+
+    /**
+     * Search cohorts.
+     *
+     * @param string $query
+     * @param array $context
+     * @param string $includes
+     * @param int $limitfrom
+     * @param int $limitnum
+     * @return array
+     */
+    public static function search_cohorts($query, $context, $includes = 'parents', $limitfrom = 0, $limitnum = 25) {
+        global $CFG;
+        require_once($CFG->dirroot . '/cohort/lib.php');
+
+        $params = self::validate_parameters(self::search_cohorts_parameters(), array(
+            'query' => $query,
+            'context' => $context,
+            'includes' => $includes,
+            'limitfrom' => $limitfrom,
+            'limitnum' => $limitnum,
+        ));
+        $query = $params['query'];
+        $includes = $params['includes'];
+        $context = self::get_context_from_params($params['context']);
+        $limitfrom = $params['limitfrom'];
+        $limitnum = $params['limitnum'];
+
+        self::validate_context($context);
+
+        $manager = has_capability('moodle/cohort:manage', $context);
+        if (!$manager) {
+            require_capability('moodle/cohort:view', $context);
+        }
+
+        // TODO Make this more efficient.
+        if ($includes == 'self') {
+            $results = cohort_get_cohorts($context->id, $limitfrom, $limitnum, $query);
+            $results = $results['cohorts'];
+        } else if ($includes == 'parents') {
+            $results = cohort_get_cohorts($context->id, $limitfrom, $limitnum, $query);
+            $results = $results['cohorts'];
+            if (!$context instanceof context_system) {
+                $results = array_merge($results, cohort_get_available_cohorts($context, COHORT_ALL, $limitfrom, $limitnum, $query));
+            }
+        } else if ($includes == 'all') {
+            $results = cohort_get_all_cohorts($limitfrom, $limitnum, $query);
+            $results = $results['cohorts'];
+        } else {
+            throw new coding_exception('Invalid parameter value for \'includes\'.');
+        }
+
+        $cohorts = array();
+        foreach ($results as $key => $cohort) {
+            $cohortcontext = context::instance_by_id($cohort->contextid);
+
+            // Only return theme when $CFG->allowcohortthemes is enabled.
+            if (!empty($cohort->theme) && empty($CFG->allowcohortthemes)) {
+                $cohort->theme = null;
+            }
+
+            if (!isset($cohort->description)) {
+                $cohort->description = '';
+            }
+            if (!isset($cohort->descriptionformat)) {
+                $cohort->descriptionformat = FORMAT_PLAIN;
+            }
+
+            list($cohort->description, $cohort->descriptionformat) =
+                external_format_text($cohort->description, $cohort->descriptionformat,
+                        $cohortcontext->id, 'cohort', 'description', $cohort->id);
+
+            $cohorts[$key] = $cohort;
+        }
+
+        return array('cohorts' => $cohorts);
+    }
+
+    /**
+     * Returns description of external function result value.
+     *
+     * @return external_description
+     */
+    public static function search_cohorts_returns() {
+        return new external_single_structure(array(
+            'cohorts' => new external_multiple_structure(
+                new external_single_structure(array(
+                    'id' => new external_value(PARAM_INT, 'ID of the cohort'),
+                    'name' => new external_value(PARAM_RAW, 'cohort name'),
+                    'idnumber' => new external_value(PARAM_RAW, 'cohort idnumber'),
+                    'description' => new external_value(PARAM_RAW, 'cohort description'),
+                    'descriptionformat' => new external_format_value('description'),
+                    'visible' => new external_value(PARAM_BOOL, 'cohort visible'),
+                    'theme' => new external_value(PARAM_THEME, 'cohort theme', VALUE_OPTIONAL),
+                ))
+            )
+        ));
+    }
+
+
 
     /**
      * Returns description of method parameters
@@ -300,6 +461,10 @@ class core_cohort_external extends external_api {
                             'description' => new external_value(PARAM_RAW, 'cohort description', VALUE_OPTIONAL),
                             'descriptionformat' => new external_format_value('description', VALUE_DEFAULT),
                             'visible' => new external_value(PARAM_BOOL, 'cohort visible', VALUE_OPTIONAL),
+                            'theme' => new external_value(PARAM_THEME,
+                                'the cohort theme. The allowcohortthemes setting must be enabled on Moodle',
+                                VALUE_OPTIONAL
+                            ),
                         )
                     )
                 )
@@ -319,6 +484,8 @@ class core_cohort_external extends external_api {
         require_once("$CFG->dirroot/cohort/lib.php");
 
         $params = self::validate_parameters(self::update_cohorts_parameters(), array('cohorts' => $cohorts));
+
+        $availablethemes = cohort_get_list_of_themes();
 
         $transaction = $DB->start_delegated_transaction();
         $syscontext = context_system::instance();
@@ -356,6 +523,14 @@ class core_cohort_external extends external_api {
 
                 self::validate_context($context);
                 require_capability('moodle/cohort:manage', $context);
+            }
+
+            // Make sure theme is valid.
+            if (!empty($cohort->theme) && !empty($CFG->allowcohortthemes)) {
+                if (empty($availablethemes[$cohort->theme])) {
+                    $debuginfo = 'The following cohort theme is not installed on this site: '.$cohort->theme;
+                    throw new moodle_exception('errorinvalidparam', 'webservice', '', 'theme', $debuginfo);
+                }
             }
 
             if (!empty($cohort->description)) {

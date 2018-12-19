@@ -35,19 +35,14 @@ defined('MOODLE_INTERNAL') || die();
 class message_sent extends base_message {
 
     /**
-     * Returns recordset containing message records.
+     * Returns a recordset with the messages for indexing.
      *
-     * @param int $modifiedfrom timestamp
-     * @return \moodle_recordset
+     * @param int $modifiedfrom
+     * @param \context|null $context Optional context to restrict scope of returned results
+     * @return moodle_recordset|null Recordset (or null if no results)
      */
-    public function get_recordset_by_timestamp($modifiedfrom = 0) {
-        global $DB;
-
-        // We don't want to index messages sent by noreply and support users.
-        $params = array('modifiedfrom' => $modifiedfrom, 'noreplyuser' => \core_user::NOREPLY_USER,
-            'supportuser' => \core_user::SUPPORT_USER);
-        return $DB->get_recordset_select('message_read', 'timecreated >= :modifiedfrom AND
-            useridfrom != :noreplyuser AND useridfrom != :supportuser', $params, 'timecreated ASC');
+    public function get_document_recordset($modifiedfrom = 0, \context $context = null) {
+        return $this->get_document_recordset_helper($modifiedfrom, $context, 'useridfrom');
     }
 
     /**
@@ -74,7 +69,15 @@ class message_sent extends base_message {
             return \core_search\manager::ACCESS_DENIED;
         }
 
-        $message = $DB->get_record('message_read', array('id' => $id));
+        $sql = "SELECT m.*, mcm.userid as useridto
+                  FROM {messages} m
+            INNER JOIN {message_conversations} mc
+                    ON m.conversationid = mc.id
+            INNER JOIN {message_conversation_members} mcm
+                    ON mcm.conversationid = mc.id
+                 WHERE mcm.userid != m.useridfrom
+                   AND m.id = :id";
+        $message = $DB->get_record_sql($sql, array('id' => $id));
         if (!$message) {
             return \core_search\manager::ACCESS_DELETED;
         }
@@ -90,7 +93,9 @@ class message_sent extends base_message {
             return \core_search\manager::ACCESS_DENIED;
         }
 
-        if ($message->timeuserfromdeleted != 0) {
+        $userfromdeleted = $DB->record_exists('message_user_actions', ['messageid' => $id, 'userid' => $message->useridfrom,
+            'action' => \core_message\api::MESSAGE_ACTION_DELETED]);
+        if ($userfromdeleted) {
             return \core_search\manager::ACCESS_DELETED;
         }
 

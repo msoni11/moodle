@@ -176,7 +176,6 @@ class core_grouplib_testcase extends advanced_testcase {
         $this->assertEquals($grouping, groups_get_grouping_by_idnumber($course->id, $idnumber2));
     }
 
-
     public function test_groups_get_members_ids_sql() {
         global $DB;
 
@@ -185,7 +184,9 @@ class core_grouplib_testcase extends advanced_testcase {
         $generator = $this->getDataGenerator();
 
         $course = $generator->create_course();
-        $student = $generator->create_user();
+        $coursecontext = context_course::instance($course->id);
+        $student1 = $generator->create_user();
+        $student2 = $generator->create_user();
         $plugin = enrol_get_plugin('manual');
         $role = $DB->get_record('role', array('shortname' => 'student'));
         $group = $generator->create_group(array('courseid' => $course->id));
@@ -196,20 +197,122 @@ class core_grouplib_testcase extends advanced_testcase {
 
         $this->assertNotEquals($instance, false);
 
-        // Enrol the user in the course.
-        $plugin->enrol_user($instance, $student->id, $role->id);
+        // Enrol users in the course.
+        $plugin->enrol_user($instance, $student1->id, $role->id);
+        $plugin->enrol_user($instance, $student2->id, $role->id);
 
-        list($sql, $params) = groups_get_members_ids_sql($group->id, true);
+        list($sql, $params) = groups_get_members_ids_sql($group->id);
 
         // Test an empty group.
         $users = $DB->get_records_sql($sql, $params);
-
-        $this->assertFalse(array_key_exists($student->id, $users));
-        groups_add_member($group->id, $student->id);
+        $this->assertFalse(array_key_exists($student1->id, $users));
 
         // Test with a group member.
+        groups_add_member($group->id, $student1->id);
         $users = $DB->get_records_sql($sql, $params);
-        $this->assertTrue(array_key_exists($student->id, $users));
+        $this->assertTrue(array_key_exists($student1->id, $users));
+    }
+
+    public function test_groups_get_members_ids_sql_valid_context() {
+        global $DB;
+
+        $this->resetAfterTest(true);
+
+        $generator = $this->getDataGenerator();
+
+        $course = $generator->create_course();
+        $coursecontext = context_course::instance($course->id);
+        $student1 = $generator->create_user();
+        $student2 = $generator->create_user();
+        $plugin = enrol_get_plugin('manual');
+        $role = $DB->get_record('role', array('shortname' => 'student'));
+        $group = $generator->create_group(array('courseid' => $course->id));
+        $instance = $DB->get_record('enrol', array(
+                'courseid' => $course->id,
+                'enrol' => 'manual',
+        ));
+
+        $this->assertNotEquals($instance, false);
+
+        // Enrol users in the course.
+        $plugin->enrol_user($instance, $student1->id, $role->id);
+        $plugin->enrol_user($instance, $student2->id, $role->id);
+
+        // Add student1 to the group.
+        groups_add_member($group->id, $student1->id);
+
+        // Test with members at any group and with a valid $context.
+        list($sql, $params) = groups_get_members_ids_sql(USERSWITHOUTGROUP, $coursecontext);
+        $users = $DB->get_records_sql($sql, $params);
+        $this->assertFalse(array_key_exists($student1->id, $users));
+        $this->assertTrue(array_key_exists($student2->id, $users));
+    }
+
+    public function test_groups_get_members_ids_sql_empty_context() {
+        global $DB;
+
+        $this->resetAfterTest(true);
+
+        $generator = $this->getDataGenerator();
+
+        $course = $generator->create_course();
+        $coursecontext = context_course::instance($course->id);
+        $student1 = $generator->create_user();
+        $student2 = $generator->create_user();
+        $plugin = enrol_get_plugin('manual');
+        $role = $DB->get_record('role', array('shortname' => 'student'));
+        $group = $generator->create_group(array('courseid' => $course->id));
+        $instance = $DB->get_record('enrol', array(
+                'courseid' => $course->id,
+                'enrol' => 'manual',
+        ));
+
+        $this->assertNotEquals($instance, false);
+
+        // Enrol users in the course.
+        $plugin->enrol_user($instance, $student1->id, $role->id);
+        $plugin->enrol_user($instance, $student2->id, $role->id);
+
+        // Add student1 to the group.
+        groups_add_member($group->id, $student1->id);
+
+        // Test with members at any group and without the $context.
+        $this->expectException('coding_exception');
+        list($sql, $params) = groups_get_members_ids_sql(USERSWITHOUTGROUP);
+    }
+
+    public function test_groups_get_members_ids_sql_invalid_context() {
+        global $DB;
+
+        $this->resetAfterTest(true);
+
+        $generator = $this->getDataGenerator();
+
+        $course = $generator->create_course();
+        $coursecontext = context_course::instance($course->id);
+        $student1 = $generator->create_user();
+        $student2 = $generator->create_user();
+        $plugin = enrol_get_plugin('manual');
+        $role = $DB->get_record('role', array('shortname' => 'student'));
+        $group = $generator->create_group(array('courseid' => $course->id));
+        $instance = $DB->get_record('enrol', array(
+                'courseid' => $course->id,
+                'enrol' => 'manual',
+        ));
+
+        $this->assertNotEquals($instance, false);
+
+        // Enrol users in the course.
+        $plugin->enrol_user($instance, $student1->id, $role->id);
+        $plugin->enrol_user($instance, $student2->id, $role->id);
+
+        // Add student1 to the group.
+        groups_add_member($group->id, $student1->id);
+
+        // Test with members at any group and with an invalid $context.
+        $syscontext = context_system::instance();
+        $this->expectException('coding_exception');
+        list($sql, $params) = groups_get_members_ids_sql(USERSWITHOUTGROUP, $syscontext);
     }
 
     public function test_groups_get_group_by_name() {
@@ -1433,6 +1536,17 @@ class core_grouplib_testcase extends advanced_testcase {
         $this->assertCount(1, $members);
         $this->assertEquals($user1->id, $members[$user1->id]->id);
 
+        // Test the info matches group membership for the entire course.
+        $groups  = groups_get_all_groups($course1->id, 0, 0, 'g.*', true);
+        $group1withmembers = array_pop($groups);
+
+        // Compare the sorted keys of both arrays (should be list of user ids).
+        $members = array_keys($members);
+        sort($members);
+        $group1members = array_keys($group1withmembers->members);
+        sort($group1members);
+        $this->assertEquals($members, $group1members);
+
         // Group with just one plus empty group.
         $members = groups_get_groups_members([$group1->id, $group3->id]);
         $this->assertCount(1, $members);
@@ -1446,6 +1560,18 @@ class core_grouplib_testcase extends advanced_testcase {
         $members = groups_get_members($group2->id, 'u.*', 'u.id ASC');
         $this->assertCount(2, $members);
         $this->assertEquals([$user1->id, $user2->id], array_keys($members));
+
+        // Test the info matches group membership for the entire course.
+        $groups  = groups_get_all_groups($course2->id, 0, 0, 'g.*', true);
+        $group2withmembers = $groups[$group2->id];
+
+        // Compare the sorted keys of both arrays (should be list of user ids).
+        $members = array_keys($members);
+        sort($members);
+        $group2members = array_keys($group2withmembers->members);
+        sort($group2members);
+        $this->assertEquals($members, $group2members);
+
     }
 
     /**

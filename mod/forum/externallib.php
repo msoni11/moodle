@@ -249,8 +249,7 @@ class mod_forum_external extends external_api {
         $allposts = forum_get_all_discussion_posts($discussion->id, $sort, $forumtracked);
 
         foreach ($allposts as $post) {
-
-            if (!forum_user_can_see_post($forum, $discussion, $post, null, $cm)) {
+            if (!forum_user_can_see_post($forum, $discussion, $post, null, $cm, false)) {
                 $warning = array();
                 $warning['item'] = 'post';
                 $warning['itemid'] = $post->id;
@@ -274,6 +273,23 @@ class mod_forum_external extends external_api {
             } else {
                 $post->children = array();
             }
+
+            if (!forum_user_can_see_post($forum, $discussion, $post, null, $cm)) {
+                // The post is available, but has been marked as deleted.
+                // It will still be available but filled with a placeholder.
+                $post->userid = null;
+                $post->userfullname = null;
+                $post->userpictureurl = null;
+
+                $post->subject = get_string('privacy:request:delete:post:subject', 'mod_forum');
+                $post->message = get_string('privacy:request:delete:post:message', 'mod_forum');
+
+                $post->deleted = true;
+                $posts[] = $post;
+
+                continue;
+            }
+            $post->deleted = false;
 
             if (forum_is_author_hidden($post, $forum)) {
                 $post->userid = null;
@@ -309,6 +325,7 @@ class mod_forum_external extends external_api {
 
         $result = array();
         $result['posts'] = $posts;
+        $result['ratinginfo'] = \core_rating\external\util::get_rating_info($forum, $modcontext, 'mod_forum', 'post', $posts);
         $result['warnings'] = $warnings;
         return $result;
     }
@@ -345,10 +362,12 @@ class mod_forum_external extends external_api {
                                 'canreply' => new external_value(PARAM_BOOL, 'The user can reply to posts?'),
                                 'postread' => new external_value(PARAM_BOOL, 'The post was read'),
                                 'userfullname' => new external_value(PARAM_TEXT, 'Post author full name'),
-                                'userpictureurl' => new external_value(PARAM_URL, 'Post author picture.', VALUE_OPTIONAL)
+                                'userpictureurl' => new external_value(PARAM_URL, 'Post author picture.', VALUE_OPTIONAL),
+                                'deleted' => new external_value(PARAM_BOOL, 'This post has been removed.'),
                             ), 'post'
                         )
                     ),
+                'ratinginfo' => \core_rating\external\util::external_ratings_structure(),
                 'warnings' => new external_warnings()
             )
         );
@@ -848,7 +867,8 @@ class mod_forum_external extends external_api {
         $post->messageformat = FORMAT_HTML;   // Force formatting for now.
         $post->messagetrust = trusttext_trusted($context);
         $post->itemid = $options['inlineattachmentsid'];
-        $post->attachments   = $options['attachmentsid'];
+        $post->attachments = $options['attachmentsid'];
+        $post->deleted = 0;
         $fakemform = $post->attachments;
         if ($postid = forum_add_new_post($post, $fakemform)) {
 

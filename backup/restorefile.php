@@ -72,13 +72,16 @@ if (is_null($course)) {
 $browser = get_file_browser();
 
 // check if tmp dir exists
-$tmpdir = $CFG->tempdir . '/backup';
+$tmpdir = make_backup_temp_directory('', false);
 if (!check_dir_exists($tmpdir, true, true)) {
     throw new restore_controller_exception('cannot_create_backup_temp_dir');
 }
 
 // choose the backup file from backup files tree
 if ($action == 'choosebackupfile') {
+    if ($filearea == 'automated') {
+        require_capability('moodle/restore:viewautomatedfilearea', $context);
+    }
     if ($fileinfo = $browser->get_file_info($filecontext, $component, $filearea, $itemid, $filepath, $filename)) {
         if (is_a($fileinfo, 'file_info_stored')) {
             // Use the contenthash rather than copying the file where possible,

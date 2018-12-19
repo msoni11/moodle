@@ -286,7 +286,7 @@ class grade_report_overview extends grade_report {
                         'user' => $this->user->id)), $coursename);
                 } else {
                     $courselink = html_writer::link(new moodle_url('/grade/report/user/index.php', array('id' => $course->id,
-                        'userid' => $this->user->id)), $coursename);
+                        'userid' => $this->user->id, 'group' => $this->gpr->groupid)), $coursename);
                 }
 
                 $data = array($courselink, grade_format_gradevalue($finalgrade, $courseitem, true));
@@ -468,7 +468,7 @@ function gradereport_overview_myprofile_navigation(core_user\output\myprofile\tr
     $usercontext = context_user::instance($user->id);
     $coursecontext = context_course::instance($course->id);
     if (grade_report_overview::check_access($systemcontext, $coursecontext, $usercontext, $course, $user->id)) {
-        $url = new moodle_url('/grade/report/overview/index.php', array('userid' => $user->id));
+        $url = new moodle_url('/grade/report/overview/index.php', array('userid' => $user->id, 'id' => $course->id));
         $node = new core_user\output\myprofile\node('reports', 'grades', get_string('gradesoverview', 'gradereport_overview'),
                 null, $url);
         $tree->add_node($node);

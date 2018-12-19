@@ -43,6 +43,9 @@ if ($hassiteconfig) {
                 new lang_string('configenablemobilewebservice', 'admin', $enablemobiledoclink), $default));
     }
 
+    $temp->add(new admin_setting_configtext('tool_mobile/apppolicy', new lang_string('apppolicy', 'tool_mobile'),
+        new lang_string('apppolicy_help', 'tool_mobile'), '', PARAM_URL));
+
     $ADMIN->add('mobileapp', $temp);
 
     // Show only mobile settings if the mobile service is enabled.
@@ -70,6 +73,14 @@ if ($hassiteconfig) {
         $temp->add(new admin_setting_configtext('mobilecssurl', new lang_string('mobilecssurl', 'tool_mobile'),
                     new lang_string('configmobilecssurl', 'tool_mobile'), '', PARAM_URL));
 
+        // Reference to Branded Mobile App.
+        if (empty($CFG->disableserviceads_branded)) {
+            $temp->add(new admin_setting_description('moodlebrandedappreference',
+                new lang_string('moodlebrandedapp', 'admin'),
+                new lang_string('moodlebrandedappreference', 'admin')
+            ));
+        }
+
         $temp->add(new admin_setting_heading('tool_mobile/smartappbanners',
                     new lang_string('smartappbanners', 'tool_mobile'), ''));
 
@@ -82,6 +93,9 @@ if ($hassiteconfig) {
 
         $temp->add(new admin_setting_configtext('tool_mobile/androidappid', new lang_string('androidappid', 'tool_mobile'),
                     new lang_string('androidappid_desc', 'tool_mobile'), 'com.moodle.moodlemobile', PARAM_NOTAGS));
+
+        $temp->add(new admin_setting_configtext('tool_mobile/setuplink', new lang_string('setuplink', 'tool_mobile'),
+            new lang_string('setuplink_desc', 'tool_mobile'), 'https://download.moodle.org/mobile', PARAM_URL));
 
         $ADMIN->add('mobileapp', $temp);
 

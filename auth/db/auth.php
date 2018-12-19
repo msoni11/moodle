@@ -42,6 +42,7 @@ class auth_plugin_db extends auth_plugin_base {
 
         $this->authtype = 'db';
         $this->config = get_config('auth_db');
+        $this->errorlogtag = '[AUTH DB] ';
         if (empty($this->config->extencoding)) {
             $this->config->extencoding = 'utf-8';
         }
@@ -171,7 +172,7 @@ class auth_plugin_db extends auth_plugin_base {
     }
 
     /**
-     * Returns user attribute mappings between moodle and ldap.
+     * Returns user attribute mappings between moodle and the external database.
      *
      * @return array
      */
@@ -215,8 +216,12 @@ class auth_plugin_db extends auth_plugin_base {
         // If at least one field is mapped from external db, get that mapped data.
         if ($selectfields) {
             $select = array();
+            $fieldcount = 0;
             foreach ($selectfields as $localname=>$externalname) {
-                $select[] = "$externalname";
+                // Without aliasing, multiple occurrences of the same external
+                // name can coalesce in only occurrence in the result.
+                $select[] = "$externalname AS F".$fieldcount;
+                $fieldcount++;
             }
             $select = implode(', ', $select);
             $sql = "SELECT $select
@@ -377,7 +382,7 @@ class auth_plugin_db extends auth_plugin_base {
                     list($in_sql, $params) = $DB->get_in_or_equal($userlistchunk, SQL_PARAMS_NAMED, 'u', true);
                     $params['authtype'] = $this->authtype;
                     $params['mnethostid'] = $CFG->mnet_localhost_id;
-                    $sql = "SELECT u.id, u.username
+                    $sql = "SELECT u.id, u.username, u.suspended
                           FROM {user} u
                          WHERE u.auth = :authtype AND u.deleted = 0 AND u.mnethostid = :mnethostid AND u.username {$in_sql}";
                     $update_users = $update_users + $DB->get_records_sql($sql, $params);
@@ -387,7 +392,7 @@ class auth_plugin_db extends auth_plugin_base {
                     $trace->output("User entries to update: ".count($update_users));
 
                     foreach ($update_users as $user) {
-                        if ($this->update_user_record($user->username, $updatekeys)) {
+                        if ($this->update_user_record($user->username, $updatekeys, false, (bool) $user->suspended)) {
                             $trace->output(get_string('auth_dbupdatinguser', 'auth_db', array('name'=>$user->username, 'id'=>$user->id)), 1);
                         } else {
                             $trace->output(get_string('auth_dbupdatinguser', 'auth_db', array('name'=>$user->username, 'id'=>$user->id))." - ".get_string('skipped'), 1);
@@ -468,6 +473,12 @@ class auth_plugin_db extends auth_plugin_base {
                     set_user_preference('auth_forcepasswordchange', 1, $id);
                     set_user_preference('create_password',          1, $id);
                 }
+
+                // Save custom profile fields here.
+                require_once($CFG->dirroot . '/user/profile/lib.php');
+                $user->id = $id;
+                profile_save_data($user);
+
                 // Make sure user context is present.
                 context_user::instance($id);
             }
@@ -539,67 +550,6 @@ class auth_plugin_db extends auth_plugin_base {
             $user->{$key} = $value;
         }
         return $user;
-    }
-
-    /**
-     * will update a local user record from an external source.
-     * is a lighter version of the one in moodlelib -- won't do
-     * expensive ops such as enrolment.
-     *
-     * If you don't pass $updatekeys, there is a performance hit and
-     * values removed from DB won't be removed from moodle.
-     *
-     * @param string $username username
-     * @param bool $updatekeys
-     * @return stdClass
-     */
-    function update_user_record($username, $updatekeys=false) {
-        global $CFG, $DB;
-
-        //just in case check text case
-        $username = trim(core_text::strtolower($username));
-
-        // get the current user record
-        $user = $DB->get_record('user', array('username'=>$username, 'mnethostid'=>$CFG->mnet_localhost_id));
-        if (empty($user)) { // trouble
-            error_log("Cannot update non-existent user: $username");
-            print_error('auth_dbusernotexist','auth_db',$username);
-            die;
-        }
-
-        // Ensure userid is not overwritten.
-        $userid = $user->id;
-        $needsupdate = false;
-
-        $updateuser = new stdClass();
-        $updateuser->id = $userid;
-        if ($newinfo = $this->get_userinfo($username)) {
-            $newinfo = truncate_userinfo($newinfo);
-
-            if (empty($updatekeys)) { // All keys? This does not support removing values.
-                $updatekeys = array_keys($newinfo);
-            }
-
-            foreach ($updatekeys as $key) {
-                if (isset($newinfo[$key])) {
-                    $value = $newinfo[$key];
-                } else {
-                    $value = '';
-                }
-
-                if (!empty($this->config->{'field_updatelocal_' . $key})) {
-                    if (isset($user->{$key}) and $user->{$key} != $value) { // Only update if it's changed.
-                        $needsupdate = true;
-                        $updateuser->$key = $value;
-                    }
-                }
-            }
-        }
-        if ($needsupdate) {
-            require_once($CFG->dirroot . '/user/lib.php');
-            user_update_user($updateuser);
-        }
-        return $DB->get_record('user', array('id'=>$userid, 'deleted'=>0));
     }
 
     /**
@@ -765,12 +715,12 @@ class auth_plugin_db extends auth_plugin_base {
         raise_memory_limit(MEMORY_HUGE);
 
         if (empty($this->config->table)) {
-            echo $OUTPUT->notification('External table not specified.', 'notifyproblem');
+            echo $OUTPUT->notification(get_string('auth_dbnoexttable', 'auth_db'), 'notifyproblem');
             return;
         }
 
         if (empty($this->config->fielduser)) {
-            echo $OUTPUT->notification('External user field not specified.', 'notifyproblem');
+            echo $OUTPUT->notification(get_string('auth_dbnouserfield', 'auth_db'), 'notifyproblem');
             return;
         }
 
@@ -791,7 +741,7 @@ class auth_plugin_db extends auth_plugin_base {
             error_reporting($CFG->debug);
             ob_end_flush();
 
-            echo $OUTPUT->notification('Cannot connect the database.', 'notifyproblem');
+            echo $OUTPUT->notification(get_string('auth_dbcannotconnect', 'auth_db'), 'notifyproblem');
             return;
         }
 
@@ -800,17 +750,17 @@ class auth_plugin_db extends auth_plugin_base {
                                 WHERE {$this->config->fielduser} <> 'random_unlikely_username'"); // Any unlikely name is ok here.
 
         if (!$rs) {
-            echo $OUTPUT->notification('Can not read external table.', 'notifyproblem');
+            echo $OUTPUT->notification(get_string('auth_dbcannotreadtable', 'auth_db'), 'notifyproblem');
 
         } else if ($rs->EOF) {
-            echo $OUTPUT->notification('External table is empty.', 'notifyproblem');
+            echo $OUTPUT->notification(get_string('auth_dbtableempty', 'auth_db'), 'notifyproblem');
             $rs->close();
 
         } else {
             $fields_obj = $rs->FetchObj();
             $columns = array_keys((array)$fields_obj);
 
-            echo $OUTPUT->notification('External table contains following columns:<br />'.implode(', ', $columns), 'notifysuccess');
+            echo $OUTPUT->notification(get_string('auth_dbcolumnlist', 'auth_db', implode(', ', $columns)), 'notifysuccess');
             $rs->close();
         }
 

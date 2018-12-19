@@ -26,6 +26,7 @@ namespace core\oauth2;
 defined('MOODLE_INTERNAL') || die();
 
 use core\persistent;
+use lang_string;
 
 /**
  * Class for loading/storing issuer from the DB
@@ -72,6 +73,10 @@ class issuer extends persistent {
                 'type' => PARAM_BOOL,
                 'default' => false
             ),
+            'basicauth' => array(
+                'type' => PARAM_BOOL,
+                'default' => false
+            ),
             'scopessupported' => array(
                 'type' => PARAM_RAW,
                 'null' => NULL_ALLOWED,
@@ -100,6 +105,10 @@ class issuer extends persistent {
             'sortorder' => array(
                 'type' => PARAM_INT,
                 'default' => 0,
+            ),
+            'requireconfirmation' => array(
+                'type' => PARAM_BOOL,
+                'default' => true
             )
         );
     }
@@ -199,6 +208,22 @@ class issuer extends persistent {
             }
         }
 
+        return true;
+    }
+
+    /**
+     * Custom validator for end point URLs.
+     * Because we send Bearer tokens we must ensure SSL.
+     *
+     * @param string $value The value to check.
+     * @return lang_string|boolean
+     */
+    protected function validate_baseurl($value) {
+        global $CFG;
+        include_once($CFG->dirroot . '/lib/validateurlsyntax.php');
+        if (!empty($value) && !validateUrlSyntax($value, 'S+')) {
+            return new lang_string('sslonlyaccess', 'error');
+        }
         return true;
     }
 }

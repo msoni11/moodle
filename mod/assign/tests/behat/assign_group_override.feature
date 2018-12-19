@@ -38,6 +38,7 @@ Feature: Assign group override
       | assignsubmission_onlinetext_wordlimit_enabled | 1 |
       | assignsubmission_onlinetext_wordlimit | 10 |
       | assignsubmission_file_enabled | 0 |
+      | gradingduedate[enabled]       | 0 |
 
   Scenario: Add, modify then delete a group override
     When I follow "Test assignment name"
@@ -149,12 +150,12 @@ Feature: Assign group override
     And I log in as "student2"
     And I am on "Course 1" course homepage
     And I follow "Test assignment name"
-    Then I should not see "Make changes to your submission"
+    Then I should not see "You have not made a submission yet"
     And I log out
     And I log in as "student1"
     And I am on "Course 1" course homepage
     And I follow "Test assignment name"
-    And I should see "Make changes to your submission"
+    And I should see "You have not made a submission yet"
 
   Scenario: Allow a group to have a different start date
     When I follow "Test assignment name"

@@ -649,17 +649,29 @@ class question_attempt {
 
     /**
      * This is used by the manual grading code, particularly in association with
-     * validation. If there is a mark submitted in the request, then use that,
-     * otherwise use the latest mark for this question.
-     * @return number the current manual mark for this question, formatted for display.
+     * validation. It gets the current manual mark for a question, in exactly the string
+     * form that the teacher entered it, if possible. This may come from the current
+     * POST request, if there is one, otherwise from the database.
+     *
+     * @return string the current manual mark for this question, in the format the teacher typed,
+     *     if possible.
      */
     public function get_current_manual_mark() {
+        // Is there a current value in the current POST data? If so, use that.
         $mark = $this->get_submitted_var($this->get_behaviour_field_name('mark'), PARAM_RAW_TRIMMED);
-        if (is_null($mark)) {
-            return format_float($this->get_mark(), 7, true, true);
-        } else {
+        if ($mark !== null) {
             return $mark;
         }
+
+        // Otherwise, use the stored value.
+        // If the question max mark has not changed, use the stored value that was input.
+        $storedmaxmark = $this->get_last_behaviour_var('maxmark');
+        if ($storedmaxmark !== null && ($storedmaxmark - $this->get_max_mark()) < 0.0000005) {
+            return $this->get_last_behaviour_var('mark');
+        }
+
+        // The max mark for this question has changed so we must re-scale the current mark.
+        return format_float($this->get_mark(), 7, true, true);
     }
 
     /**
@@ -1095,8 +1107,10 @@ class question_attempt {
             return null;
         }
 
-        return new question_file_saver($draftitemid, 'question', 'response_' .
-                str_replace($this->get_field_prefix(), '', $name), $text);
+        $filearea = str_replace($this->get_field_prefix(), '', $name);
+        $filearea = str_replace('-', 'bf_', $filearea);
+        $filearea = 'response_' . $filearea;
+        return new question_file_saver($draftitemid, 'question', $filearea, $text);
     }
 
     /**
@@ -1152,12 +1166,31 @@ class question_attempt {
                 $this->behaviour->get_expected_data(), $postdata, '-');
 
         $expected = $this->behaviour->get_expected_qt_data();
+        $this->check_qt_var_name_restrictions($expected);
+
         if ($expected === self::USE_RAW_DATA) {
             $submitteddata += $this->get_all_submitted_qt_vars($postdata);
         } else {
             $submitteddata += $this->get_expected_data($expected, $postdata, '');
         }
         return $submitteddata;
+    }
+
+    /**
+     * Ensure that no reserved prefixes are being used by installed
+     * question types.
+     * @param array $expected An array of question type variables
+     */
+    protected function check_qt_var_name_restrictions($expected) {
+        global $CFG;
+
+        if ($CFG->debugdeveloper && $expected !== self::USE_RAW_DATA) {
+            foreach ($expected as $key => $value) {
+                if (strpos($key, 'bf_') !== false) {
+                    debugging('The bf_ prefix is reserved and cannot be used by question types', DEBUG_DEVELOPER);
+                }
+            }
+        }
     }
 
     /**
@@ -1358,16 +1391,17 @@ class question_attempt {
 
     /**
      * @return array(string, int) the most recent manual comment that was added
-     * to this question, and the FORMAT_... it is.
+     * to this question, the FORMAT_... it is and the step itself.
      */
     public function get_manual_comment() {
         foreach ($this->get_reverse_step_iterator() as $step) {
             if ($step->has_behaviour_var('comment')) {
                 return array($step->get_behaviour_var('comment'),
-                        $step->get_behaviour_var('commentformat'));
+                        $step->get_behaviour_var('commentformat'),
+                        $step);
             }
         }
-        return array(null, null);
+        return array(null, null, null);
     }
 
     /**
@@ -1387,7 +1421,7 @@ class question_attempt {
             if ($commentformat === null) {
                 $commentformat = FORMAT_HTML;
             }
-            return array($comment, $commentformat);
+            return array($comment, $commentformat, null);
         }
     }
 

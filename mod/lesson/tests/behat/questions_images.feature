@@ -20,8 +20,7 @@ Feature: In a lesson activity, teacher can add embedded images in questions answ
     And I follow "Manage private files"
     And I upload "mod/lesson/tests/fixtures/moodle_logo.jpg" file to "Files" filemanager
     And I click on "Save changes" "button"
-    When I am on homepage
-    And I am on "Course 1" course homepage with editing mode on
+    When I am on "Course 1" course homepage with editing mode on
     And I add a "Lesson" to section "1" and I fill the form with:
       | Name | Test lesson name |
       | Description | Test lesson description |
@@ -46,7 +45,7 @@ Feature: In a lesson activity, teacher can add embedded images in questions answ
       | id_score_2 | 0 |
     # Atto needs focus to add image, select empty p tag to do so.
     And I select the text in the "id_answer_editor_2" Atto editor
-    And I click on "Image" "button" in the "//*[@data-fieldtype='editor']/*[descendant::*[@id='id_answer_editor_2']]" "xpath_element"
+    And I click on "Insert or edit image" "button" in the "//*[@data-fieldtype='editor']/*[descendant::*[@id='id_answer_editor_2']]" "xpath_element"
     And I click on "Browse repositories..." "button"
     And I click on "Private files" "link" in the ".fp-repo-area" "css_element"
     And I click on "moodle_logo.jpg" "link"
@@ -54,7 +53,7 @@ Feature: In a lesson activity, teacher can add embedded images in questions answ
     And I set the field "Describe this image for someone who cannot see it" to "It's the logo"
     And I click on "Save image" "button"
     And I press "Save page"
-    And I set the field "qtype" to "Question"
+    And I set the field "qtype" to "Add a question page"
     And I set the field "Select a question type" to "True/false"
     And I press "Add a question page"
     And I set the following fields to these values:
@@ -68,7 +67,7 @@ Feature: In a lesson activity, teacher can add embedded images in questions answ
       | id_jumpto_1 | This page |
     # Atto needs focus to add image, select empty p tag to do so.
     And I select the text in the "id_response_editor_0" Atto editor
-    And I click on "Image" "button" in the "//*[@data-fieldtype='editor']/*[descendant::*[@id='id_response_editor_0']]" "xpath_element"
+    And I click on "Insert or edit image" "button" in the "//*[@data-fieldtype='editor']/*[descendant::*[@id='id_response_editor_0']]" "xpath_element"
     And I click on "Browse repositories..." "button"
     And I click on "Private files" "link" in the ".fp-repo-area" "css_element"
     And I click on "moodle_logo.jpg" "link"

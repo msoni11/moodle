@@ -30,7 +30,9 @@ $functions = array(
         'methodname'  => 'get_plugins_supporting_mobile',
         'description' => 'Returns a list of Moodle plugins supporting the mobile app.',
         'type'        => 'read',
-        'services'    => array(MOODLE_OFFICIAL_MOBILE_SERVICE)
+        'services'    => array(MOODLE_OFFICIAL_MOBILE_SERVICE),
+        'ajax'          => true,
+        'loginrequired' => false,
     ),
 
     'tool_mobile_get_public_config' => array(
@@ -58,6 +60,13 @@ $functions = array(
                             Is created only in https sites and is restricted by time and ip address.',
         'type'        => 'write',
         'services'    => array(MOODLE_OFFICIAL_MOBILE_SERVICE),
-    )
+    ),
+    'tool_mobile_get_content' => array(
+        'classname'   => 'tool_mobile\external',
+        'methodname'  => 'get_content',
+        'description' => 'Returns a piece of content to be displayed in the Mobile app.',
+        'type'        => 'read',
+        'services'    => array(MOODLE_OFFICIAL_MOBILE_SERVICE),
+    ),
 );
 

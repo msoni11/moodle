@@ -406,16 +406,6 @@ class enrol_self_plugin extends enrol_plugin {
     }
 
     /**
-     * Enrol self cron support.
-     * @return void
-     */
-    public function cron() {
-        $trace = new text_progress_trace();
-        $this->sync($trace, null);
-        $this->send_expiry_notifications($trace);
-    }
-
-    /**
      * Sync all meta course links.
      *
      * @param progress_trace $trace
@@ -519,30 +509,6 @@ class enrol_self_plugin extends enrol_plugin {
         $this->lasternollerinstanceid = $instanceid;
 
         return $this->lasternoller;
-    }
-
-    /**
-     * Gets an array of the user enrolment actions.
-     *
-     * @param course_enrolment_manager $manager
-     * @param stdClass $ue A user enrolment object
-     * @return array An array of user_enrolment_actions
-     */
-    public function get_user_enrolment_actions(course_enrolment_manager $manager, $ue) {
-        $actions = array();
-        $context = $manager->get_context();
-        $instance = $ue->enrolmentinstance;
-        $params = $manager->get_moodlepage()->url->params();
-        $params['ue'] = $ue->id;
-        if ($this->allow_unenrol($instance) && has_capability("enrol/self:unenrol", $context)) {
-            $url = new moodle_url('/enrol/unenroluser.php', $params);
-            $actions[] = new user_enrolment_action(new pix_icon('t/delete', ''), get_string('unenrol', 'enrol'), $url, array('class'=>'unenrollink', 'rel'=>$ue->id));
-        }
-        if ($this->allow_manage($instance) && has_capability("enrol/self:manage", $context)) {
-            $url = new moodle_url('/enrol/editenrolment.php', $params);
-            $actions[] = new user_enrolment_action(new pix_icon('t/edit', ''), get_string('edit'), $url, array('class'=>'editenrollink', 'rel'=>$ue->id));
-        }
-        return $actions;
     }
 
     /**
@@ -691,8 +657,8 @@ class enrol_self_plugin extends enrol_plugin {
      */
     protected function get_expirynotify_options() {
         $options = array(0 => get_string('no'),
-                         1 => get_string('expirynotifyenroller', 'core_enrol'),
-                         2 => get_string('expirynotifyall', 'core_enrol'));
+                         1 => get_string('expirynotifyenroller', 'enrol_self'),
+                         2 => get_string('expirynotifyall', 'enrol_self'));
         return $options;
     }
 
@@ -716,6 +682,25 @@ class enrol_self_plugin extends enrol_plugin {
                          14 * 3600 * 24 => get_string('numdays', '', 14),
                          7 * 3600 * 24 => get_string('numdays', '', 7));
         return $options;
+    }
+
+    /**
+     * The self enrollment plugin has several bulk operations that can be performed.
+     * @param course_enrolment_manager $manager
+     * @return array
+     */
+    public function get_bulk_operations(course_enrolment_manager $manager) {
+        global $CFG;
+        require_once($CFG->dirroot.'/enrol/self/locallib.php');
+        $context = $manager->get_context();
+        $bulkoperations = array();
+        if (has_capability("enrol/self:manage", $context)) {
+            $bulkoperations['editselectedusers'] = new enrol_self_editselectedusers_operation($manager, $this);
+        }
+        if (has_capability("enrol/self:unenrol", $context)) {
+            $bulkoperations['deleteselectedusers'] = new enrol_self_deleteselectedusers_operation($manager, $this);
+        }
+        return $bulkoperations;
     }
 
     /**
@@ -1027,8 +1012,9 @@ class enrol_self_plugin extends enrol_plugin {
                 // We only use the first user.
                 $i = 0;
                 do {
-                    $rusers = get_role_users($croles[$i], $context, true, '',
-                        'r.sortorder ASC, ' . $sort, null, '', '', '', '', $sortparams);
+                    $allnames = get_all_user_name_fields(true, 'u');
+                    $rusers = get_role_users($croles[$i], $context, true, 'u.id,  u.confirmed, u.username, '. $allnames . ',
+                    u.email, r.sortorder, ra.id', 'r.sortorder, ra.id ASC, ' . $sort, null, '', '', '', '', $sortparams);
                     $i++;
                 } while (empty($rusers) && !empty($croles[$i]));
             }

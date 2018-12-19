@@ -61,14 +61,9 @@ date_default_timezone_set(@date_default_timezone_get());
 @error_reporting(E_ALL);
 @ini_set('display_errors', '1');
 
-// Check that PHP is of a sufficient version.
-if (version_compare(phpversion(), '5.6.5') < 0) {
-    $phpversion = phpversion();
-    // do NOT localise - lang strings would not work here and we CAN not move it after installib
-    echo "Moodle 3.2 or later requires at least PHP 5.6.5 (currently using version $phpversion).<br />";
-    echo "Please upgrade your server software or install older Moodle version.";
-    die;
-}
+// Check that PHP is of a sufficient version as soon as possible.
+require_once(__DIR__.'/lib/phpminimumversionlib.php');
+moodle_require_minimum_php_version();
 
 // make sure iconv is available and actually works
 if (!function_exists('iconv')) {
@@ -168,10 +163,11 @@ $CFG->wwwroot              = install_guess_wwwroot(); // can not be changed - pp
 $CFG->httpswwwroot         = $CFG->wwwroot;
 $CFG->dataroot             = $config->dataroot;
 $CFG->tempdir              = $CFG->dataroot.'/temp';
+$CFG->backuptempdir        = $CFG->tempdir.'/backup';
 $CFG->cachedir             = $CFG->dataroot.'/cache';
 $CFG->localcachedir        = $CFG->dataroot.'/localcache';
 $CFG->admin                = $config->admin;
-$CFG->docroot              = 'http://docs.moodle.org';
+$CFG->docroot              = 'https://docs.moodle.org';
 $CFG->langotherroot        = $CFG->dataroot.'/lang';
 $CFG->langlocalroot        = $CFG->dataroot.'/lang';
 $CFG->directorypermissions = isset($distro->directorypermissions) ? $distro->directorypermissions : 00777; // let distros set dir permissions
@@ -488,7 +484,6 @@ if ($config->stage == INSTALL_DATABASETYPE) {
                        'pgsql'  => moodle_database::get_driver_instance('pgsql',  'native'),
                        'oci'    => moodle_database::get_driver_instance('oci',    'native'),
                        'sqlsrv' => moodle_database::get_driver_instance('sqlsrv', 'native'), // MS SQL*Server PHP driver
-                       'mssql'  => moodle_database::get_driver_instance('mssql',  'native'), // FreeTDS driver
                       );
 
     echo '<div class="userinput">';

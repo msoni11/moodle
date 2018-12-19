@@ -18,14 +18,20 @@
 
     section {
         @extend .card;
-        @extend .card-block;
+        @extend .card-body;
         display: inline-block;
         width: 100%;
+        margin-bottom: 1rem;
 
         h3 {
             @extend .lead;
         }
     }
+}
+
+// This rule overrides the automatic no-overflow on the participants table. It kills the auto-complete.
+#participantsform .no-overflow {
+    overflow: visible;
 }
 
 .userprofile dl.list {
@@ -113,9 +119,13 @@
     text-align: center;
 }
 
-.userlist table#participants td,
-.userlist table#participants th {
+.userlist table#participants td {
+    text-align: left;
+    padding: 4px;
     vertical-align: middle;
+}
+
+.userlist table#participants th {
     text-align: left;
     padding: 4px;
 }
@@ -189,6 +199,22 @@
     white-space: nowrap;
     vertical-align: top;
     font-weight: bold;
+}
+
+.group-edit {
+    position: absolute;
+    right: 0;
+    margin-right: 0.6em;
+}
+
+.group-image {
+    display: block;
+    float: left;
+    margin-right: 1em;
+
+    .grouppicture {
+        border-radius: 50%;
+    }
 }
 
 .groupinfobox {
@@ -273,21 +299,6 @@
         div,
         input {
             margin: 0;
-        }
-    }
-}
-
-#groupeditform {
-    .groups,
-    .members {
-        min-width: 175px;
-        width: 49%;
-        float: left;
-        text-align: left;
-
-        select {
-            min-width: 175px;
-            max-width: 90%;
         }
     }
 }

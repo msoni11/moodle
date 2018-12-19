@@ -127,6 +127,18 @@ $definitions = array(
         'staticacceleration' => true,
     ),
 
+    // Cache the course categories where the user has any enrolment and all categories that this user can manage.
+    'calendar_categories' => array(
+        'mode' => cache_store::MODE_SESSION,
+        'simplekeys' => true,
+        'simpledata' => true,
+        'invalidationevents' => array(
+            'changesincoursecat',
+            'changesincategoryenrolment',
+        ),
+        'ttl' => 900,
+    ),
+
     // Cache the capabilities list DB table. See get_all_capabilities in accesslib.
     'capabilities' => array(
         'mode' => cache_store::MODE_APPLICATION,
@@ -312,6 +324,15 @@ $definitions = array(
         ),
     ),
 
+    // Caches contexts with insights.
+    'contextwithinsights' => array(
+        'mode' => cache_store::MODE_APPLICATION,
+        'simplekeys' => true,
+        'simpledata' => true,
+        'staticacceleration' => true,
+        'staticaccelerationsize' => 1
+    ),
+
     // Caches message processors.
     'message_processors_enabled' => array(
         'mode' => cache_store::MODE_APPLICATION,
@@ -321,10 +342,10 @@ $definitions = array(
         'staticaccelerationsize' => 3
     ),
 
-    // Caches the time of the last message between two users.
+    // Caches the time of the last message in a conversation.
     'message_time_last_message_between_users' => array(
         'mode' => cache_store::MODE_APPLICATION,
-        'simplekeys' => true, // The id of the sender and recipient is used.
+        'simplekeys' => true, // The conversation id is used.
         'simplevalues' => true,
         'datasource' => '\core_message\time_last_message_between_users',
     ),
@@ -344,5 +365,26 @@ $definitions = array(
         'simplekeys' => true,
         'simpledata' => true,
         'staticacceleration' => false,
+    ),
+
+    // Caches grouping and group ids of a user.
+    'user_group_groupings' => array(
+        'mode' => cache_store::MODE_APPLICATION,
+        'simplekeys' => true,
+        'simpledata' => true,
+        'staticacceleration' => true,
+    ),
+
+    // This is the user's pre sign-up session cache.
+    // This cache is used to record the user's pre sign-up data such as
+    // age of digital consent (minor) status, accepted policies, etc.
+    'presignup' => array(
+        'mode' => cache_store::MODE_SESSION,
+        'simplekeys' => true,
+        'simpledata' => true,
+        'ttl' => 1800,
+        'invalidationevents' => array(
+            'createduser',
+        )
     ),
 );

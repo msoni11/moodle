@@ -37,7 +37,7 @@ require_once($CFG->dirroot . '/mod/quiz/locallib.php');
  */
 class mod_quiz_mod_form extends moodleform_mod {
     /** @var array options to be used with date_time_selector fields in the quiz. */
-    public static $datefieldoptions = array('optional' => true, 'step' => 1);
+    public static $datefieldoptions = array('optional' => true);
 
     protected $_feedbacks;
     protected static $reviewfields = array(); // Initialised in the constructor.
@@ -242,6 +242,9 @@ class mod_quiz_mod_form extends moodleform_mod {
                 'neq', 'wontmatch');
         $mform->disabledIf('overallfeedbackduring', 'preferredbehaviour',
                 'neq', 'wontmatch');
+        foreach (self::$reviewfields as $field => $notused) {
+            $mform->disabledIf($field . 'closed', 'timeclose[enabled]');
+        }
 
         // -------------------------------------------------------------------------------
         $mform->addElement('header', 'display', get_string('appearance'));
@@ -514,6 +517,11 @@ class mod_quiz_mod_form extends moodleform_mod {
                 $toform[$name] = $value;
             }
         }
+
+        // Completion settings check.
+        if (empty($toform['completionusegrade'])) {
+            $toform['completionpass'] = 0; // Forced unchecked.
+        }
     }
 
     public function validation($data, $files) {
@@ -618,7 +626,7 @@ class mod_quiz_mod_form extends moodleform_mod {
         $group = array();
         $group[] = $mform->createElement('advcheckbox', 'completionpass', null, get_string('completionpass', 'quiz'),
                 array('group' => 'cpass'));
-
+        $mform->disabledIf('completionpass', 'completionusegrade', 'notchecked');
         $group[] = $mform->createElement('advcheckbox', 'completionattemptsexhausted', null,
                 get_string('completionattemptsexhausted', 'quiz'),
                 array('group' => 'cattempts'));

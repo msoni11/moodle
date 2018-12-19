@@ -146,7 +146,7 @@ class core_plugin_manager {
     public function get_plugin_types() {
         if (func_num_args() > 0) {
             if (!func_get_arg(0)) {
-                throw coding_exception('core_plugin_manager->get_plugin_types() does not support relative paths.');
+                throw new coding_exception('core_plugin_manager->get_plugin_types() does not support relative paths.');
             }
         }
         if ($this->plugintypes) {
@@ -1646,13 +1646,14 @@ class core_plugin_manager {
         // Moodle 2.3 supports upgrades from 2.2.x only.
         $plugins = array(
             'qformat' => array('blackboard', 'learnwise'),
-            'auth' => array('radius'),
-            'block' => array('course_overview'),
+            'auth' => array('radius', 'fc', 'nntp', 'pam', 'pop3', 'imap'),
+            'block' => array('course_overview', 'messages'),
+            'cachestore' => array('memcache'),
             'enrol' => array('authorize'),
             'report' => array('search'),
             'repository' => array('alfresco'),
             'tinymce' => array('dragmath'),
-            'tool' => array('bloglevelupgrade', 'qeupgradehelper', 'timezoneimport'),
+            'tool' => array('bloglevelupgrade', 'qeupgradehelper', 'timezoneimport', 'assignmentupgrade'),
             'theme' => array('afterburner', 'anomaly', 'arialist', 'base', 'binarius', 'boxxie', 'brick', 'canvas',
                 'formal_white', 'formfactor', 'fusion', 'leatherbound', 'magazine', 'mymobile', 'nimble', 'nonzero',
                 'overlay', 'serenity', 'sky_high', 'splash', 'standard', 'standardold'),
@@ -1684,8 +1685,8 @@ class core_plugin_manager {
                 'backcolor', 'bold', 'charmap', 'clear', 'collapse', 'emoticon',
                 'equation', 'fontcolor', 'html', 'image', 'indent', 'italic',
                 'link', 'managefiles', 'media', 'noautolink', 'orderedlist',
-                'rtl', 'strike', 'subscript', 'superscript', 'table', 'title',
-                'underline', 'undo', 'unorderedlist'
+                'recordrtc', 'rtl', 'strike', 'subscript', 'superscript', 'table',
+                'title', 'underline', 'undo', 'unorderedlist'
             ),
 
             'assignment' => array(
@@ -1701,8 +1702,8 @@ class core_plugin_manager {
             ),
 
             'auth' => array(
-                'cas', 'db', 'email', 'fc', 'imap', 'ldap', 'lti', 'manual', 'mnet',
-                'nntp', 'nologin', 'none', 'oauth2', 'pam', 'pop3', 'shibboleth', 'webservice'
+                'cas', 'db', 'email', 'ldap', 'lti', 'manual', 'mnet',
+                'nologin', 'none', 'oauth2', 'shibboleth', 'webservice'
             ),
 
             'availability' => array(
@@ -1715,12 +1716,12 @@ class core_plugin_manager {
                 'calendar_upcoming', 'comments', 'community',
                 'completionstatus', 'course_list', 'course_summary',
                 'feedback', 'globalsearch', 'glossary_random', 'html',
-                'login', 'lp', 'mentees', 'messages', 'mnet_hosts', 'myoverview', 'myprofile',
+                'login', 'lp', 'mentees', 'mnet_hosts', 'myoverview', 'myprofile',
                 'navigation', 'news_items', 'online_users', 'participants',
-                'private_files', 'quiz_results', 'recent_activity',
-                'rss_client', 'search_forums', 'section_links',
+                'private_files', 'quiz_results', 'recent_activity', 'recentlyaccesseditems',
+                'recentlyaccessedcourses', 'rss_client', 'search_forums', 'section_links',
                 'selfcompletion', 'settings', 'site_main_menu',
-                'social_activities', 'tag_flickr', 'tag_youtube', 'tags'
+                'social_activities', 'starredcourses', 'tag_flickr', 'tag_youtube', 'tags', 'timeline'
             ),
 
             'booktool' => array(
@@ -1732,7 +1733,7 @@ class core_plugin_manager {
             ),
 
             'cachestore' => array(
-                'file', 'memcache', 'memcached', 'mongodb', 'session', 'static', 'apcu', 'redis'
+                'file', 'memcached', 'mongodb', 'session', 'static', 'apcu', 'redis'
             ),
 
             'calendartype' => array(
@@ -1804,7 +1805,11 @@ class core_plugin_manager {
             ),
 
             'ltiservice' => array(
-                'memberships', 'profile', 'toolproxy', 'toolsettings'
+                'gradebookservices', 'memberships', 'profile', 'toolproxy', 'toolsettings'
+            ),
+
+            'mlbackend' => array(
+                'php', 'python'
             ),
 
             'media' => array(
@@ -1868,19 +1873,19 @@ class core_plugin_manager {
 
             'report' => array(
                 'backups', 'competency', 'completion', 'configlog', 'courseoverview', 'eventlist',
-                'log', 'loglive', 'outline', 'participation', 'progress', 'questioninstances',
+                'insights', 'log', 'loglive', 'outline', 'participation', 'progress', 'questioninstances',
                 'security', 'stats', 'performance', 'usersessions'
             ),
 
             'repository' => array(
                 'areafiles', 'boxnet', 'coursefiles', 'dropbox', 'equella', 'filesystem',
-                'flickr', 'flickr_public', 'googledocs', 'local', 'merlot',
+                'flickr', 'flickr_public', 'googledocs', 'local', 'merlot', 'nextcloud',
                 'onedrive', 'picasa', 'recent', 'skydrive', 's3', 'upload', 'url', 'user', 'webdav',
                 'wikimedia', 'youtube'
             ),
 
             'search' => array(
-                'solr'
+                'simpledb', 'solr'
             ),
 
             'scormreport' => array(
@@ -1900,11 +1905,11 @@ class core_plugin_manager {
             ),
 
             'tool' => array(
-                'assignmentupgrade', 'availabilityconditions', 'behat', 'capability', 'cohortroles', 'customlang',
-                'dbtransfer', 'filetypes', 'generator', 'health', 'innodb', 'installaddon',
-                'langimport', 'log', 'lp', 'lpimportcsv', 'lpmigrate', 'messageinbound', 'mobile', 'multilangupgrade', 'monitor',
-                'oauth2', 'phpunit', 'profiling', 'recyclebin', 'replace', 'spamcleaner', 'task', 'templatelibrary',
-                'unittest', 'uploadcourse', 'uploaduser', 'unsuproles', 'usertours', 'xmldb'
+                'analytics', 'availabilityconditions', 'behat', 'capability', 'cohortroles', 'customlang',
+                'dataprivacy', 'dbtransfer', 'filetypes', 'generator', 'health', 'httpsreplace', 'innodb', 'installaddon',
+                'langimport', 'log', 'lp', 'lpimportcsv', 'lpmigrate', 'messageinbound', 'mobile', 'multilangupgrade',
+                'monitor', 'oauth2', 'phpunit', 'policy', 'profiling', 'recyclebin', 'replace', 'spamcleaner', 'task',
+                'templatelibrary', 'uploadcourse', 'uploaduser', 'unsuproles', 'usertours', 'xmldb'
             ),
 
             'webservice' => array(

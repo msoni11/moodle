@@ -114,9 +114,14 @@ if (!$formdata = $form->get_data()) {
         $rawfields = $DB->get_records('data_fields', array('dataid' => $data->id), '', 'name, id, type');
         $fields = array();
         $errorfield = '';
+        $safetoskipfields = array(get_string('user'), get_string('username'), get_string('email'),
+            get_string('timeadded', 'data'), get_string('timemodified', 'data'),
+            get_string('approved', 'data'), get_string('tags', 'data'));
         foreach ($fieldnames as $name => $id) {
             if (!isset($rawfields[$name])) {
-                $errorfield .= "'$name' ";
+                if (!in_array($name, $safetoskipfields)) {
+                    $errorfield .= "'$name' ";
+                }
             } else {
                 $field = $rawfields[$name];
                 require_once("$CFG->dirroot/mod/data/field/$field->type/field.class.php");
@@ -151,6 +156,21 @@ if (!$formdata = $form->get_data()) {
                         $DB->insert_record('data_content', $content);
                     }
                 }
+
+                if (core_tag_tag::is_enabled('mod_data', 'data_records') &&
+                        isset($fieldnames[get_string('tags', 'data')])) {
+                    $columnindex = $fieldnames[get_string('tags', 'data')];
+                    $rawtags = $record[$columnindex];
+                    $tags = explode(',', $rawtags);
+                    foreach ($tags as $tag) {
+                        $tag = trim($tag);
+                        if (empty($tag)) {
+                            continue;
+                        }
+                        core_tag_tag::add_item_tag('mod_data', 'data_records', $recordid, $context, $tag);
+                    }
+                }
+
                 $recordsadded++;
                 print get_string('added', 'moodle', $recordsadded) . ". " . get_string('entry', 'data') . " (ID $recordid)<br />\n";
             }

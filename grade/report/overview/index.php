@@ -33,7 +33,7 @@ $userid   = optional_param('userid', $USER->id, PARAM_INT);
 $PAGE->set_url(new moodle_url('/grade/report/overview/index.php', array('id' => $courseid, 'userid' => $userid)));
 
 if (!$course = $DB->get_record('course', array('id' => $courseid))) {
-    print_error('nocourseid');
+    print_error('invalidcourseid');
 }
 require_login(null, false);
 $PAGE->set_course($course);
@@ -93,7 +93,7 @@ grade_regrade_final_grades_if_required($course);
 if (has_capability('moodle/grade:viewall', $context) && $courseid != SITEID) {
     // Please note this would be extremely slow if we wanted to implement this properly for all teachers.
     $groupmode    = groups_get_course_groupmode($course);   // Groups are being used
-    $currentgroup = groups_get_course_group($course, true);
+    $currentgroup = $gpr->groupid;
 
     if (!$currentgroup) {      // To make some other functions work better later
         $currentgroup = NULL;

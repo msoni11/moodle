@@ -208,15 +208,16 @@ class phpunit_util extends testing_util {
         // reset all static caches
         \core\event\manager::phpunit_reset();
         accesslib_clear_all_caches(true);
+        accesslib_reset_role_cache();
         get_string_manager()->reset_caches(true);
         reset_text_filters_cache(true);
-        events_get_handlers('reset');
         core_text::reset_caches();
         get_message_processors(false, true, true);
         filter_manager::reset_caches();
         core_filetypes::reset_caches();
         \core_search\manager::clear_static();
         core_user::reset_caches();
+        \core\output\icon_system::reset_caches();
         if (class_exists('core_media_manager', false)) {
             core_media_manager::reset_caches();
         }
@@ -228,6 +229,11 @@ class phpunit_util extends testing_util {
 
         // Reset internal users.
         core_user::reset_internal_users();
+
+        // Clear static caches in calendar container.
+        if (class_exists('\core_calendar\local\event\container', false)) {
+            core_calendar\local\event\container::reset_caches();
+        }
 
         //TODO MDL-25290: add more resets here and probably refactor them to new core function
 
@@ -271,6 +277,9 @@ class phpunit_util extends testing_util {
 
         // Reset the log manager cache.
         get_log_manager(true);
+
+        // Reset user agent.
+        core_useragent::instance(true, null);
 
         // verify db writes just in case something goes wrong in reset
         if (self::$lastdbwrites != $DB->perf_get_writes()) {
@@ -612,7 +621,7 @@ class phpunit_util extends testing_util {
 
         foreach ($backtrace as $bt) {
             if (isset($bt['object']) and is_object($bt['object'])
-                    && $bt['object'] instanceof PHPUnit_Framework_TestCase) {
+                    && $bt['object'] instanceof PHPUnit\Framework\TestCase) {
                 $debug = new stdClass();
                 $debug->message = $message;
                 $debug->level   = $level;
@@ -705,7 +714,7 @@ class phpunit_util extends testing_util {
     /**
      * To be called from messagelib.php only!
      *
-     * @param stdClass $message record from message_read table
+     * @param stdClass $message record from messages table
      * @return bool true means send message, false means message "sent" to sink.
      */
     public static function message_sent($message) {
@@ -756,7 +765,7 @@ class phpunit_util extends testing_util {
     /**
      * To be called from messagelib.php only!
      *
-     * @param stdClass $message record from message_read table
+     * @param stdClass $message record from messages table
      * @return bool true means send message, false means message "sent" to sink.
      */
     public static function phpmailer_sent($message) {

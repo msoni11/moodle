@@ -39,7 +39,6 @@ $previewrows = optional_param('previewrows', 10, PARAM_INT);
 core_php_time_limit::raise(60*60); // 1 hour should be enough
 raise_memory_limit(MEMORY_HUGE);
 
-require_login();
 admin_externalpage_setup('tooluploaduser');
 require_capability('moodle/site:uploadusers', context_system::instance());
 
@@ -358,7 +357,7 @@ if ($formdata = $mform2->is_cancelled()) {
 
         // add default values for remaining fields
         $formdefaults = array();
-        if ($updatetype != UU_UPDATE_FILEOVERRIDE && $updatetype != UU_UPDATE_NOCHANGES) {
+        if (!$existinguser || ($updatetype != UU_UPDATE_FILEOVERRIDE && $updatetype != UU_UPDATE_NOCHANGES)) {
             foreach ($STD_FIELDS as $field) {
                 if (isset($user->$field)) {
                     continue;

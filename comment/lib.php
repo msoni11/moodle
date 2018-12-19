@@ -493,7 +493,8 @@ class comment {
                 $textareaattrs = array(
                     'name' => 'content',
                     'rows' => 2,
-                    'id' => 'dlg-content-'.$this->cid
+                    'id' => 'dlg-content-'.$this->cid,
+                    'aria-label' => get_string('addcomment')
                 );
                 if (!$this->fullwidth) {
                     $textareaattrs['cols'] = '20';
@@ -577,7 +578,7 @@ class comment {
             $c->content     = $u->ccontent;
             $c->format      = $u->cformat;
             $c->timecreated = $u->ctimecreated;
-            $c->strftimeformat = get_string('strftimerecent', 'langconfig');
+            $c->strftimeformat = get_string('strftimerecentfull', 'langconfig');
             $url = new moodle_url('/user/view.php', array('id'=>$u->id, 'course'=>$this->courseid));
             $c->profileurl = $url->out(false); // URL should not be escaped just yet.
             $c->fullname = fullname($u);
@@ -712,7 +713,7 @@ class comment {
         $cmt_id = $DB->insert_record('comments', $newcmt);
         if (!empty($cmt_id)) {
             $newcmt->id = $cmt_id;
-            $newcmt->strftimeformat = get_string('strftimerecent', 'langconfig');
+            $newcmt->strftimeformat = get_string('strftimerecentfull', 'langconfig');
             $newcmt->fullname = fullname($USER);
             $url = new moodle_url('/user/view.php', array('id' => $USER->id, 'course' => $this->courseid));
             $newcmt->profileurl = $url->out();

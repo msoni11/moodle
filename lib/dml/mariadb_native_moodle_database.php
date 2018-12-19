@@ -88,6 +88,18 @@ class mariadb_native_moodle_database extends mysqli_native_moodle_database {
         return array('description'=>$this->mysqli->server_info, 'version'=>$version);
     }
 
+    protected function has_breaking_change_quoted_defaults() {
+        $version = $this->get_server_info()['version'];
+        // Breaking change since 10.2.7: MDEV-13132.
+        return version_compare($version, '10.2.7', '>=');
+    }
+
+    public function has_breaking_change_sqlmode() {
+        $version = $this->get_server_info()['version'];
+        // Breaking change since 10.2.4: https://mariadb.com/kb/en/the-mariadb-library/sql-mode/#setting-sql_mode.
+        return version_compare($version, '10.2.4', '>=');
+    }
+
     /**
      * It is time to require transactions everywhere.
      *
@@ -100,5 +112,19 @@ class mariadb_native_moodle_database extends mysqli_native_moodle_database {
             return parent::transactions_supported();
         }
         return true;
+    }
+
+    /**
+     * Does this mariadb instance support fulltext indexes?
+     *
+     * @return bool
+     */
+    public function is_fulltext_search_supported() {
+        $info = $this->get_server_info();
+
+        if (version_compare($info['version'], '10.0.5', '>=')) {
+            return true;
+        }
+        return false;
     }
 }

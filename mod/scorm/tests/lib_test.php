@@ -67,6 +67,48 @@ class mod_scorm_lib_testcase extends externallib_advanced_testcase {
         $this->getDataGenerator()->enrol_user($this->teacher->id, $this->course->id, $this->teacherrole->id, 'manual');
     }
 
+    /** Test scorm_check_mode
+     *
+     * @return void
+     */
+    public function test_scorm_check_mode() {
+        global $CFG;
+
+        $newattempt = 'on';
+        $attempt = 1;
+        $mode = 'normal';
+        scorm_check_mode($this->scorm, $newattempt, $attempt, $this->student->id, $mode);
+        $this->assertEquals('off', $newattempt);
+
+        $scoes = scorm_get_scoes($this->scorm->id);
+        $sco = array_pop($scoes);
+        scorm_insert_track($this->student->id, $this->scorm->id, $sco->id, 1, 'cmi.core.lesson_status', 'completed');
+        $newattempt = 'on';
+        scorm_check_mode($this->scorm, $newattempt, $attempt, $this->student->id, $mode);
+        $this->assertEquals('on', $newattempt);
+
+        // Now do the same with a SCORM 2004 package.
+        $record = new stdClass();
+        $record->course = $this->course->id;
+        $record->packagefilepath = $CFG->dirroot.'/mod/scorm/tests/packages/RuntimeBasicCalls_SCORM20043rdEdition.zip';
+        $scorm13 = $this->getDataGenerator()->create_module('scorm', $record);
+        $newattempt = 'on';
+        $attempt = 1;
+        $mode = 'normal';
+        scorm_check_mode($scorm13, $newattempt, $attempt, $this->student->id, $mode);
+        $this->assertEquals('off', $newattempt);
+
+        $scoes = scorm_get_scoes($scorm13->id);
+        $sco = array_pop($scoes);
+        scorm_insert_track($this->student->id, $scorm13->id, $sco->id, 1, 'cmi.completion_status', 'completed');
+
+        $newattempt = 'on';
+        $attempt = 1;
+        $mode = 'normal';
+        scorm_check_mode($scorm13, $newattempt, $attempt, $this->student->id, $mode);
+        $this->assertEquals('on', $newattempt);
+    }
+
     /**
      * Test scorm_view
      * @return void
@@ -318,9 +360,10 @@ class mod_scorm_lib_testcase extends externallib_advanced_testcase {
      * @param int $courseid
      * @param int $instanceid The data id.
      * @param string $eventtype The event type. eg. DATA_EVENT_TYPE_OPEN.
+     * @param int|null $timestart The start timestamp for the event
      * @return bool|calendar_event
      */
-    private function create_action_event($courseid, $instanceid, $eventtype) {
+    private function create_action_event($courseid, $instanceid, $eventtype, $timestart = null) {
         $event = new stdClass();
         $event->name = 'Calendar event';
         $event->modulename = 'scorm';
@@ -328,7 +371,13 @@ class mod_scorm_lib_testcase extends externallib_advanced_testcase {
         $event->instance = $instanceid;
         $event->type = CALENDAR_EVENT_TYPE_ACTION;
         $event->eventtype = $eventtype;
-        $event->timestart = time();
+        $event->eventtype = $eventtype;
+
+        if ($timestart) {
+            $event->timestart = $timestart;
+        } else {
+            $event->timestart = time();
+        }
 
         return calendar_event::create($event);
     }
@@ -390,5 +439,324 @@ class mod_scorm_lib_testcase extends externallib_advanced_testcase {
         $this->assertEquals(mod_scorm_get_completion_active_rule_descriptions($cm2), []);
         $this->assertEquals(mod_scorm_get_completion_active_rule_descriptions($moddefaults), $activeruledescriptions);
         $this->assertEquals(mod_scorm_get_completion_active_rule_descriptions(new stdClass()), []);
+    }
+
+    /**
+     * An unkown event type should not change the scorm instance.
+     */
+    public function test_mod_scorm_core_calendar_event_timestart_updated_unknown_event() {
+        global $CFG, $DB;
+        require_once($CFG->dirroot . "/calendar/lib.php");
+
+        $this->resetAfterTest(true);
+        $this->setAdminUser();
+        $generator = $this->getDataGenerator();
+        $course = $generator->create_course();
+        $scormgenerator = $generator->get_plugin_generator('mod_scorm');
+        $timeopen = time();
+        $timeclose = $timeopen + DAYSECS;
+        $scorm = $scormgenerator->create_instance(['course' => $course->id]);
+        $scorm->timeopen = $timeopen;
+        $scorm->timeclose = $timeclose;
+        $DB->update_record('scorm', $scorm);
+
+        // Create a valid event.
+        $event = new \calendar_event([
+            'name' => 'Test event',
+            'description' => '',
+            'format' => 1,
+            'courseid' => $course->id,
+            'groupid' => 0,
+            'userid' => 2,
+            'modulename' => 'scorm',
+            'instance' => $scorm->id,
+            'eventtype' => SCORM_EVENT_TYPE_OPEN . "SOMETHING ELSE",
+            'timestart' => 1,
+            'timeduration' => 86400,
+            'visible' => 1
+        ]);
+
+        mod_scorm_core_calendar_event_timestart_updated($event, $scorm);
+
+        $scorm = $DB->get_record('scorm', ['id' => $scorm->id]);
+        $this->assertEquals($timeopen, $scorm->timeopen);
+        $this->assertEquals($timeclose, $scorm->timeclose);
+    }
+
+    /**
+     * A SCORM_EVENT_TYPE_OPEN event should update the timeopen property of
+     * the scorm activity.
+     */
+    public function test_mod_scorm_core_calendar_event_timestart_updated_open_event() {
+        global $CFG, $DB;
+        require_once($CFG->dirroot . "/calendar/lib.php");
+
+        $this->resetAfterTest(true);
+        $this->setAdminUser();
+        $generator = $this->getDataGenerator();
+        $course = $generator->create_course();
+        $scormgenerator = $generator->get_plugin_generator('mod_scorm');
+        $timeopen = time();
+        $timeclose = $timeopen + DAYSECS;
+        $timemodified = 1;
+        $newtimeopen = $timeopen - DAYSECS;
+        $scorm = $scormgenerator->create_instance(['course' => $course->id]);
+        $scorm->timeopen = $timeopen;
+        $scorm->timeclose = $timeclose;
+        $scorm->timemodified = $timemodified;
+        $DB->update_record('scorm', $scorm);
+
+        // Create a valid event.
+        $event = new \calendar_event([
+            'name' => 'Test event',
+            'description' => '',
+            'format' => 1,
+            'courseid' => $course->id,
+            'groupid' => 0,
+            'userid' => 2,
+            'modulename' => 'scorm',
+            'instance' => $scorm->id,
+            'eventtype' => SCORM_EVENT_TYPE_OPEN,
+            'timestart' => $newtimeopen,
+            'timeduration' => 86400,
+            'visible' => 1
+        ]);
+
+        // Trigger and capture the event when adding a contact.
+        $sink = $this->redirectEvents();
+
+        mod_scorm_core_calendar_event_timestart_updated($event, $scorm);
+
+        $triggeredevents = $sink->get_events();
+        $moduleupdatedevents = array_filter($triggeredevents, function($e) {
+            return is_a($e, 'core\event\course_module_updated');
+        });
+
+        $scorm = $DB->get_record('scorm', ['id' => $scorm->id]);
+        // Ensure the timeopen property matches the event timestart.
+        $this->assertEquals($newtimeopen, $scorm->timeopen);
+        // Ensure the timeclose isn't changed.
+        $this->assertEquals($timeclose, $scorm->timeclose);
+        // Ensure the timemodified property has been changed.
+        $this->assertNotEquals($timemodified, $scorm->timemodified);
+        // Confirm that a module updated event is fired when the module
+        // is changed.
+        $this->assertNotEmpty($moduleupdatedevents);
+    }
+
+    /**
+     * A SCORM_EVENT_TYPE_CLOSE event should update the timeclose property of
+     * the scorm activity.
+     */
+    public function test_mod_scorm_core_calendar_event_timestart_updated_close_event() {
+        global $CFG, $DB;
+        require_once($CFG->dirroot . "/calendar/lib.php");
+
+        $this->resetAfterTest(true);
+        $this->setAdminUser();
+        $generator = $this->getDataGenerator();
+        $course = $generator->create_course();
+        $scormgenerator = $generator->get_plugin_generator('mod_scorm');
+        $timeopen = time();
+        $timeclose = $timeopen + DAYSECS;
+        $timemodified = 1;
+        $newtimeclose = $timeclose + DAYSECS;
+        $scorm = $scormgenerator->create_instance(['course' => $course->id]);
+        $scorm->timeopen = $timeopen;
+        $scorm->timeclose = $timeclose;
+        $scorm->timemodified = $timemodified;
+        $DB->update_record('scorm', $scorm);
+
+        // Create a valid event.
+        $event = new \calendar_event([
+            'name' => 'Test event',
+            'description' => '',
+            'format' => 1,
+            'courseid' => $course->id,
+            'groupid' => 0,
+            'userid' => 2,
+            'modulename' => 'scorm',
+            'instance' => $scorm->id,
+            'eventtype' => SCORM_EVENT_TYPE_CLOSE,
+            'timestart' => $newtimeclose,
+            'timeduration' => 86400,
+            'visible' => 1
+        ]);
+
+        // Trigger and capture the event when adding a contact.
+        $sink = $this->redirectEvents();
+
+        mod_scorm_core_calendar_event_timestart_updated($event, $scorm);
+
+        $triggeredevents = $sink->get_events();
+        $moduleupdatedevents = array_filter($triggeredevents, function($e) {
+            return is_a($e, 'core\event\course_module_updated');
+        });
+
+        $scorm = $DB->get_record('scorm', ['id' => $scorm->id]);
+        // Ensure the timeclose property matches the event timestart.
+        $this->assertEquals($newtimeclose, $scorm->timeclose);
+        // Ensure the timeopen isn't changed.
+        $this->assertEquals($timeopen, $scorm->timeopen);
+        // Ensure the timemodified property has been changed.
+        $this->assertNotEquals($timemodified, $scorm->timemodified);
+        // Confirm that a module updated event is fired when the module
+        // is changed.
+        $this->assertNotEmpty($moduleupdatedevents);
+    }
+
+    /**
+     * An unkown event type should not have any limits
+     */
+    public function test_mod_scorm_core_calendar_get_valid_event_timestart_range_unknown_event() {
+        global $CFG, $DB;
+        require_once($CFG->dirroot . "/calendar/lib.php");
+
+        $this->resetAfterTest(true);
+        $this->setAdminUser();
+        $generator = $this->getDataGenerator();
+        $course = $generator->create_course();
+        $timeopen = time();
+        $timeclose = $timeopen + DAYSECS;
+        $scorm = new \stdClass();
+        $scorm->timeopen = $timeopen;
+        $scorm->timeclose = $timeclose;
+
+        // Create a valid event.
+        $event = new \calendar_event([
+            'name' => 'Test event',
+            'description' => '',
+            'format' => 1,
+            'courseid' => $course->id,
+            'groupid' => 0,
+            'userid' => 2,
+            'modulename' => 'scorm',
+            'instance' => 1,
+            'eventtype' => SCORM_EVENT_TYPE_OPEN . "SOMETHING ELSE",
+            'timestart' => 1,
+            'timeduration' => 86400,
+            'visible' => 1
+        ]);
+
+        list ($min, $max) = mod_scorm_core_calendar_get_valid_event_timestart_range($event, $scorm);
+        $this->assertNull($min);
+        $this->assertNull($max);
+    }
+
+    /**
+     * The open event should be limited by the scorm's timeclose property, if it's set.
+     */
+    public function test_mod_scorm_core_calendar_get_valid_event_timestart_range_open_event() {
+        global $CFG, $DB;
+        require_once($CFG->dirroot . "/calendar/lib.php");
+
+        $this->resetAfterTest(true);
+        $this->setAdminUser();
+        $generator = $this->getDataGenerator();
+        $course = $generator->create_course();
+        $timeopen = time();
+        $timeclose = $timeopen + DAYSECS;
+        $scorm = new \stdClass();
+        $scorm->timeopen = $timeopen;
+        $scorm->timeclose = $timeclose;
+
+        // Create a valid event.
+        $event = new \calendar_event([
+            'name' => 'Test event',
+            'description' => '',
+            'format' => 1,
+            'courseid' => $course->id,
+            'groupid' => 0,
+            'userid' => 2,
+            'modulename' => 'scorm',
+            'instance' => 1,
+            'eventtype' => SCORM_EVENT_TYPE_OPEN,
+            'timestart' => 1,
+            'timeduration' => 86400,
+            'visible' => 1
+        ]);
+
+        // The max limit should be bounded by the timeclose value.
+        list ($min, $max) = mod_scorm_core_calendar_get_valid_event_timestart_range($event, $scorm);
+
+        $this->assertNull($min);
+        $this->assertEquals($timeclose, $max[0]);
+
+        // No timeclose value should result in no upper limit.
+        $scorm->timeclose = 0;
+        list ($min, $max) = mod_scorm_core_calendar_get_valid_event_timestart_range($event, $scorm);
+
+        $this->assertNull($min);
+        $this->assertNull($max);
+    }
+
+    /**
+     * The close event should be limited by the scorm's timeopen property, if it's set.
+     */
+    public function test_mod_scorm_core_calendar_get_valid_event_timestart_range_close_event() {
+        global $CFG, $DB;
+        require_once($CFG->dirroot . "/calendar/lib.php");
+
+        $this->resetAfterTest(true);
+        $this->setAdminUser();
+        $generator = $this->getDataGenerator();
+        $course = $generator->create_course();
+        $timeopen = time();
+        $timeclose = $timeopen + DAYSECS;
+        $scorm = new \stdClass();
+        $scorm->timeopen = $timeopen;
+        $scorm->timeclose = $timeclose;
+
+        // Create a valid event.
+        $event = new \calendar_event([
+            'name' => 'Test event',
+            'description' => '',
+            'format' => 1,
+            'courseid' => $course->id,
+            'groupid' => 0,
+            'userid' => 2,
+            'modulename' => 'scorm',
+            'instance' => 1,
+            'eventtype' => SCORM_EVENT_TYPE_CLOSE,
+            'timestart' => 1,
+            'timeduration' => 86400,
+            'visible' => 1
+        ]);
+
+        // The max limit should be bounded by the timeclose value.
+        list ($min, $max) = mod_scorm_core_calendar_get_valid_event_timestart_range($event, $scorm);
+
+        $this->assertEquals($timeopen, $min[0]);
+        $this->assertNull($max);
+
+        // No timeclose value should result in no upper limit.
+        $scorm->timeopen = 0;
+        list ($min, $max) = mod_scorm_core_calendar_get_valid_event_timestart_range($event, $scorm);
+
+        $this->assertNull($min);
+        $this->assertNull($max);
+    }
+
+    /**
+     * A user who does not have capabilities to add events to the calendar should be able to create a SCORM.
+     */
+    public function test_creation_with_no_calendar_capabilities() {
+        $this->resetAfterTest();
+        $course = self::getDataGenerator()->create_course();
+        $context = context_course::instance($course->id);
+        $user = self::getDataGenerator()->create_and_enrol($course, 'editingteacher');
+        $roleid = self::getDataGenerator()->create_role();
+        self::getDataGenerator()->role_assign($roleid, $user->id, $context->id);
+        assign_capability('moodle/calendar:manageentries', CAP_PROHIBIT, $roleid, $context, true);
+        $generator = self::getDataGenerator()->get_plugin_generator('mod_scorm');
+        // Create an instance as a user without the calendar capabilities.
+        $this->setUser($user);
+        $time = time();
+        $params = array(
+            'course' => $course->id,
+            'timeopen' => $time + 200,
+            'timeclose' => $time + 2000,
+        );
+        $generator->create_instance($params);
     }
 }

@@ -430,6 +430,21 @@ function upgrade_stale_php_files_present() {
     global $CFG;
 
     $someexamplesofremovedfiles = array(
+        // Removed in 3.6.
+        '/lib/classes/session/memcache.php',
+        '/lib/eventslib.php',
+        '/lib/form/submitlink.php',
+        '/lib/medialib.php',
+        '/lib/password_compat/lib/password.php',
+        // Removed in 3.5.
+        '/lib/dml/mssql_native_moodle_database.php',
+        '/lib/dml/mssql_native_moodle_recordset.php',
+        '/lib/dml/mssql_native_moodle_temptables.php',
+        // Removed in 3.4.
+        '/auth/README.txt',
+        '/calendar/set.php',
+        '/enrol/users.php',
+        '/enrol/yui/rolemanager/assets/skins/sam/rolemanager.css',
         // Removed in 3.3.
         '/badges/backpackconnect.php',
         '/calendar/yui/src/info/assets/skins/sam/moodle-calendar-info.css',
@@ -562,7 +577,6 @@ function upgrade_plugins($type, $startcallback, $endcallback, $verbose) {
                     update_capabilities($component);
                     log_update_descriptions($component);
                     external_update_descriptions($component);
-                    events_update_definition($component);
                     \core\task\manager::reset_scheduled_tasks_for_component($component);
                     message_update_providers($component);
                     \core\message\inbound\manager::update_handlers_for_component($component);
@@ -601,7 +615,6 @@ function upgrade_plugins($type, $startcallback, $endcallback, $verbose) {
             update_capabilities($component);
             log_update_descriptions($component);
             external_update_descriptions($component);
-            events_update_definition($component);
             \core\task\manager::reset_scheduled_tasks_for_component($component);
             message_update_providers($component);
             \core\message\inbound\manager::update_handlers_for_component($component);
@@ -635,7 +648,6 @@ function upgrade_plugins($type, $startcallback, $endcallback, $verbose) {
             update_capabilities($component);
             log_update_descriptions($component);
             external_update_descriptions($component);
-            events_update_definition($component);
             \core\task\manager::reset_scheduled_tasks_for_component($component);
             message_update_providers($component);
             \core\message\inbound\manager::update_handlers_for_component($component);
@@ -743,7 +755,6 @@ function upgrade_plugins_modules($startcallback, $endcallback, $verbose) {
                     update_capabilities($component);
                     log_update_descriptions($component);
                     external_update_descriptions($component);
-                    events_update_definition($component);
                     \core\task\manager::reset_scheduled_tasks_for_component($component);
                     message_update_providers($component);
                     \core\message\inbound\manager::update_handlers_for_component($component);
@@ -778,7 +789,6 @@ function upgrade_plugins_modules($startcallback, $endcallback, $verbose) {
             update_capabilities($component);
             log_update_descriptions($component);
             external_update_descriptions($component);
-            events_update_definition($component);
             \core\task\manager::reset_scheduled_tasks_for_component($component);
             message_update_providers($component);
             \core\message\inbound\manager::update_handlers_for_component($component);
@@ -815,7 +825,6 @@ function upgrade_plugins_modules($startcallback, $endcallback, $verbose) {
             update_capabilities($component);
             log_update_descriptions($component);
             external_update_descriptions($component);
-            events_update_definition($component);
             \core\task\manager::reset_scheduled_tasks_for_component($component);
             message_update_providers($component);
             \core\message\inbound\manager::update_handlers_for_component($component);
@@ -937,7 +946,6 @@ function upgrade_plugins_blocks($startcallback, $endcallback, $verbose) {
                     update_capabilities($component);
                     log_update_descriptions($component);
                     external_update_descriptions($component);
-                    events_update_definition($component);
                     \core\task\manager::reset_scheduled_tasks_for_component($component);
                     message_update_providers($component);
                     \core\message\inbound\manager::update_handlers_for_component($component);
@@ -978,7 +986,6 @@ function upgrade_plugins_blocks($startcallback, $endcallback, $verbose) {
             update_capabilities($component);
             log_update_descriptions($component);
             external_update_descriptions($component);
-            events_update_definition($component);
             \core\task\manager::reset_scheduled_tasks_for_component($component);
             message_update_providers($component);
             \core\message\inbound\manager::update_handlers_for_component($component);
@@ -1014,7 +1021,6 @@ function upgrade_plugins_blocks($startcallback, $endcallback, $verbose) {
             update_capabilities($component);
             log_update_descriptions($component);
             external_update_descriptions($component);
-            events_update_definition($component);
             \core\task\manager::reset_scheduled_tasks_for_component($component);
             message_update_providers($component);
             \core\message\inbound\manager::update_handlers_for_component($component);
@@ -1665,6 +1671,31 @@ function upgrade_language_pack($lang = null) {
 }
 
 /**
+ * Build the current theme so that the user doesn't have to wait for it
+ * to build on the first page load after the install / upgrade.
+ */
+function upgrade_themes() {
+    global $CFG;
+
+    require_once("{$CFG->libdir}/outputlib.php");
+
+    // Build the current theme so that the user can immediately
+    // browse the site without having to wait for the theme to build.
+    $themeconfig = theme_config::load($CFG->theme);
+    $direction = right_to_left() ? 'rtl' : 'ltr';
+    theme_build_css_for_themes([$themeconfig], [$direction]);
+
+    // Only queue the task if there isn't already one queued.
+    if (empty(\core\task\manager::get_adhoc_tasks('\\core\\task\\build_installed_themes_task'))) {
+        // Queue a task to build all of the site themes at some point
+        // later. These can happen offline because it doesn't block the
+        // user unless they quickly change theme.
+        $adhoctask = new \core\task\build_installed_themes_task();
+        \core\task\manager::queue_adhoc_task($adhoctask);
+    }
+}
+
+/**
  * Install core moodle tables and initialize
  * @param float $version target version
  * @param bool $verbose
@@ -1682,6 +1713,9 @@ function install_core($version, $verbose) {
 
     remove_dir($CFG->tempdir.'', true);
     make_temp_directory('', true);
+
+    remove_dir($CFG->backuptempdir.'', true);
+    make_backup_temp_directory('', true);
 
     remove_dir($CFG->dataroot.'/muc', true);
     make_writable_directory($CFG->dataroot.'/muc', true);
@@ -1703,7 +1737,6 @@ function install_core($version, $verbose) {
         // Continue with the installation
         log_update_descriptions('moodle');
         external_update_descriptions('moodle');
-        events_update_definition('moodle');
         \core\task\manager::reset_scheduled_tasks_for_component('moodle');
         message_update_providers('moodle');
         \core\message\inbound\manager::update_handlers_for_component('moodle');
@@ -1771,7 +1804,6 @@ function upgrade_core($version, $verbose) {
         update_capabilities('moodle');
         log_update_descriptions('moodle');
         external_update_descriptions('moodle');
-        events_update_definition('moodle');
         \core\task\manager::reset_scheduled_tasks_for_component('moodle');
         message_update_providers('moodle');
         \core\message\inbound\manager::update_handlers_for_component('moodle');
@@ -2117,39 +2149,6 @@ function admin_mnet_method_get_help(ReflectionFunctionAbstract $function) {
 }
 
 /**
- * Detect draft file areas with missing root directory records and add them.
- */
-function upgrade_fix_missing_root_folders_draft() {
-    global $DB;
-
-    $transaction = $DB->start_delegated_transaction();
-
-    $sql = "SELECT contextid, itemid, MAX(timecreated) AS timecreated, MAX(timemodified) AS timemodified
-              FROM {files}
-             WHERE (component = 'user' AND filearea = 'draft')
-          GROUP BY contextid, itemid
-            HAVING MAX(CASE WHEN filename = '.' AND filepath = '/' THEN 1 ELSE 0 END) = 0";
-
-    $rs = $DB->get_recordset_sql($sql);
-    $defaults = array('component' => 'user',
-        'filearea' => 'draft',
-        'filepath' => '/',
-        'filename' => '.',
-        'userid' => 0, // Don't rely on any particular user for these system records.
-        'filesize' => 0,
-        // Note: This does not use the file_storage API's hash calculator
-        // because access to core APIs is not allowed during upgrade.
-        'contenthash' => sha1(''),
-    );
-    foreach ($rs as $r) {
-        $r->pathnamehash = sha1("/$r->contextid/user/draft/$r->itemid/.");
-        $DB->insert_record('files', (array)$r + $defaults);
-    }
-    $rs->close();
-    $transaction->allow_commit();
-}
-
-/**
  * This function verifies that the database is not using an unsupported storage engine.
  *
  * @param environment_results $result object to update, if relevant
@@ -2343,55 +2342,20 @@ function check_is_https(environment_results $result) {
 }
 
 /**
- * Upgrade the minmaxgrade setting.
+ * Check if the site is using 64 bits PHP.
  *
- * This step should only be run for sites running 2.8 or later. Sites using 2.7 will be fine
- * using the new default system setting $CFG->grade_minmaxtouse.
- *
- * @return void
+ * @param  environment_results $result
+ * @return environment_results|null updated results object, or null if the site is using 64 bits PHP.
  */
-function upgrade_minmaxgrade() {
-    global $CFG, $DB;
+function check_sixtyfour_bits(environment_results $result) {
 
-    // 2 is a copy of GRADE_MIN_MAX_FROM_GRADE_GRADE.
-    $settingvalue = 2;
-
-    // Set the course setting when:
-    // - The system setting does not exist yet.
-    // - The system seeting is not set to what we'd set the course setting.
-    $setcoursesetting = !isset($CFG->grade_minmaxtouse) || $CFG->grade_minmaxtouse != $settingvalue;
-
-    // Identify the courses that have inconsistencies grade_item vs grade_grade.
-    $sql = "SELECT DISTINCT(gi.courseid)
-              FROM {grade_grades} gg
-              JOIN {grade_items} gi
-                ON gg.itemid = gi.id
-             WHERE gi.itemtype NOT IN (?, ?)
-               AND (gg.rawgrademax != gi.grademax OR gg.rawgrademin != gi.grademin)";
-
-    $rs = $DB->get_recordset_sql($sql, array('course', 'category'));
-    foreach ($rs as $record) {
-        // Flag the course to show a notice in the gradebook.
-        set_config('show_min_max_grades_changed_' . $record->courseid, 1);
-
-        // Set the appropriate course setting so that grades displayed are not changed.
-        $configname = 'minmaxtouse';
-        if ($setcoursesetting &&
-                !$DB->record_exists('grade_settings', array('courseid' => $record->courseid, 'name' => $configname))) {
-            // Do not set the setting when the course already defines it.
-            $data = new stdClass();
-            $data->courseid = $record->courseid;
-            $data->name     = $configname;
-            $data->value    = $settingvalue;
-            $DB->insert_record('grade_settings', $data);
-        }
-
-        // Mark the grades to be regraded.
-        $DB->set_field('grade_items', 'needsupdate', 1, array('courseid' => $record->courseid));
+    if (PHP_INT_SIZE === 4) {
+         $result->setInfo('php not 64 bits');
+         $result->setStatus(false);
+         return $result;
     }
-    $rs->close();
+    return null;
 }
-
 
 /**
  * Assert the upgrade key is provided, if it is defined.
@@ -2678,10 +2642,70 @@ function upgrade_fix_config_auth_plugin_defaults($plugin) {
         include($settingspath);
 
         if ($settings) {
-            // Consistently with what admin/cli/upgrade.php does, apply the default settings twice.
-            // I assume this is done for theoretical cases when a default value depends on an other.
-            admin_apply_default_settings($settings, false);
             admin_apply_default_settings($settings, false);
         }
     }
+}
+
+/**
+ * Search for a given theme in any of the parent themes of a given theme.
+ *
+ * @param string $needle The name of the theme you want to search for
+ * @param string $themename The name of the theme you want to search for
+ * @param string $checkedthemeforparents The name of all the themes already checked
+ * @return bool True if found, false if not.
+ */
+function upgrade_theme_is_from_family($needle, $themename, $checkedthemeforparents = []) {
+    global $CFG;
+
+    // Once we've started checking a theme, don't start checking it again. Prevent recursion.
+    if (!empty($checkedthemeforparents[$themename])) {
+        return false;
+    }
+    $checkedthemeforparents[$themename] = true;
+
+    if ($themename == $needle) {
+        return true;
+    }
+
+    if ($themedir = upgrade_find_theme_location($themename)) {
+        $THEME = new stdClass();
+        require($themedir . '/config.php');
+        $theme = $THEME;
+    } else {
+        return false;
+    }
+
+    if (empty($theme->parents)) {
+        return false;
+    }
+
+    // Recursively search through each parent theme.
+    foreach ($theme->parents as $parent) {
+        if (upgrade_theme_is_from_family($needle, $parent, $checkedthemeforparents)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/**
+ * Finds the theme location and verifies the theme has all needed files.
+ *
+ * @param string $themename The name of the theme you want to search for
+ * @return string full dir path or null if not found
+ * @see \theme_config::find_theme_location()
+ */
+function upgrade_find_theme_location($themename) {
+    global $CFG;
+
+    if (file_exists("$CFG->dirroot/theme/$themename/config.php")) {
+        $dir = "$CFG->dirroot/theme/$themename";
+    } else if (!empty($CFG->themedir) and file_exists("$CFG->themedir/$themename/config.php")) {
+        $dir = "$CFG->themedir/$themename";
+    } else {
+        return null;
+    }
+
+    return $dir;
 }

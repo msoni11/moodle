@@ -20,8 +20,7 @@ Feature: In a lesson activity, a teacher can duplicate a lesson page
     And I follow "Manage private files"
     And I upload "mod/lesson/tests/fixtures/moodle_logo.jpg" file to "Files" filemanager
     And I click on "Save changes" "button"
-    When I am on homepage
-    And I am on "Course 1" course homepage with editing mode on
+    When I am on "Course 1" course homepage with editing mode on
     And I add a "Lesson" to section "1" and I fill the form with:
       | Name | Test lesson name |
       | Description | Test lesson description |
@@ -39,7 +38,7 @@ Feature: In a lesson activity, a teacher can duplicate a lesson page
       | id_jumpto_1 | Previous page |
     # Atto needs focus to add image, select empty p tag to do so.
     And I select the text in the "id_contents_editor" Atto editor
-    And I click on "Image" "button" in the "[data-fieldtype=editor]" "css_element"
+    And I click on "Insert or edit image" "button" in the "[data-fieldtype=editor]" "css_element"
     And I click on "Browse repositories..." "button"
     And I click on "Private files" "link" in the ".fp-repo-area" "css_element"
     And I click on "moodle_logo.jpg" "link"
@@ -75,7 +74,7 @@ Feature: In a lesson activity, a teacher can duplicate a lesson page
       | id_score_1 | 0 |
     # Atto needs focus to add image, select empty p tag to do so.
     And I select the text in the "id_answer_editor_0" Atto editor
-    And I click on "Image" "button" in the "//*[@id='id_answer_editor_0']/ancestor::*[@data-fieldtype='editor']" "xpath_element"
+    And I click on "Insert or edit image" "button" in the "//*[@id='id_answer_editor_0']/ancestor::*[@data-fieldtype='editor']" "xpath_element"
     And I click on "Browse repositories..." "button"
     And I click on "Private files" "link" in the ".fp-repo-area" "css_element"
     And I click on "moodle_logo.jpg" "link"
@@ -112,7 +111,7 @@ Feature: In a lesson activity, a teacher can duplicate a lesson page
       | id_score_1 | 0 |
     # Atto needs focus to add image, select empty p tag to do so.
     And I select the text in the "id_response_editor_0" Atto editor
-    And I click on "Image" "button" in the "//*[@id='id_response_editor_0']/ancestor::*[@data-fieldtype='editor']" "xpath_element"
+    And I click on "Insert or edit image" "button" in the "//*[@id='id_response_editor_0']/ancestor::*[@data-fieldtype='editor']" "xpath_element"
     And I click on "Browse repositories..." "button"
     And I click on "Private files" "link" in the ".fp-repo-area" "css_element"
     And I click on "moodle_logo.jpg" "link"

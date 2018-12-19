@@ -69,6 +69,7 @@ echo $OUTPUT->doctype() ?>
                     <?php
                     echo $OUTPUT->course_content_header();
                     echo $OUTPUT->main_content();
+                    echo $OUTPUT->activity_navigation();
                     echo $OUTPUT->course_content_footer();
                     ?>
                 </section>
@@ -77,6 +78,7 @@ echo $OUTPUT->doctype() ?>
         </div>
         <?php echo $OUTPUT->blocks('side-post', $sidepost); ?>
     </div>
+    <?php echo $OUTPUT->standard_after_main_region_html() ?>
 
     <footer id="page-footer">
         <div id="course-footer"><?php echo $OUTPUT->course_footer(); ?></div>

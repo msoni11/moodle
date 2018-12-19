@@ -234,13 +234,13 @@ abstract class backup_cron_automated_helper {
             // Summary.
             $message .= get_string('summary') . "\n";
             $message .= "==================================================\n";
-            $message .= '  ' . get_string('courses') . '; ' . array_sum($count) . "\n";
-            $message .= '  ' . get_string('ok') . '; ' . $count[self::BACKUP_STATUS_OK] . "\n";
-            $message .= '  ' . get_string('skipped') . '; ' . $count[self::BACKUP_STATUS_SKIPPED] . "\n";
-            $message .= '  ' . get_string('error') . '; ' . $count[self::BACKUP_STATUS_ERROR] . "\n";
-            $message .= '  ' . get_string('unfinished') . '; ' . $count[self::BACKUP_STATUS_UNFINISHED] . "\n";
-            $message .= '  ' . get_string('warning') . '; ' . $count[self::BACKUP_STATUS_WARNING] . "\n";
-            $message .= '  ' . get_string('backupnotyetrun') . '; ' . $count[self::BACKUP_STATUS_NOTYETRUN]."\n\n";
+            $message .= '  ' . get_string('courses') . ': ' . array_sum($count) . "\n";
+            $message .= '  ' . get_string('ok') . ': ' . $count[self::BACKUP_STATUS_OK] . "\n";
+            $message .= '  ' . get_string('skipped') . ': ' . $count[self::BACKUP_STATUS_SKIPPED] . "\n";
+            $message .= '  ' . get_string('error') . ': ' . $count[self::BACKUP_STATUS_ERROR] . "\n";
+            $message .= '  ' . get_string('unfinished') . ': ' . $count[self::BACKUP_STATUS_UNFINISHED] . "\n";
+            $message .= '  ' . get_string('warning') . ': ' . $count[self::BACKUP_STATUS_WARNING] . "\n";
+            $message .= '  ' . get_string('backupnotyetrun') . ': ' . $count[self::BACKUP_STATUS_NOTYETRUN]."\n\n";
 
             //Reference
             if ($haserrors) {
@@ -730,9 +730,16 @@ abstract class backup_cron_automated_helper {
     protected static function is_course_modified($courseid, $since) {
         $logmang = get_log_manager();
         $readers = $logmang->get_readers('core\log\sql_reader');
-        $where = "courseid = :courseid and timecreated > :since and crud <> 'r'";
         $params = array('courseid' => $courseid, 'since' => $since);
-        foreach ($readers as $reader) {
+
+        foreach ($readers as $readerpluginname => $reader) {
+            $where = "courseid = :courseid and timecreated > :since and crud <> 'r'";
+
+            // Prevent logs of prevous backups causing a false positive.
+            if ($readerpluginname != 'logstore_legacy') {
+                $where .= " and target <> 'course_backup'";
+            }
+
             if ($reader->get_events_select_count($where, $params)) {
                 return true;
             }

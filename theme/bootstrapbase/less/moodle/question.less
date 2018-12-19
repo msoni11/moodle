@@ -76,7 +76,7 @@
 }
 
 // TODO: MDL-55142 remove browser these brwoser hacks:
-/* stylelint-disable declaration-block-no-duplicate-properties, no-browser-hacks */
+/* stylelint-disable declaration-block-no-duplicate-properties */
 #chooseqtype .alloptions {
     overflow-x: hidden;
     overflow-y: auto;
@@ -146,6 +146,9 @@
     }
     label {
         margin: 0;
+    }
+    .header {
+        text-align: left;
     }
 }
 #page-mod-quiz-edit {
@@ -233,6 +236,12 @@ body.path-question-type .fitem_fgroup .accesshide {
 .formulation select {
     width: auto;
     vertical-align: baseline;
+}
+.que.multianswer .formulation .yui3-widget-positioned .feedbackspan {
+    box-sizing: content-box;
+    padding-bottom: 0;
+    max-width: inherit;
+    width: inherit;
 }
 .path-mod-quiz input[size] {
     width: auto;
@@ -531,4 +540,8 @@ a#hidebankcmd {
 body.path-question-type .mform fieldset.hidden {
     padding: 0;
     margin: 0.7em 0 0;
+}
+
+.tag-condition-container {
+    position: relative;
 }

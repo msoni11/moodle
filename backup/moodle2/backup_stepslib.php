@@ -529,7 +529,7 @@ class backup_enrolments_structure_step extends backup_structure_step {
         $enrol->annotate_ids('role', 'roleid');
 
         // Add enrol plugin structure.
-        $this->add_plugin_structure('enrol', $enrol, false);
+        $this->add_plugin_structure('enrol', $enrol, true);
 
         return $enrolments;
     }
@@ -865,7 +865,7 @@ class backup_calendarevents_structure_step extends backup_structure_step {
                 'name', 'description', 'format', 'courseid', 'groupid', 'userid',
                 'repeatid', 'modulename', 'instance', 'type', 'eventtype', 'timestart',
                 'timeduration', 'timesort', 'visible', 'uuid', 'sequence', 'timemodified',
-                'priority'));
+                'priority', 'location'));
 
         // Build the tree
         $events->add_child($event);
@@ -878,13 +878,22 @@ class backup_calendarevents_structure_step extends backup_structure_step {
             $calendar_items_params = array('courseid'=>backup::VAR_COURSEID);
             $event->set_source_sql($calendar_items_sql, $calendar_items_params);
         } else if ($this->name == 'activity_calendar') {
-            $params = array('instance' => backup::VAR_ACTIVITYID, 'modulename' => backup::VAR_MODNAME);
+            // We don't backup action events.
+            $params = array('instance' => backup::VAR_ACTIVITYID, 'modulename' => backup::VAR_MODNAME,
+                'type' => array('sqlparam' => CALENDAR_EVENT_TYPE_ACTION));
             // If we don't want to include the userinfo in the backup then setting the courseid
             // will filter out all of the user override events (which have a course id of zero).
+            $coursewhere = "";
             if (!$this->get_setting_value('userinfo')) {
                 $params['courseid'] = backup::VAR_COURSEID;
+                $coursewhere = " AND courseid = :courseid";
             }
-            $event->set_source_table('event', $params);
+            $calendarsql = "SELECT * FROM {event}
+                             WHERE instance = :instance
+                               AND type <> :type
+                               AND modulename = :modulename";
+            $calendarsql = $calendarsql . $coursewhere;
+            $event->set_source_sql($calendarsql, $params);
         } else {
             $event->set_source_table('event', array('courseid' => backup::VAR_COURSEID, 'instance' => backup::VAR_ACTIVITYID, 'modulename' => backup::VAR_MODNAME));
         }
@@ -1410,8 +1419,9 @@ class backup_block_instance_structure_step extends backup_structure_step {
         // Define each element separated
 
         $block = new backup_nested_element('block', array('id', 'contextid', 'version'), array(
-            'blockname', 'parentcontextid', 'showinsubcontexts', 'pagetypepattern',
-            'subpagepattern', 'defaultregion', 'defaultweight', 'configdata'));
+                'blockname', 'parentcontextid', 'showinsubcontexts', 'pagetypepattern',
+                'subpagepattern', 'defaultregion', 'defaultweight', 'configdata',
+                'timecreated', 'timemodified'));
 
         $positions = new backup_nested_element('block_positions');
 
@@ -2201,7 +2211,7 @@ class backup_questions_structure_step extends backup_structure_step {
         $qcategory = new backup_nested_element('question_category', array('id'), array(
             'name', 'contextid', 'contextlevel', 'contextinstanceid',
             'info', 'infoformat', 'stamp', 'parent',
-            'sortorder'));
+            'sortorder', 'idnumber'));
 
         $questions = new backup_nested_element('questions');
 
@@ -2209,7 +2219,7 @@ class backup_questions_structure_step extends backup_structure_step {
             'parent', 'name', 'questiontext', 'questiontextformat',
             'generalfeedback', 'generalfeedbackformat', 'defaultmark', 'penalty',
             'qtype', 'length', 'stamp', 'version',
-            'hidden', 'timecreated', 'timemodified', 'createdby', 'modifiedby'));
+            'hidden', 'timecreated', 'timemodified', 'createdby', 'modifiedby', 'idnumber'));
 
         // attach qtype plugin structure to $question element, only one allowed
         $this->add_plugin_structure('qtype', $question, false);
@@ -2224,7 +2234,7 @@ class backup_questions_structure_step extends backup_structure_step {
 
         $tags = new backup_nested_element('tags');
 
-        $tag = new backup_nested_element('tag', array('id'), array('name', 'rawname'));
+        $tag = new backup_nested_element('tag', array('id', 'contextid'), array('name', 'rawname'));
 
         // Build the tree
 
@@ -2256,7 +2266,7 @@ class backup_questions_structure_step extends backup_structure_step {
                 ORDER BY id',
                 array('questionid' => backup::VAR_PARENTID));
 
-        $tag->set_source_sql("SELECT t.id, t.name, t.rawname
+        $tag->set_source_sql("SELECT t.id, ti.contextid, t.name, t.rawname
                               FROM {tag} t
                               JOIN {tag_instance} ti ON ti.tagid = t.id
                               WHERE ti.itemid = ?
@@ -2408,6 +2418,9 @@ class backup_activity_grades_structure_step extends backup_structure_step {
     }
 
     protected function define_structure() {
+        global $CFG;
+
+        require_once($CFG->libdir . '/grade/constants.php');
 
         // To know if we are including userinfo
         $userinfo = $this->get_setting_value('userinfo');
@@ -2464,6 +2477,7 @@ class backup_activity_grades_structure_step extends backup_structure_step {
         // This only happens if we are including user info
         if ($userinfo) {
             $grade->set_source_table('grade_grades', array('itemid' => backup::VAR_PARENTID));
+            $grade->annotate_files(GRADE_FILE_COMPONENT, GRADE_FEEDBACK_FILEAREA, 'id');
         }
 
         $letter->set_source_table('grade_letters', array('contextid' => backup::VAR_CONTEXTID));
@@ -2500,6 +2514,9 @@ class backup_activity_grade_history_structure_step extends backup_structure_step
     }
 
     protected function define_structure() {
+        global $CFG;
+
+        require_once($CFG->libdir . '/grade/constants.php');
 
         // Settings to use.
         $userinfo = $this->get_setting_value('userinfo');
@@ -2527,6 +2544,7 @@ class backup_activity_grade_history_structure_step extends backup_structure_step
                                      JOIN {backup_ids_temp} bi ON ggh.itemid = bi.itemid
                                     WHERE bi.backupid = ?
                                       AND bi.itemname = 'grade_item'", array(backup::VAR_BACKUPID));
+            $grade->annotate_files(GRADE_FILE_COMPONENT, GRADE_HISTORY_FEEDBACK_FILEAREA, 'id');
         }
 
         // Annotations.

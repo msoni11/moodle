@@ -72,8 +72,8 @@ class testable_core_search extends \core_search\manager {
      *
      * @return array
      */
-    public function get_areas_user_accesses($limitcourseids = false) {
-        return parent::get_areas_user_accesses($limitcourseids);
+    public function get_areas_user_accesses($limitcourseids = false, $limitcontextids = false) {
+        return parent::get_areas_user_accesses($limitcourseids, $limitcontextids);
     }
 
     /**
@@ -108,4 +108,14 @@ class testable_core_search extends \core_search\manager {
         return parent::is_search_area($classname);
     }
 
+    /**
+     * Fakes the current time for PHPunit. Turns off faking time if called with default parameter.
+     *
+     * Note: This should be replaced with core functionality once possible (see MDL-60644).
+     *
+     * @param float $faketime Current time
+     */
+    public static function fake_current_time($faketime = 0.0) {
+        static::$phpunitfaketime = $faketime;
+    }
 }

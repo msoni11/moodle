@@ -101,4 +101,17 @@ $messageproviders = array (
 
     // A comment was left on a user competency.
     'competencyusercompcomment' => array(),
+
+    // User insights.
+    'insights' => array (
+         'capability'  => 'moodle/analytics:listinsights'
+    ),
+
+    // Message contact requests.
+    'messagecontactrequests' => [
+        'defaults' => [
+            'popup' => MESSAGE_PERMITTED + MESSAGE_DEFAULT_LOGGEDIN + MESSAGE_DEFAULT_LOGGEDOFF,
+            'email' => MESSAGE_PERMITTED + MESSAGE_DEFAULT_LOGGEDOFF,
+        ]
+    ],
 );

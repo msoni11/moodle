@@ -50,7 +50,7 @@ abstract class moodleform_mod extends moodleform {
      */
     protected $_customcompletionelements;
     /**
-     * @var string name of module
+     * @var string name of module.
      */
     protected $_modname;
     /** current context, course or module depends if already exists*/
@@ -86,13 +86,15 @@ abstract class moodleform_mod extends moodleform {
         require_once($CFG->dirroot . '/course/format/lib.php');
         $this->courseformat = course_get_format($course);
 
-        // Guess module name
-        $matches = array();
-        if (!preg_match('/^mod_([^_]+)_mod_form$/', get_class($this), $matches)) {
-            debugging('Use $modname parameter or rename form to mod_xx_mod_form, where xx is name of your module');
-            print_error('unknownmodulename');
+        // Guess module name if not set.
+        if (is_null($this->_modname)) {
+            $matches = array();
+            if (!preg_match('/^mod_([^_]+)_mod_form$/', get_class($this), $matches)) {
+                debugging('Rename form to mod_xx_mod_form, where xx is name of your module');
+                print_error('unknownmodulename');
+            }
+            $this->_modname = $matches[1];
         }
-        $this->_modname = $matches[1];
         $this->init_features();
         parent::__construct('modedit.php');
     }
@@ -168,7 +170,7 @@ abstract class moodleform_mod extends moodleform {
         global $CFG;
 
         $this->_features = new stdClass();
-        $this->_features->groups            = plugin_supports('mod', $this->_modname, FEATURE_GROUPS, true);
+        $this->_features->groups            = plugin_supports('mod', $this->_modname, FEATURE_GROUPS, false);
         $this->_features->groupings         = plugin_supports('mod', $this->_modname, FEATURE_GROUPINGS, false);
         $this->_features->outcomes          = (!empty($CFG->enableoutcomes) and plugin_supports('mod', $this->_modname, FEATURE_GRADE_OUTCOMES, true));
         $this->_features->hasgrades         = plugin_supports('mod', $this->_modname, FEATURE_GRADE_HAS_GRADE, false);
@@ -287,6 +289,10 @@ abstract class moodleform_mod extends moodleform {
                 // Groupings have no use without groupmode.
                 if ($mform->elementExists('groupingid')) {
                     $mform->removeElement('groupingid');
+                }
+                // Nor does the group restrictions button.
+                if ($mform->elementExists('restrictgroupbutton')) {
+                    $mform->removeElement('restrictgroupbutton');
                 }
             }
         }
@@ -408,7 +414,7 @@ abstract class moodleform_mod extends moodleform {
             } else {
                 $grade = $scale;
             }
-            if ($data['gradepass'] > $grade) {
+            if (unformat_float($data['gradepass']) > $grade) {
                 $errors['gradepass'] = get_string('gradepassgreaterthangrade', 'grades', $grade);
             }
         }
@@ -710,7 +716,8 @@ abstract class moodleform_mod extends moodleform {
             }
 
             // Completion expected at particular date? (For progress tracking)
-            $mform->addElement('date_selector', 'completionexpected', get_string('completionexpected', 'completion'), array('optional'=>true));
+            $mform->addElement('date_time_selector', 'completionexpected', get_string('completionexpected', 'completion'),
+                    array('optional' => true));
             $mform->addHelpButton('completionexpected', 'completionexpected', 'completion');
             $mform->disabledIf('completionexpected', 'completion', 'eq', COMPLETION_TRACKING_NONE);
         }

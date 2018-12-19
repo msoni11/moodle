@@ -31,9 +31,6 @@ require_once($CFG->dirroot.'/user/profile/lib.php');
 require_once($CFG->dirroot.'/user/lib.php');
 require_once($CFG->dirroot.'/webservice/lib.php');
 
-// HTTPS is required in this page when $CFG->loginhttps enabled.
-$PAGE->https_required();
-
 $id     = optional_param('id', $USER->id, PARAM_INT);    // User id; -1 if creating new user.
 $course = optional_param('course', SITEID, PARAM_INT);   // Course id (defaults to Site).
 $returnto = optional_param('returnto', null, PARAM_ALPHA);  // Code determining where to return to after save.
@@ -157,7 +154,21 @@ $userform = new user_editadvanced_form(new moodle_url($PAGE->url, array('returnt
     'filemanageroptions' => $filemanageroptions,
     'user' => $user));
 
-if ($usernew = $userform->get_data()) {
+
+// Deciding where to send the user back in most cases.
+if ($returnto === 'profile') {
+    if ($course->id != SITEID) {
+        $returnurl = new moodle_url('/user/view.php', array('id' => $user->id, 'course' => $course->id));
+    } else {
+        $returnurl = new moodle_url('/user/profile.php', array('id' => $user->id));
+    }
+} else {
+    $returnurl = new moodle_url('/user/preferences.php', array('userid' => $user->id));
+}
+
+if ($userform->is_cancelled()) {
+    redirect($returnurl);
+} else if ($usernew = $userform->get_data()) {
     $usercreated = false;
 
     if (empty($usernew->auth)) {
@@ -295,15 +306,6 @@ if ($usernew = $userform->get_data()) {
             // Somebody double clicked when editing admin user during install.
             redirect("$CFG->wwwroot/$CFG->admin/");
         } else {
-            if ($returnto === 'profile') {
-                if ($course->id != SITEID) {
-                    $returnurl = new moodle_url('/user/view.php', array('id' => $user->id, 'course' => $course->id));
-                } else {
-                    $returnurl = new moodle_url('/user/profile.php', array('id' => $user->id));
-                }
-            } else {
-                $returnurl = new moodle_url('/user/preferences.php', array('userid' => $user->id));
-            }
             redirect($returnurl);
         }
     } else {
@@ -312,9 +314,6 @@ if ($usernew = $userform->get_data()) {
     }
     // Never reached..
 }
-
-// Make sure we really are on the https page when https login required.
-$PAGE->verify_https_required();
 
 
 // Display page header.

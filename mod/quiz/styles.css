@@ -360,11 +360,13 @@ table.quizattemptsummary .noreviewmessage {
     font-size: 0.7em;
 }
 
-.quizstartbuttondiv.quizsecuremoderequired input {
+.quizstartbuttondiv.quizsecuremoderequired input,
+.quizstartbuttondiv.quizsecuremoderequired button {
     display: none;
 }
 
-.jsenabled .quizstartbuttondiv.quizsecuremoderequired input {
+.jsenabled .quizstartbuttondiv.quizsecuremoderequired input,
+.jsenabled .quizstartbuttondiv.quizsecuremoderequired button {
     display: inline;
 }
 
@@ -374,11 +376,6 @@ table.quizattemptsummary .noreviewmessage {
 
 #mod_quiz_preflight_form .femptylabel .fitemtitle {
     display: none;
-}
-
-#mod_quiz_preflight_form .femptylabel .felement {
-    margin: 0;
-    padding: 0;
 }
 
 .moodle-dialogue-base .moodle-dialogue.mod_quiz_preflight_popup {
@@ -617,6 +614,12 @@ table.quizreviewsummary td.cell {
     border-bottom: lightgrey solid 0.2em;
 }
 
+#page-mod-quiz-report tr.quiz_statistics-summaryrow td.cell {
+    padding-top: 1px;
+    padding-bottom: 1px;
+    border-top: none;
+}
+
 /** Mod quiz edit **/
 #page-mod-quiz-edit .statusbar {
     margin: 0.6em 0.4em;
@@ -661,8 +664,8 @@ table.quizreviewsummary td.cell {
     position: relative;
 }
 
-#page-mod-quiz-edit ul.section li.pagenumber:first-child .add-menu-outer .menu > :first-child,
-#page-mod-quiz-edit .last-add-menu .add-menu-outer .menu > :first-child {
+#page-mod-quiz-edit ul.section li.pagenumber:first-child .add-menu-outer .menu > :last-child,
+#page-mod-quiz-edit .last-add-menu .add-menu-outer .menu > :last-child {
     display: none;
 }
 
@@ -737,6 +740,11 @@ table.quizreviewsummary td.cell {
     margin: 0.3em 20px 0 0;
 }
 
+.instanceshufflequestions [type="checkbox"] {
+    vertical-align: middle;
+    margin-right: .5rem;
+}
+
 #page-mod-quiz-edit ul.section {
     margin: 0;
     padding: 0 20px;
@@ -793,12 +801,6 @@ table.quizreviewsummary td.cell {
 
 #page-mod-quiz-edit ul.slots li.section li.activity .instancemaxmarkcontainer form {
     display: inline;
-}
-
-#page-mod-quiz-edit ul.slots li.section li.activity .instancemaxmarkcontainer form input {
-    margin: 0;
-    padding: 0.2em;
-    height: 1em;
 }
 
 #page-mod-quiz-edit ul.slots li.section li.activity .instancemaxmark {
@@ -1064,6 +1066,11 @@ table#categoryquestions {
 .modulespecificbuttonscontainer {
     padding-left: 0.3em;
     padding-right: 0.3em;
+}
+
+.questionbankformforpopup .modulespecificbuttonscontainer {
+    padding-top: 10px;
+    padding-left: 0;
 }
 
 .quizquestionlistcontrols {

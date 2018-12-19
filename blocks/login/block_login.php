@@ -42,13 +42,7 @@ class block_login extends block_base {
             return $this->content;
         }
 
-        if (empty($CFG->loginhttps)) {
-            $wwwroot = $CFG->wwwroot;
-        } else {
-            // This actually is not so secure ;-), 'cause we're
-            // in unencrypted connection...
-            $wwwroot = str_replace("http://", "https://", $CFG->wwwroot);
-        }
+        $wwwroot = $CFG->wwwroot;
 
         if (signup_is_enabled()) {
             $signup = $wwwroot . '/login/signup.php';
@@ -92,6 +86,7 @@ class block_login extends block_base {
             $this->content->text .= '<div class="form-group">';
             $this->content->text .= '<input type="submit" class="btn btn-primary btn-block" value="'.get_string('login').'" />';
             $this->content->text .= '</div>';
+            $this->content->text .= '<input type="hidden" name="logintoken" value="'.s(\core\session\manager::get_login_token()).'" />';
 
             $this->content->text .= "</form>\n";
 
@@ -115,7 +110,7 @@ class block_login extends block_base {
                 $this->content->text .= '<div class="potentialidplist">';
                 foreach ($potentialidps as $idp) {
                     $this->content->text .= '<div class="potentialidp">';
-                    $this->content->text .= '<a class="btn btn-secondary btn-block" ';
+                    $this->content->text .= '<a class="btn btn-default btn-block" ';
                     $this->content->text .= 'href="' . $idp['url']->out() . '" title="' . s($idp['name']) . '">';
                     if (!empty($idp['iconurl'])) {
                         $this->content->text .= '<img src="' . s($idp['iconurl']) . '" width="24" height="24" class="m-r-1"/>';

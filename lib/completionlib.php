@@ -356,19 +356,19 @@ class completion_info {
      * @return array
      */
     public function get_completions($user_id, $criteriatype = null) {
-        $criterion = $this->get_criteria($criteriatype);
+        $criteria = $this->get_criteria($criteriatype);
 
         $completions = array();
 
-        foreach ($criterion as $criteria) {
+        foreach ($criteria as $criterion) {
             $params = array(
                 'course'        => $this->course_id,
                 'userid'        => $user_id,
-                'criteriaid'    => $criteria->id
+                'criteriaid'    => $criterion->id
             );
 
             $completion = new completion_criteria_completion($params);
-            $completion->attach_criteria($criteria);
+            $completion->attach_criteria($criterion);
 
             $completions[] = $completion;
         }
@@ -422,6 +422,21 @@ class completion_info {
 
             // Load criteria from database
             $records = (array)$DB->get_records('course_completion_criteria', $params);
+
+            // Order records so activities are in the same order as they appear on the course view page.
+            if ($records) {
+                $activitiesorder = array_keys(get_fast_modinfo($this->course)->get_cms());
+                usort($records, function ($a, $b) use ($activitiesorder) {
+                    $aidx = ($a->criteriatype == COMPLETION_CRITERIA_TYPE_ACTIVITY) ?
+                        array_search($a->moduleinstance, $activitiesorder) : false;
+                    $bidx = ($b->criteriatype == COMPLETION_CRITERIA_TYPE_ACTIVITY) ?
+                        array_search($b->moduleinstance, $activitiesorder) : false;
+                    if ($aidx === false || $bidx === false || $aidx == $bidx) {
+                        return 0;
+                    }
+                    return ($aidx < $bidx) ? -1 : 1;
+                });
+            }
 
             // Build array of criteria objects
             $this->criteria = array();
@@ -505,6 +520,16 @@ class completion_info {
     }
 
     /**
+     * Check whether the supplied user can override the activity completion statuses within the current course.
+     *
+     * @param stdClass $user The user object.
+     * @return bool True if the user can override, false otherwise.
+     */
+    public function user_can_override_completion($user) {
+        return has_capability('moodle/course:overridecompletion', context_course::instance($this->course_id), $user);
+    }
+
+    /**
      * Updates (if necessary) the completion state of activity $cm for the given
      * user.
      *
@@ -533,14 +558,24 @@ class completion_info {
      *   result. For manual events, COMPLETION_COMPLETE or COMPLETION_INCOMPLETE
      *   must be used; these directly set the specified state.
      * @param int $userid User ID to be updated. Default 0 = current user
+     * @param bool $override Whether manually overriding the existing completion state.
      * @return void
+     * @throws moodle_exception if trying to override without permission.
      */
-    public function update_state($cm, $possibleresult=COMPLETION_UNKNOWN, $userid=0) {
+    public function update_state($cm, $possibleresult=COMPLETION_UNKNOWN, $userid=0, $override = false) {
         global $USER;
 
         // Do nothing if completion is not enabled for that activity
         if (!$this->is_enabled($cm)) {
             return;
+        }
+
+        // If we're processing an override and the current user isn't allowed to do so, then throw an exception.
+        if ($override) {
+            if (!$this->user_can_override_completion($USER)) {
+                throw new required_capability_exception(context_course::instance($this->course_id),
+                                                        'moodle/course:overridecompletion', 'nopermission', '');
+            }
         }
 
         // Get current value of completion state and do nothing if it's same as
@@ -554,8 +589,17 @@ class completion_info {
             return;
         }
 
-        if ($cm->completion == COMPLETION_TRACKING_MANUAL) {
-            // For manual tracking we set the result directly
+        // For auto tracking, if the status is overridden to 'COMPLETION_COMPLETE', then disallow further changes,
+        // unless processing another override.
+        // Basically, we want those activities which have been overridden to COMPLETE to hold state, and those which have been
+        // overridden to INCOMPLETE to still be processed by normal completion triggers.
+        if ($cm->completion == COMPLETION_TRACKING_AUTOMATIC && !is_null($current->overrideby)
+            && $current->completionstate == COMPLETION_COMPLETE && !$override) {
+            return;
+        }
+
+        // For manual tracking, or if overriding the completion state, we set the state directly.
+        if ($cm->completion == COMPLETION_TRACKING_MANUAL || $override) {
             switch($possibleresult) {
                 case COMPLETION_COMPLETE:
                 case COMPLETION_INCOMPLETE:
@@ -566,7 +610,6 @@ class completion_info {
             }
 
         } else {
-            // Automatic tracking; get new state
             $newstate = $this->internal_get_state($cm, $userid, $current);
         }
 
@@ -574,6 +617,7 @@ class completion_info {
         if ($newstate != $current->completionstate) {
             $current->completionstate = $newstate;
             $current->timemodified    = time();
+            $current->overrideby      = $override ? $USER->id : null;
             $this->internal_set_data($cm, $current);
         }
     }
@@ -683,8 +727,9 @@ class completion_info {
         // Get current completion state
         $data = $this->get_data($cm, false, $userid);
 
-        // If we already viewed it, don't do anything
-        if ($data->viewed == COMPLETION_VIEWED) {
+        // If we already viewed it, don't do anything unless the completion status is overridden.
+        // If the completion status is overridden, then we need to allow this 'view' to trigger automatic completion again.
+        if ($data->viewed == COMPLETION_VIEWED && empty($data->overrideby)) {
             return;
         }
 
@@ -943,6 +988,7 @@ class completion_info {
                     $data['userid'] = $userid;
                     $data['completionstate'] = 0;
                     $data['viewed'] = 0;
+                    $data['overrideby'] = null;
                     $data['timemodified'] = 0;
                 }
                 $cacheddata[$othercm->id] = $data;
@@ -965,6 +1011,7 @@ class completion_info {
                 $data['userid'] = $userid;
                 $data['completionstate'] = 0;
                 $data['viewed'] = 0;
+                $data['overrideby'] = null;
                 $data['timemodified'] = 0;
             }
 
@@ -1032,7 +1079,9 @@ class completion_info {
             'context' => $cmcontext,
             'relateduserid' => $data->userid,
             'other' => array(
-                'relateduserid' => $data->userid
+                'relateduserid' => $data->userid,
+                'overrideby' => $data->overrideby,
+                'completionstate' => $data->completionstate
             )
         ));
         $event->add_record_snapshot('course_modules_completion', $data);

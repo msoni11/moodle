@@ -160,6 +160,14 @@ EDITOR.prototype = {
     currentannotation: null,
 
     /**
+     * Track the previous annotation so we can remove selection highlights.
+     * @property lastannotation
+     * @type M.assignfeedback_editpdf.annotation
+     * @protected
+     */
+    lastannotation: null,
+
+    /**
      * Last selected annotation tool
      * @property lastannotationtool
      * @type String
@@ -258,7 +266,7 @@ EDITOR.prototype = {
      * @method refresh_button_state
      */
     refresh_button_state: function() {
-        var button, currenttoolnode, imgurl, drawingregion;
+        var button, currenttoolnode, imgurl, drawingregion, stampimgurl, drawingcanvas;
 
         // Initalise the colour buttons.
         button = this.get_dialogue_element(SELECTOR.COMMENTCOLOURBUTTON);
@@ -283,9 +291,28 @@ EDITOR.prototype = {
         drawingregion.setAttribute('data-currenttool', this.currentedit.tool);
 
         button = this.get_dialogue_element(SELECTOR.STAMPSBUTTON);
-        button.one('img').setAttrs({'src': this.get_stamp_image_url(this.currentedit.stamp),
+        stampimgurl = this.get_stamp_image_url(this.currentedit.stamp);
+        button.one('img').setAttrs({'src': stampimgurl,
                                     'height': '16',
                                     'width': '16'});
+
+        drawingcanvas = this.get_dialogue_element(SELECTOR.DRAWINGCANVAS);
+        switch (this.currentedit.tool) {
+            case 'drag':
+                drawingcanvas.setStyle('cursor', 'move');
+                break;
+            case 'highlight':
+                drawingcanvas.setStyle('cursor', 'text');
+                break;
+            case 'select':
+                drawingcanvas.setStyle('cursor', 'default');
+                break;
+            case 'stamp':
+                drawingcanvas.setStyle('cursor', 'url(' + stampimgurl + '), crosshair');
+                break;
+            default:
+                drawingcanvas.setStyle('cursor', 'crosshair');
+        }
     },
 
     /**
@@ -746,6 +773,8 @@ EDITOR.prototype = {
         if (this.get('readonly')) {
             return;
         }
+        this.disable_touch_scroll();
+
         // Setup the tool buttons.
         Y.each(TOOLSELECTOR, function(selector, tool) {
             toolnode = this.get_dialogue_element(selector);
@@ -839,6 +868,7 @@ EDITOR.prototype = {
         if (tool !== "comment" && tool !== "select" && tool !== "drag" && tool !== "stamp") {
             this.lastannotationtool = tool;
         }
+
         this.refresh_button_state();
     },
 
@@ -931,8 +961,7 @@ EDITOR.prototype = {
             scrollleft = canvas.get('docScrollX'),
             point = {x: e.clientX - offset[0] + scrollleft,
                      y: e.clientY - offset[1] + scrolltop},
-            selected = false,
-            lastannotation;
+            selected = false;
 
         // Ignore right mouse click.
         if (e.button === 3) {
@@ -964,13 +993,13 @@ EDITOR.prototype = {
             });
 
             if (selected) {
-                lastannotation = this.currentannotation;
+                this.lastannotation = this.currentannotation;
                 this.currentannotation = selected;
-                if (lastannotation && lastannotation !== selected) {
+                if (this.lastannotation && this.lastannotation !== selected) {
                     // Redraw the last selected annotation to remove the highlight.
-                    if (lastannotation.drawable) {
-                        lastannotation.drawable.erase();
-                        this.drawables.push(lastannotation.draw());
+                    if (this.lastannotation.drawable) {
+                        this.lastannotation.drawable.erase();
+                        this.drawables.push(this.lastannotation.draw());
                     }
                 }
                 // Redraw the newly selected annotation to show the highlight.
@@ -978,6 +1007,15 @@ EDITOR.prototype = {
                     this.currentannotation.drawable.erase();
                 }
                 this.drawables.push(this.currentannotation.draw());
+            } else {
+                this.lastannotation = this.currentannotation;
+                this.currentannotation = null;
+
+                // Redraw the last selected annotation to remove the highlight.
+                if (this.lastannotation && this.lastannotation.drawable) {
+                    this.lastannotation.drawable.erase();
+                    this.drawables.push(this.lastannotation.draw());
+                }
             }
         }
         if (this.currentannotation) {
@@ -1218,13 +1256,15 @@ EDITOR.prototype = {
      * @method expandCollapseComments
      */
     expandCollapseComments: function() {
+        var comments = Y.all('.commentdrawable');
+
         if (this.collapsecomments) {
             this.collapsecomments = false;
+            comments.removeClass('commentcollapsed');
         } else {
             this.collapsecomments = true;
+            comments.addClass('commentcollapsed');
         }
-
-        this.redraw();
     },
 
     /**
@@ -1373,6 +1413,54 @@ EDITOR.prototype = {
         for (i = 0; i < this.drawables.length; i++) {
             this.drawables[i].scroll_update(x, y);
         }
+    },
+
+    /**
+     * Test the browser support for options objects on event listeners.
+     * @return Boolean
+     */
+    event_listener_options_supported: function() {
+        var passivesupported = false,
+            options,
+            testeventname = "testpassiveeventoptions";
+
+        // Options support testing example from:
+        // https://developer.mozilla.org/en-US/docs/Web/API/EventTarget/addEventListener
+
+        try {
+            options = Object.defineProperty({}, "passive", {
+                get: function() {
+                    passivesupported = true;
+                }
+            });
+
+            // We use an event name that is not likely to conflict with any real event.
+            document.addEventListener(testeventname, options, options);
+            // We remove the event listener as we have tested the options already.
+            document.removeEventListener(testeventname, options, options);
+        } catch(err) {
+            // It's already false.
+            passivesupported = false;
+        }
+        return passivesupported;
+    },
+
+    /**
+     * Disable Touch Move scrolling
+     */
+    disable_touch_scroll: function() {
+        if (this.event_listener_options_supported()) {
+            document.addEventListener('touchmove', this.stop_touch_scroll, {passive: false});
+        }
+    },
+
+    /**
+     * Stop Touch Scrolling
+     * @param {Object} e
+     */
+    stop_touch_scroll: function(e) {
+        e.stopPropagation();
+        e.preventDefault();
     }
 
 };

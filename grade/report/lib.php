@@ -49,7 +49,8 @@ abstract class grade_report {
 
     /**
      * The context.
-     * @var int $context
+     *
+     * @var context $context
      */
     public $context;
 
@@ -366,13 +367,16 @@ abstract class grade_report {
     protected function setup_groups() {
         // find out current groups mode
         if ($this->groupmode = groups_get_course_groupmode($this->course)) {
-            $this->currentgroup = groups_get_course_group($this->course, true);
+            if (empty($this->gpr->groupid)) {
+                $this->currentgroup = groups_get_course_group($this->course, true);
+            } else {
+                $this->currentgroup = $this->gpr->groupid;
+            }
             $this->group_selector = groups_print_course_menu($this->course, $this->pbarurl, true);
 
             if ($this->groupmode == SEPARATEGROUPS and !$this->currentgroup and !has_capability('moodle/site:accessallgroups', $this->context)) {
                 $this->currentgroup = -2; // means can not access any groups at all
             }
-
             if ($this->currentgroup) {
                 $group = groups_get_group($this->currentgroup);
                 $this->currentgroupname     = $group->name;
@@ -525,14 +529,14 @@ abstract class grade_report {
                     $aggregationweight = null;
                 }
             }
-        } else if (!empty($hiding_affected['unknown'][$course_item->id])) {
+        } else if (array_key_exists($course_item->id, $hiding_affected['unknowngrades'])) {
             //not sure whether or not this item depends on a hidden item
             if (!$this->showtotalsifcontainhidden[$courseid]) {
                 //hide the grade
                 $finalgrade = null;
             } else {
                 //use reprocessed marks that exclude hidden items
-                $finalgrade = $hiding_affected['unknown'][$course_item->id];
+                $finalgrade = $hiding_affected['unknowngrades'][$course_item->id];
 
                 if (array_key_exists($course_item->id, $hiding_affected['alteredgrademin'])) {
                     $grademin = $hiding_affected['alteredgrademin'][$course_item->id];

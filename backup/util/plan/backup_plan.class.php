@@ -37,13 +37,12 @@ class backup_plan extends base_plan implements loggable {
      * Constructor - instantiates one object of this class
      */
     public function __construct($controller) {
-        global $CFG;
-
         if (! $controller instanceof backup_controller) {
             throw new backup_plan_exception('wrong_backup_controller_specified');
         }
+        $backuptempdir    = make_backup_temp_directory('');
         $this->controller = $controller;
-        $this->basepath   = $CFG->tempdir . '/backup/' . $controller->get_backupid();
+        $this->basepath   = $backuptempdir . '/' . $controller->get_backupid();
         $this->excludingdactivities = false;
         parent::__construct('backup_plan');
     }
@@ -119,6 +118,21 @@ class backup_plan extends base_plan implements loggable {
         $this->controller->set_status(backup::STATUS_EXECUTING);
         parent::execute();
         $this->controller->set_status(backup::STATUS_FINISHED_OK);
+
+        if ($this->controller->get_type() === backup::TYPE_1COURSE) {
+            // Trigger a course_backup_created event.
+            $otherarray = array('format' => $this->controller->get_format(),
+                                'mode' => $this->controller->get_mode(),
+                                'interactive' => $this->controller->get_interactive(),
+                                'type' => $this->controller->get_type(),
+            );
+            $event = \core\event\course_backup_created::create(array(
+                'objectid' => $this->get_courseid(),
+                'context' => context_course::instance($this->get_courseid()),
+                'other' => $otherarray
+            ));
+            $event->trigger();
+        }
     }
 }
 

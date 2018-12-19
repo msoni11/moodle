@@ -105,19 +105,22 @@
                     </optgroup>
                 {{/optgroup}}
                 {{^optgroup}}
-                    <option value="{{value}}" {{#selected}}selected{{/selected}}>{{{name}}}</option>
+                    <option {{ignore}} value="{{value}}" {{#selected}}selected{{/selected}}>{{{name}}}</option>
                 {{/optgroup}}
             {{/options}}
         </select>
         <noscript>
-            <input type="submit" role="button" class="btn btn-secondary" value="{{#str}}go, core{{/str}}">
+            <input type="submit" class="btn btn-secondary" value="{{#str}}go, core{{/str}}">
         </noscript>
     </form>
 </div>
 {{#js}}
 require(['jquery'], function($) {
     $('#{{id}}').change(function() {
-        $('#{{formid}}').submit();
+        var ignore = $(this).find(':selected').attr('data-ignore');
+        if (typeof ignore === typeof undefined) {
+            $('#{{formid}}').submit();
+        }
     });
 });
 {{/js}}

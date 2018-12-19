@@ -57,7 +57,7 @@ function useredit_setup_preference_page($userid, $courseid) {
         require_login($course);
     } else if (!isloggedin()) {
         if (empty($SESSION->wantsurl)) {
-            $SESSION->wantsurl = $CFG->httpswwwroot.'/user/preferences.php';
+            $SESSION->wantsurl = $CFG->wwwroot.'/user/preferences.php';
         }
         redirect(get_login_url());
     } else {
@@ -184,21 +184,12 @@ function useredit_update_user_preference($usernew) {
 }
 
 /**
- * Updates the provided users profile picture based upon the expected fields returned from the edit or edit_advanced forms.
- *
- * @deprecated since Moodle 3.2 MDL-51789 - please use core_user::update_picture() instead.
- * @todo MDL-54858 This will be deleted in Moodle 3.6.
+ * @deprecated since Moodle 3.2
  * @see core_user::update_picture()
- *
- * @global moodle_database $DB
- * @param stdClass $usernew An object that contains some information about the user being updated
- * @param moodleform $userform The form that was submitted to edit the form (unused)
- * @param array $filemanageroptions
- * @return bool True if the user was updated, false if it stayed the same.
  */
-function useredit_update_picture(stdClass $usernew, moodleform $userform, $filemanageroptions = array()) {
-    debugging('useredit_update_picture() is deprecated. Please use core_user::update_picture() instead.', DEBUG_DEVELOPER);
-    return core_user::update_picture($usernew, $filemanageroptions);
+function useredit_update_picture() {
+    throw new coding_exception('useredit_update_picture() can not be used anymore. Please use ' .
+        'core_user::update_picture() instead.');
 }
 
 /**
@@ -302,6 +293,7 @@ function useredit_shared_definition(&$mform, $editoroptions, $filemanageroptions
     $choices['2'] = get_string('emaildisplaycourse');
     $mform->addElement('select', 'maildisplay', get_string('emaildisplay'), $choices);
     $mform->setDefault('maildisplay', core_user::get_property_default('maildisplay'));
+    $mform->addHelpButton('maildisplay', 'emaildisplay');
 
     $mform->addElement('text', 'city', get_string('city'), 'maxlength="120" size="21"');
     $mform->setType('city', PARAM_TEXT);
@@ -326,6 +318,12 @@ function useredit_shared_definition(&$mform, $editoroptions, $filemanageroptions
         $mform->addElement('select', 'timezone', get_string('timezone'), $choices);
     }
 
+    if ($user->id < 0) {
+        $mform->addElement('select', 'lang', get_string('preferredlanguage'), get_string_manager()->get_list_of_translations());
+        $lang = empty($user->lang) ? $CFG->lang : $user->lang;
+        $mform->setDefault('lang', $lang);
+    }
+
     if (!empty($CFG->allowuserthemes)) {
         $choices = array();
         $choices[''] = get_string('default');
@@ -339,7 +337,7 @@ function useredit_shared_definition(&$mform, $editoroptions, $filemanageroptions
     }
 
     $mform->addElement('editor', 'description_editor', get_string('userdescription'), null, $editoroptions);
-    $mform->setType('description_editor', PARAM_CLEANHTML);
+    $mform->setType('description_editor', PARAM_RAW);
     $mform->addHelpButton('description_editor', 'userdescription');
 
     if (empty($USER->newadminuser)) {
@@ -352,7 +350,7 @@ function useredit_shared_definition(&$mform, $editoroptions, $filemanageroptions
 
         $mform->addElement('static', 'currentpicture', get_string('currentpicture'));
 
-        $mform->addElement('checkbox', 'deletepicture', get_string('delete'));
+        $mform->addElement('checkbox', 'deletepicture', get_string('deletepicture'));
         $mform->setDefault('deletepicture', 0);
 
         $mform->addElement('filemanager', 'imagefile', get_string('newpicture'), '', $filemanageroptions);

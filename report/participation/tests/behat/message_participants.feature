@@ -38,7 +38,7 @@ Feature: Use the particiaption report to message groups of students
   Scenario: Message students who have not participated in book
     Given I log in as "teacher1"
     And I am on "Course 1" course homepage
-    And I navigate to "Course participation" node in "Course administration > Reports"
+    And I navigate to "Reports > Course participation" in current page administration
     And I set the field "instanceid" to "Test book name"
     And I set the field "roleid" to "Student"
     And I press "Go"
@@ -46,12 +46,8 @@ Feature: Use the particiaption report to message groups of students
     And I should see "No" in the "Student 2" "table_row"
     And I should see "No" in the "Student 3" "table_row"
     When I press "Select all 'No'"
-    And I set the field "With selected users..." to "Send a message"
-    And I press "OK"
-    Then I should see "Added 2 new recipients"
-    And I should see "Student 2" in the "Currently selected users" "table"
-    And I should see "Student 3" in the "Currently selected users" "table"
-    And I should not see "Student 1" in the "Currently selected users" "table"
+    And I choose "Send a message" from the participants page bulk action menu
+    Then I should see "Send message to 2 people"
 
   Scenario: Ensure no message options when messaging is disabled
     Given I log in as "admin"
@@ -60,7 +56,7 @@ Feature: Use the particiaption report to message groups of students
     And I log out
     And I log in as "teacher1"
     And I am on "Course 1" course homepage
-    And I navigate to "Course participation" node in "Course administration > Reports"
+    And I navigate to "Reports > Course participation" in current page administration
     When I set the field "instanceid" to "Test book name"
     And I set the field "roleid" to "Student"
     And I press "Go"

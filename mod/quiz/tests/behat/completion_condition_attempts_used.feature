@@ -30,27 +30,23 @@ Feature: Set a quiz to be marked complete when the student uses all attempts all
     And quiz "Test quiz name" contains the following questions:
       | question       | page |
       | First question | 1    |
+    And user "student1" has attempted "Test quiz name" with responses:
+      | slot | response |
+      |   1  | False    |
 
   Scenario: student1 uses up both attempts without passing
     When I log in as "student1"
     And I am on "Course 1" course homepage
     And the "Test quiz name" "quiz" activity with "auto" completion should be marked as not complete
     And I follow "Test quiz name"
-    And I press "Attempt quiz now"
-    And I set the field "False" to "1"
-    And I press "Finish attempt ..."
-    And I press "Submit all and finish"
-    And I follow "C1"
-    And the "Test quiz name" "quiz" activity with "auto" completion should be marked as not complete
-    And I follow "Test quiz name"
     And I press "Re-attempt quiz"
     And I set the field "False" to "1"
     And I press "Finish attempt ..."
     And I press "Submit all and finish"
-    And I follow "C1"
+    And I am on "Course 1" course homepage
     Then "Completed: Test quiz name" "icon" should exist in the "li.modtype_quiz" "css_element"
     And I log out
     And I log in as "teacher1"
     And I am on "Course 1" course homepage
-    And I navigate to "Activity completion" node in "Course administration > Reports"
+    And I navigate to "Reports > Activity completion" in current page administration
     And "Completed" "icon" should exist in the "Student 1" "table_row"

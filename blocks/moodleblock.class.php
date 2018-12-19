@@ -272,6 +272,39 @@ class block_base {
         return $bc;
     }
 
+
+    /**
+     * Return an object containing all the block content to be returned by external functions.
+     *
+     * If your block is returning formatted content or provide files for download, you should override this method to use the
+     * external_format_text, external_format_string functions for formatting or external_util::get_area_files for files.
+     *
+     * @param  core_renderer $output the rendered used for output
+     * @return stdClass      object containing the block title, central content, footer and linked files (if any).
+     * @since  Moodle 3.6
+     */
+    public function get_content_for_external($output) {
+        $bc = new stdClass;
+        $bc->title = null;
+        $bc->content = null;
+        $bc->contentformat = FORMAT_HTML;
+        $bc->footer = null;
+        $bc->files = [];
+
+        if ($this->instance->visible) {
+            $bc->content = $this->formatted_contents($output);
+            if (!empty($this->content->footer)) {
+                $bc->footer = $this->content->footer;
+            }
+        }
+
+        if (!$this->hide_header()) {
+            $bc->title = $this->title;
+        }
+
+        return $bc;
+    }
+
     /**
      * Convert the contents of the block to HTML.
      *
@@ -474,8 +507,8 @@ class block_base {
      */
     function instance_config_save($data, $nolongerused = false) {
         global $DB;
-        $DB->set_field('block_instances', 'configdata', base64_encode(serialize($data)),
-                array('id' => $this->instance->id));
+        $DB->update_record('block_instances', ['id' => $this->instance->id,
+                'configdata' => base64_encode(serialize($data)), 'timemodified' => time()]);
     }
 
     /**

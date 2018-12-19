@@ -124,6 +124,9 @@ class format_weeks extends format_base {
             if ($sectionno != 0 && $usercoursedisplay == COURSE_DISPLAY_MULTIPAGE) {
                 $url->param('section', $sectionno);
             } else {
+                if (empty($CFG->linkcoursesections) && !empty($options['navigation'])) {
+                    return null;
+                }
                 $url->set_anchor('section-'.$sectionno);
             }
         }
@@ -561,6 +564,17 @@ class format_weeks extends format_base {
                 }
             }
         }
+    }
+
+    /**
+     * Return the plugin configs for external functions.
+     *
+     * @return array the list of configuration settings
+     * @since Moodle 3.5
+     */
+    public function get_config_for_external() {
+        // Return everything (nothing to hide).
+        return $this->get_format_options();
     }
 }
 

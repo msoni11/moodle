@@ -17,7 +17,7 @@
 /**
  * Strings for component 'search_solr'.
  *
- * @package   core_search
+ * @package   search_solr
  * @copyright Prateek Sachan {@link http://prateeksachan.com}
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -28,7 +28,8 @@ $string['errorcreatingschema'] = 'Error creating the Solr schema: {$a}';
 $string['errorvalidatingschema'] = 'Error validating Solr schema: field {$a->fieldname} does not exist. Please <a href="{$a->setupurl}">follow this link</a> to set up the required fields.';
 $string['extensionerror'] = 'The Apache Solr PHP extension is not installed. Please check the documentation.';
 $string['fileindexing'] = 'Enable file indexing';
-$string['fileindexing_help'] = 'If your Solr install supports it, this feature allows Moodle to send files to be indexed.';
+$string['fileindexing_help'] = 'If your Solr install supports it, this feature allows Moodle to send files to be indexed.<br/>
+You will need to reindex all site contents after enabling this option for all files to be added.';
 $string['fileindexsettings'] = 'File indexing settings';
 $string['maxindexfilekb'] = 'Maximum file size to index (kB)';
 $string['maxindexfilekb_help'] = 'Files larger than this number of kilobytes will not be included in search indexing. If set to zero, files of any size will be indexed.';
@@ -37,6 +38,8 @@ $string['missingconfig'] = 'Your Apache Solr server is not yet configured in Moo
 $string['multivaluedfield'] = 'Field "{$a}" returned an array instead of a scalar. Please delete the current index, create a new one and run setup_schema.php before indexing data in Solr.';
 $string['nodatafromserver'] = 'No data from server';
 $string['pluginname'] = 'Solr';
+$string['privacy:metadata'] = 'This plugin sends data externally to a linked Solr search engine. It does not store data locally.';
+$string['privacy:metadata:data'] = 'Personal data passed through from the search subsystem.';
 $string['schemafieldautocreated'] = 'Field "{$a}" already exists in Solr schema. You probably forgot to run this script before indexing data and fields were autocreated by Solr. Please delete the current index, create a new one and run setup_schema.php again before indexing data in Solr.';
 $string['schemasetupfromsolr5'] = 'Your Solr server version is lower than 5.0. This script can only set your schema if your Solr version is 5.0 or higher. You need to manually set the fields in your schema according to \\search_solr\\document::get_default_fields_definition().';
 $string['searchinfo'] = 'Search queries';

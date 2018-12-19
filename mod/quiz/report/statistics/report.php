@@ -190,7 +190,7 @@ class quiz_statistics_report extends quiz_default_report {
             if ($quizstats->s()) {
                 $this->output_quiz_structure_analysis_table($questionstats);
 
-                if ($this->table->is_downloading() == 'xhtml' && $quizstats->s() != 0) {
+                if ($this->table->is_downloading() == 'html' && $quizstats->s() != 0) {
                     $this->output_statistics_graph($quiz->id, $qubaids);
                 }
 
@@ -201,7 +201,7 @@ class quiz_statistics_report extends quiz_default_report {
 
         } else if ($qid) {
             // Report on an individual sub-question indexed questionid.
-            if (is_null($questionstats->for_subq($qid, $variantno))) {
+            if (!$questionstats->has_subq($qid, $variantno)) {
                 print_error('questiondoesnotexist', 'question');
             }
 
@@ -256,7 +256,7 @@ class quiz_statistics_report extends quiz_default_report {
             if ($quizstats->s()) {
                 $this->output_quiz_structure_analysis_table($questionstats);
             }
-            $this->table->finish_output();
+            $this->table->export_class_instance()->finish_document();
 
         } else {
             // On-screen display of overview report.
@@ -403,14 +403,14 @@ class quiz_statistics_report extends quiz_default_report {
                 $questiontabletitle = get_string('analysisnameonly', 'quiz_statistics', $a);
             }
 
-            if ($this->table->is_downloading() == 'xhtml') {
+            if ($this->table->is_downloading() == 'html') {
                 $questiontabletitle = get_string('analysisofresponsesfor', 'quiz_statistics', $questiontabletitle);
             }
 
             // Set up the table.
             $exportclass->start_table($questiontabletitle);
 
-            if ($this->table->is_downloading() == 'xhtml') {
+            if ($this->table->is_downloading() == 'html') {
                 echo $this->render_question_text($question);
             }
         }
@@ -449,13 +449,32 @@ class quiz_statistics_report extends quiz_default_report {
      *                                                                                               variants.
      */
     protected function output_quiz_structure_analysis_table($questionstats) {
-        $tooutput = array();
         $limitvariants = !$this->table->is_downloading();
         foreach ($questionstats->get_all_slots() as $slot) {
             // Output the data for these question statistics.
-            $tooutput = array_merge($tooutput, $questionstats->structure_analysis_for_one_slot($slot, $limitvariants));
+            $structureanalysis = $questionstats->structure_analysis_for_one_slot($slot, $limitvariants);
+            if (is_null($structureanalysis)) {
+                $this->table->add_separator();
+            } else {
+                foreach ($structureanalysis as $row) {
+                    $bgcssclass = '';
+                    // The only way to identify in this point of the report if a row is a summary row
+                    // is checking if it's a instance of calculated_question_summary class.
+                    if ($row instanceof \core_question\statistics\questions\calculated_question_summary) {
+                        // Apply a custom css class to summary row to remove border and reduce paddings.
+                        $bgcssclass = 'quiz_statistics-summaryrow';
+
+                        // For question that contain a summary row, we add a "hidden" row in between so the report
+                        // display both rows with same background color.
+                        $this->table->add_data_keyed([], 'd-none hidden');
+                    }
+
+                    $this->table->add_data_keyed($this->table->format_row($row), $bgcssclass);
+                }
+            }
         }
-        $this->table->format_and_add_array_of_rows($tooutput);
+
+        $this->table->finish_output(!$this->table->is_downloading());
     }
 
     /**
@@ -487,8 +506,8 @@ class quiz_statistics_report extends quiz_default_report {
     protected function download_quiz_info_table($quizinfo) {
         global $OUTPUT;
 
-        // XHTML download is a special case.
-        if ($this->table->is_downloading() == 'xhtml') {
+        // HTML download is a special case.
+        if ($this->table->is_downloading() == 'html') {
             echo $OUTPUT->heading(get_string('quizinformation', 'quiz_statistics'), 3);
             echo $this->output_quiz_info_table($quizinfo);
             return;
@@ -529,7 +548,8 @@ class quiz_statistics_report extends quiz_default_report {
         $questions = quiz_report_get_significant_questions($quiz);
 
         // Only load main question not sub questions.
-        $questionstatistics = $DB->get_records_select('question_statistics', 'hashcode = ? AND slot IS NOT NULL',
+        $questionstatistics = $DB->get_records_select('question_statistics',
+                'hashcode = ? AND slot IS NOT NULL AND variant IS NULL',
             [$qubaids->get_hash_code()]);
 
         // Configure what to display.

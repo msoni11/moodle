@@ -106,6 +106,7 @@ class combined_document {
                     case \core_files\conversion::STATUS_IN_PROGRESS:
                     case \core_files\conversion::STATUS_PENDING:
                         $pending = true;
+                        break;
 
                     case \core_files\conversion::STATUS_FAILED:
                         return self::STATUS_FAILED;
@@ -186,7 +187,7 @@ class combined_document {
                 $status = $file->get('status');
                 switch ($status) {
                     case \core_files\conversion::STATUS_COMPLETE:
-                        continue;
+                        continue 2;
                         break;
                     default:
                         $converter->poll_conversion($conversion);

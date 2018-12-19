@@ -42,7 +42,6 @@ if ($node && $newnode) {
     $newnode->make_active();
 }
 
-require_capability('moodle/site:config', context_system::instance());
 
 $tokenlisturl = new moodle_url("/" . $CFG->admin . "/settings.php", array('section' => 'webservicetokens'));
 
@@ -101,7 +100,11 @@ switch ($action) {
         break;
 
     case 'delete':
-        $token = $webservicemanager->get_created_by_user_ws_token($USER->id, $tokenid);
+        $token = $webservicemanager->get_token_by_id_with_details($tokenid);
+
+        if ($token->creatorid != $USER->id) {
+            require_capability("moodle/webservice:managealltokens", context_system::instance());
+        }
 
         //Delete the token
         if ($confirm and confirm_sesskey()) {

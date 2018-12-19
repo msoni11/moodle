@@ -30,7 +30,7 @@ Feature: Enable Block Completion in a course using activity completion
       | Require view | 1 |
     And I press "Save and return to course"
     And I add the "Course completion status" block
-    And I navigate to "Course completion" node in "Course administration"
+    And I navigate to "Course completion" in current page administration
     And I expand all fieldsets
     And I set the following fields to these values:
       | Test page name | 1 |
@@ -51,7 +51,7 @@ Feature: Enable Block Completion in a course using activity completion
       | Require view | 1 |
     And I press "Save and return to course"
     And I add the "Course completion status" block
-    And I navigate to "Course completion" node in "Course administration"
+    And I navigate to "Course completion" in current page administration
     And I expand all fieldsets
     And I set the following fields to these values:
       | Test page name | 1 |
@@ -60,7 +60,7 @@ Feature: Enable Block Completion in a course using activity completion
     When I log in as "student1"
     And I am on "Course 1" course homepage
     And I follow "Test page name"
-    And I follow "C1"
+    And I am on "Course 1" course homepage
     Then I should see "Status: Pending" in the "Course completion status" "block"
     And I should see "0 of 1" in the "Activity completion" "table_row"
     And I trigger cron

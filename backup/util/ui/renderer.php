@@ -395,7 +395,7 @@ class core_backup_renderer extends plugin_renderer_base {
         $count ++;
         $html  = html_writer::start_tag('div', array('class' => 'detail-pair'));
         $html .= html_writer::tag('label', $label, array('class' => 'detail-pair-label', 'for' => 'detail-pair-value-'.$count));
-        $html .= html_writer::tag('div', $value, array('class' => 'detail-pair-value', 'name' => 'detail-pair-value-'.$count));
+        $html .= html_writer::tag('div', $value, array('class' => 'detail-pair-value pl-2', 'name' => 'detail-pair-value-'.$count));
         $html .= html_writer::end_tag('div');
         return $html;
     }
@@ -573,27 +573,51 @@ class core_backup_renderer extends plugin_renderer_base {
             $params['contextid'] = $viewer->currentcontext->id;
             $params['itemid'] = $file->get_itemid();
             $restoreurl = new moodle_url('/backup/restorefile.php', $params);
+            $restorelink = html_writer::link($restoreurl, get_string('restore'));
+            $downloadlink = html_writer::link($fileurl, get_string('download'));
+
+            // Conditional display of the restore and download links, initially only for the 'automated' filearea.
+            if ($params['filearea'] == 'automated') {
+                if (!has_capability('moodle/restore:viewautomatedfilearea', $viewer->currentcontext)) {
+                    $restorelink = '';
+                }
+                if (!can_download_from_backup_filearea($params['filearea'], $viewer->currentcontext)) {
+                    $downloadlink = '';
+                }
+            }
             $table->data[] = array(
                 $file->get_filename(),
                 userdate($file->get_timemodified()),
                 display_size($file->get_filesize()),
-                html_writer::link($fileurl, get_string('download')),
-                html_writer::link($restoreurl, get_string('restore')),
+                $downloadlink,
+                $restorelink,
                 );
         }
 
         $html = html_writer::table($table);
-        $html .= $this->output->single_button(
-            new moodle_url('/backup/backupfilesedit.php', array(
-                'currentcontext' => $viewer->currentcontext->id,
-                'contextid' => $viewer->filecontext->id,
-                'filearea' => $viewer->filearea,
-                'component' => $viewer->component,
-                'returnurl' => $this->page->url->out())
-            ),
-            get_string('managefiles', 'backup'),
-            'post'
-        );
+
+        // For automated backups, the ability to manage backup files is controlled by the ability to download them.
+        // All files must be from the same file area in a backup_files_viewer.
+        $canmanagebackups = true;
+        if ($viewer->filearea == 'automated') {
+            if (!can_download_from_backup_filearea($viewer->filearea, $viewer->currentcontext)) {
+                $canmanagebackups = false;
+            }
+        }
+
+        if ($canmanagebackups) {
+            $html .= $this->output->single_button(
+                new moodle_url('/backup/backupfilesedit.php', array(
+                        'currentcontext' => $viewer->currentcontext->id,
+                        'contextid' => $viewer->filecontext->id,
+                        'filearea' => $viewer->filearea,
+                        'component' => $viewer->component,
+                        'returnurl' => $this->page->url->out())
+                ),
+                get_string('managefiles', 'backup'),
+                'post'
+            );
+        }
 
         return $html;
     }
@@ -608,7 +632,7 @@ class core_backup_renderer extends plugin_renderer_base {
         $url = $component->get_url();
 
         $output = html_writer::start_tag('div', array('class' => 'restore-course-search form-inline m-b-1'));
-        $output .= html_writer::start_tag('div', array('class' => 'rcs-results'));
+        $output .= html_writer::start_tag('div', array('class' => 'rcs-results w-75'));
 
         $table = new html_table();
         $table->head = array('', get_string('shortnamecourse'), get_string('fullnamecourse'));
@@ -768,7 +792,7 @@ class core_backup_renderer extends plugin_renderer_base {
         $url = $component->get_url();
 
         $output = html_writer::start_tag('div', array('class' => 'restore-course-search form-inline m-b-1'));
-        $output .= html_writer::start_tag('div', array('class' => 'rcs-results'));
+        $output .= html_writer::start_tag('div', array('class' => 'rcs-results w-75'));
 
         $table = new html_table();
         $table->head = array('', get_string('name'), get_string('description'));

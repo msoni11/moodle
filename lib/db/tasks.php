@@ -150,15 +150,6 @@ $tasks = array(
         'month' => '*'
     ),
     array(
-        'classname' => 'core\task\events_cron_task',
-        'blocking' => 0,
-        'minute' => '*',
-        'hour' => '*',
-        'day' => '*',
-        'dayofweek' => '*',
-        'month' => '*'
-    ),
-    array(
         'classname' => 'core\task\completion_regular_task',
         'blocking' => 0,
         'minute' => '*',
@@ -351,6 +342,15 @@ $tasks = array(
         'classname' => 'core\oauth2\refresh_system_tokens_task',
         'blocking' => 0,
         'minute' => '30',
+        'hour' => '*',
+        'day' => '*',
+        'dayofweek' => '*',
+        'month' => '*'
+    ),
+    array(
+        'classname' => 'core\task\analytics_cleanup_task',
+        'blocking' => 0,
+        'minute' => '42',
         'hour' => '*',
         'day' => '*',
         'dayofweek' => '*',

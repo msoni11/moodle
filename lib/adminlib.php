@@ -234,9 +234,6 @@ function uninstall_plugin($type, $name) {
     // delete the capabilities that were defined by this module
     capabilities_cleanup($component);
 
-    // remove event handlers and dequeue pending events
-    events_uninstall($component);
-
     // Delete all remaining files in the filepool owned by the component.
     $fs = get_file_storage();
     $fs->delete_component_files($component);
@@ -1866,7 +1863,7 @@ abstract class admin_setting {
         }
 
         $callbackfunction = $this->updatedcallback;
-        if (!empty($callbackfunction) and function_exists($callbackfunction)) {
+        if (!empty($callbackfunction) and is_callable($callbackfunction)) {
             $callbackfunction($this->get_full_name());
         }
         return true;
@@ -2109,6 +2106,74 @@ class admin_setting_heading extends admin_setting {
         return $OUTPUT->render_from_template('core_admin/setting_heading', $context);
     }
 }
+
+/**
+ * No setting - just name and description in same row.
+ *
+ * @copyright 2018 onwards Amaia Anabitarte
+ * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ */
+class admin_setting_description extends admin_setting {
+
+    /**
+     * Not a setting, just text
+     *
+     * @param string $name
+     * @param string $visiblename
+     * @param string $description
+     */
+    public function __construct($name, $visiblename, $description) {
+        $this->nosave = true;
+        parent::__construct($name, $visiblename, $description, '');
+    }
+
+    /**
+     * Always returns true
+     *
+     * @return bool Always returns true
+     */
+    public function get_setting() {
+        return true;
+    }
+
+    /**
+     * Always returns true
+     *
+     * @return bool Always returns true
+     */
+    public function get_defaultsetting() {
+        return true;
+    }
+
+    /**
+     * Never write settings
+     *
+     * @param mixed $data Gets converted to str for comparison against yes value
+     * @return string Always returns an empty string
+     */
+    public function write_setting($data) {
+        // Do not write any setting.
+        return '';
+    }
+
+    /**
+     * Returns an HTML string
+     *
+     * @param string $data
+     * @param string $query
+     * @return string Returns an HTML string
+     */
+    public function output_html($data, $query='') {
+        global $OUTPUT;
+
+        $context = new stdClass();
+        $context->title = $this->visiblename;
+        $context->description = $this->description;
+
+        return $OUTPUT->render_from_template('core_admin/setting_description', $context);
+    }
+}
+
 
 
 /**
@@ -2960,6 +3025,7 @@ class admin_setting_configselect extends admin_setting {
     public function __construct($name, $visiblename, $description, $defaultsetting, $choices) {
         // Look for optgroup and single options.
         if (is_array($choices)) {
+            $this->choices = [];
             foreach ($choices as $key => $val) {
                 if (is_array($val)) {
                     $this->optgroups[$key] = $val;
@@ -3613,14 +3679,15 @@ class admin_setting_configiplist extends admin_setting_configtextarea {
      */
     public function validate($data) {
         if(!empty($data)) {
-            $ips = explode("\n", $data);
+            $lines = explode("\n", $data);
         } else {
             return true;
         }
         $result = true;
         $badips = array();
-        foreach($ips as $ip) {
-            $ip = trim($ip);
+        foreach ($lines as $line) {
+            $tokens = explode('#', $line);
+            $ip = trim($tokens[0]);
             if (empty($ip)) {
                 continue;
             }
@@ -3702,16 +3769,11 @@ class admin_setting_configmixedhostiplist extends admin_setting_configtextarea {
         $entries = explode("\n", $data);
         foreach ($entries as $key => $entry) {
             $entry = trim($entry);
-            // This regex matches any string which:
-            // a) contains at least one non-ascii unicode character AND
-            // b) starts with a-zA-Z0-9 or any non-ascii unicode character AND
-            // c) ends with a-zA-Z0-9 or any non-ascii unicode character
-            // d) contains a-zA-Z0-9, hyphen, dot or any non-ascii unicode characters in the middle.
-            if (preg_match('/^(?=[^\x00-\x7f])([^\x00-\x7f]|[a-zA-Z0-9])([^\x00-\x7f]|[a-zA-Z0-9-.])*([^\x00-\x7f]|[a-zA-Z0-9])$/',
-                $entry)) {
+            // This regex matches any string that has non-ascii character.
+            if (preg_match('/[^\x00-\x7f]/', $entry)) {
                 // If we can convert the unicode string to an idn, do so.
                 // Otherwise, leave the original unicode string alone and let the validation function handle it (it will fail).
-                $val = idn_to_ascii($entry);
+                $val = idn_to_ascii($entry, IDNA_NONTRANSITIONAL_TO_ASCII, INTL_IDNA_VARIANT_UTS46);
                 $entries[$key] = $val ? $val : $entry;
             }
         }
@@ -3729,7 +3791,7 @@ class admin_setting_configmixedhostiplist extends admin_setting_configtextarea {
         foreach ($entries as $key => $entry) {
             $entry = trim($entry);
             if (strpos($entry, 'xn--') !== false) {
-                $entries[$key] = idn_to_utf8($entry);
+                $entries[$key] = idn_to_utf8($entry, IDNA_NONTRANSITIONAL_TO_ASCII, INTL_IDNA_VARIANT_UTS46);
             }
         }
         return implode("\n", $entries);
@@ -5206,8 +5268,9 @@ class admin_setting_special_coursecontact extends admin_setting_pickroles {
         parent::__construct('coursecontact', get_string('coursecontact', 'admin'),
             get_string('coursecontact_desc', 'admin'),
             array('editingteacher'));
-        $this->set_updatedcallback(create_function('',
-                "cache::make('core', 'coursecontacts')->purge();"));
+        $this->set_updatedcallback(function (){
+            cache::make('core', 'coursecontacts')->purge();
+        });
     }
 }
 
@@ -7973,9 +8036,7 @@ function admin_externalpage_setup($section, $extrabutton = '', array $extraurlpa
  * @return object admin_root object
  */
 function admin_get_root($reload=false, $requirefulltree=true) {
-    global $CFG, $DB, $OUTPUT;
-
-    static $ADMIN = NULL;
+    global $CFG, $DB, $OUTPUT, $ADMIN;
 
     if (is_null($ADMIN)) {
     // create the admin tree!
@@ -8013,12 +8074,16 @@ function admin_get_root($reload=false, $requirefulltree=true) {
 
 /**
  * This function applies default settings.
+ * Because setting the defaults of some settings can enable other settings,
+ * this function is called recursively until no more new settings are found.
  *
  * @param object $node, NULL means complete tree, null by default
- * @param bool $unconditional if true overrides all values with defaults, null buy default
+ * @param bool $unconditional if true overrides all values with defaults, true by default
+ * @param array $admindefaultsettings default admin settings to apply. Used recursively
+ * @param array $settingsoutput The names and values of the changed settings. Used recursively
+ * @return array $settingsoutput The names and values of the changed settings
  */
-function admin_apply_default_settings($node=NULL, $unconditional=true) {
-    global $CFG;
+function admin_apply_default_settings($node=null, $unconditional=true, $admindefaultsettings=array(), $settingsoutput=array()) {
 
     if (is_null($node)) {
         core_plugin_manager::reset_caches();
@@ -8028,26 +8093,46 @@ function admin_apply_default_settings($node=NULL, $unconditional=true) {
     if ($node instanceof admin_category) {
         $entries = array_keys($node->children);
         foreach ($entries as $entry) {
-            admin_apply_default_settings($node->children[$entry], $unconditional);
+            $settingsoutput = admin_apply_default_settings(
+                    $node->children[$entry], $unconditional, $admindefaultsettings, $settingsoutput
+                    );
         }
 
     } else if ($node instanceof admin_settingpage) {
-            foreach ($node->settings as $setting) {
-                if (!$unconditional and !is_null($setting->get_setting())) {
-                //do not override existing defaults
-                    continue;
-                }
-                $defaultsetting = $setting->get_defaultsetting();
-                if (is_null($defaultsetting)) {
-                // no value yet - default maybe applied after admin user creation or in upgradesettings
-                    continue;
-                }
+        foreach ($node->settings as $setting) {
+            if (!$unconditional and !is_null($setting->get_setting())) {
+                // Do not override existing defaults.
+                continue;
+            }
+            $defaultsetting = $setting->get_defaultsetting();
+            if (is_null($defaultsetting)) {
+                // No value yet - default maybe applied after admin user creation or in upgradesettings.
+                continue;
+            }
+
+            $settingname = $node->name . '_' . $setting->name; // Get a unique name for the setting.
+
+            if (!array_key_exists($settingname, $admindefaultsettings)) {  // Only update a setting if not already processed.
+                $admindefaultsettings[$settingname] = $settingname;
+                $settingsoutput[$settingname] = $defaultsetting;
+
+                // Set the default for this setting.
                 $setting->write_setting($defaultsetting);
                 $setting->write_setting_flags(null);
+            } else {
+                unset($admindefaultsettings[$settingname]); // Remove processed settings.
             }
         }
+    }
+
+    // Call this function recursively until all settings are processed.
+    if (($node instanceof admin_root) && (!empty($admindefaultsettings))) {
+        $settingsoutput = admin_apply_default_settings(null, $unconditional, $admindefaultsettings, $settingsoutput);
+    }
     // Just in case somebody modifies the list of active plugins directly.
     core_plugin_manager::reset_caches();
+
+    return $settingsoutput;
 }
 
 /**
@@ -8122,20 +8207,24 @@ function admin_find_write_settings($node, $data) {
     }
 
     if ($node instanceof admin_category) {
-        $entries = array_keys($node->children);
-        foreach ($entries as $entry) {
-            $return = array_merge($return, admin_find_write_settings($node->children[$entry], $data));
+        if ($node->check_access()) {
+            $entries = array_keys($node->children);
+            foreach ($entries as $entry) {
+                $return = array_merge($return, admin_find_write_settings($node->children[$entry], $data));
+            }
         }
 
     } else if ($node instanceof admin_settingpage) {
+        if ($node->check_access()) {
             foreach ($node->settings as $setting) {
                 $fullname = $setting->get_full_name();
                 if (array_key_exists($fullname, $data)) {
                     $return[$fullname] = $setting;
                 }
             }
-
         }
+
+    }
 
     return $return;
 }
@@ -8182,6 +8271,15 @@ function admin_search_settings_html($query) {
             continue;
         }
 
+        // Locate the page in the admin root and populate its visiblepath attribute.
+        $path = array();
+        $located = $adminroot->locate($page->name, true);
+        if ($located) {
+            foreach ($located->visiblepath as $pathitem) {
+                array_unshift($path, (string) $pathitem);
+            }
+        }
+
         $sectionsettings = [];
         if (!empty($settings)) {
             foreach ($settings as $setting) {
@@ -8193,6 +8291,7 @@ function admin_search_settings_html($query) {
                     $data = $adminroot->errors[$fullname]->data;
                 } else {
                     $data = $setting->get_setting();
+                    $data = $setting->get_setting();
                 // do not use defaults if settings not available - upgradesettings handles the defaults!
                 }
                 $sectionsettings[] = $setting->output_html($data, $query);
@@ -8201,6 +8300,7 @@ function admin_search_settings_html($query) {
 
         $tpldata->results[] = (object) [
             'title' => $heading,
+            'path' => $path,
             'url' => $headingurl->out(false),
             'settings' => $sectionsettings
         ];
@@ -8742,17 +8842,14 @@ class admin_setting_enablemobileservice extends admin_setting_configcheckbox {
      * @return string XHTML
      */
     public function output_html($data, $query='') {
-        global $CFG, $OUTPUT;
+        global $OUTPUT;
         $html = parent::output_html($data, $query);
 
         if ((string)$data === $this->yes) {
-            require_once($CFG->dirroot . "/lib/filelib.php");
-            $curl = new curl();
-            $httpswwwroot = str_replace('http:', 'https:', $CFG->wwwroot); //force https url
-            $curl->head($httpswwwroot . "/login/index.php");
-            $info = $curl->get_info();
-            if (empty($info['http_code']) or ($info['http_code'] >= 400)) {
-               $html .= $OUTPUT->notification(get_string('nohttpsformobilewarning', 'admin'));
+            $notifications = tool_mobile\api::get_potential_config_issues(); // Safe to call, plugin available if we reach here.
+            foreach ($notifications as $notification) {
+                $message = get_string($notification[0], $notification[1]);
+                $html .= $OUTPUT->notification($message, \core\output\notification::NOTIFY_WARNING);
             }
         }
 
@@ -9520,83 +9617,28 @@ class admin_setting_managewebservicetokens extends admin_setting {
      * @return string
      */
     public function output_html($data, $query='') {
-        global $CFG, $OUTPUT, $DB, $USER;
+        global $CFG, $OUTPUT;
 
-        // display strings
-        $stroperation = get_string('operation', 'webservice');
-        $strtoken = get_string('token', 'webservice');
-        $strservice = get_string('service', 'webservice');
-        $struser = get_string('user');
-        $strcontext = get_string('context', 'webservice');
-        $strvaliduntil = get_string('validuntil', 'webservice');
-        $striprestriction = get_string('iprestriction', 'webservice');
+        require_once($CFG->dirroot . '/webservice/classes/token_table.php');
+        $baseurl = new moodle_url('/' . $CFG->admin . '/settings.php?section=webservicetokens');
 
         $return = $OUTPUT->box_start('generalbox webservicestokenui');
 
-        $table = new html_table();
-        $table->head  = array($strtoken, $struser, $strservice, $striprestriction, $strvaliduntil, $stroperation);
-        $table->colclasses = array('leftalign', 'leftalign', 'leftalign', 'centeralign', 'centeralign', 'centeralign');
-        $table->id = 'webservicetokens';
-        $table->attributes['class'] = 'admintable generaltable';
+        if (has_capability('moodle/webservice:managealltokens', context_system::instance())) {
+            $return .= \html_writer::div(get_string('onlyseecreatedtokens', 'webservice'));
+        }
+
+        $table = new \webservice\token_table('webservicetokens');
+        $table->define_baseurl($baseurl);
+        $table->attributes['class'] = 'admintable generaltable'; // Any need changing?
         $table->data  = array();
+        ob_start();
+        $table->out(10, false);
+        $tablehtml = ob_get_contents();
+        ob_end_clean();
+        $return .= $tablehtml;
 
         $tokenpageurl = "$CFG->wwwroot/$CFG->admin/webservice/tokens.php?sesskey=" . sesskey();
-
-        //TODO: in order to let the administrator delete obsolete token, split this request in multiple request or use LEFT JOIN
-
-        //here retrieve token list (including linked users firstname/lastname and linked services name)
-        $sql = "SELECT t.id, t.token, u.id AS userid, u.firstname, u.lastname, s.name, t.iprestriction, t.validuntil, s.id AS serviceid
-                  FROM {external_tokens} t, {user} u, {external_services} s
-                 WHERE t.creatorid=? AND t.tokentype = ? AND s.id = t.externalserviceid AND t.userid = u.id";
-        $tokens = $DB->get_records_sql($sql, array($USER->id, EXTERNAL_TOKEN_PERMANENT));
-        if (!empty($tokens)) {
-            foreach ($tokens as $token) {
-                //TODO: retrieve context
-
-                $delete = "<a href=\"".$tokenpageurl."&amp;action=delete&amp;tokenid=".$token->id."\">";
-                $delete .= get_string('delete')."</a>";
-
-                $validuntil = '';
-                if (!empty($token->validuntil)) {
-                    $validuntil = userdate($token->validuntil, get_string('strftimedatetime', 'langconfig'));
-                }
-
-                $iprestriction = '';
-                if (!empty($token->iprestriction)) {
-                    $iprestriction = $token->iprestriction;
-                }
-
-                $userprofilurl = new moodle_url('/user/profile.php?id='.$token->userid);
-                $useratag = html_writer::start_tag('a', array('href' => $userprofilurl));
-                $useratag .= $token->firstname." ".$token->lastname;
-                $useratag .= html_writer::end_tag('a');
-
-                //check user missing capabilities
-                require_once($CFG->dirroot . '/webservice/lib.php');
-                $webservicemanager = new webservice();
-                $usermissingcaps = $webservicemanager->get_missing_capabilities_by_users(
-                        array(array('id' => $token->userid)), $token->serviceid);
-
-                if (!is_siteadmin($token->userid) and
-                        array_key_exists($token->userid, $usermissingcaps)) {
-                    $missingcapabilities = implode(', ',
-                            $usermissingcaps[$token->userid]);
-                    if (!empty($missingcapabilities)) {
-                        $useratag .= html_writer::tag('div',
-                                        get_string('usermissingcaps', 'webservice',
-                                                $missingcapabilities)
-                                        . '&nbsp;' . $OUTPUT->help_icon('missingcaps', 'webservice'),
-                                        array('class' => 'missingcaps'));
-                    }
-                }
-
-                $table->data[] = array($token->token, $useratag, $token->name, $iprestriction, $validuntil, $delete);
-            }
-
-            $return .= html_writer::table($table);
-        } else {
-            $return .= get_string('notoken', 'webservice');
-        }
 
         $return .= $OUTPUT->box_end();
         // add a token to the table
@@ -10618,7 +10660,7 @@ class admin_setting_filetypes extends admin_setting_configtext {
 
         $PAGE->requires->js_call_amd('core_form/filetypes', 'init', [
             $this->get_id(),
-            $this->visiblename,
+            $this->visiblename->out(),
             $this->onlytypes,
             $this->allowall,
         ]);
@@ -10634,6 +10676,96 @@ class admin_setting_filetypes extends admin_setting_configtext {
      * @return bool True because these values are not RTL compatible.
      */
     public function get_force_ltr() {
+        return true;
+    }
+}
+
+/**
+ * Used to validate the content and format of the age of digital consent map and ensuring it is parsable.
+ *
+ * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @copyright 2018 Mihail Geshoski <mihail@moodle.com>
+ */
+class admin_setting_agedigitalconsentmap extends admin_setting_configtextarea {
+
+    /**
+     * Constructor.
+     *
+     * @param string $name
+     * @param string $visiblename
+     * @param string $description
+     * @param mixed $defaultsetting string or array
+     * @param mixed $paramtype
+     * @param string $cols
+     * @param string $rows
+     */
+    public function __construct($name, $visiblename, $description, $defaultsetting, $paramtype = PARAM_RAW,
+                                $cols = '60', $rows = '8') {
+        parent::__construct($name, $visiblename, $description, $defaultsetting, $paramtype, $cols, $rows);
+        // Pre-set force LTR to false.
+        $this->set_force_ltr(false);
+    }
+
+    /**
+     * Validate the content and format of the age of digital consent map to ensure it is parsable.
+     *
+     * @param string $data The age of digital consent map from text field.
+     * @return mixed bool true for success or string:error on failure.
+     */
+    public function validate($data) {
+        if (empty($data)) {
+            return true;
+        }
+
+        try {
+            \core_auth\digital_consent::parse_age_digital_consent_map($data);
+        } catch (\moodle_exception $e) {
+            return get_string('invalidagedigitalconsent', 'admin', $e->getMessage());
+        }
+
+        return true;
+    }
+}
+
+/**
+ * Selection of plugins that can work as site policy handlers
+ *
+ * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @copyright 2018 Marina Glancy
+ */
+class admin_settings_sitepolicy_handler_select extends admin_setting_configselect {
+
+    /**
+     * Constructor
+     * @param string $name unique ascii name, either 'mysetting' for settings that in config, or 'myplugin/mysetting'
+     *        for ones in config_plugins.
+     * @param string $visiblename localised
+     * @param string $description long localised info
+     * @param string $defaultsetting
+     */
+    public function __construct($name, $visiblename, $description, $defaultsetting = '') {
+        parent::__construct($name, $visiblename, $description, $defaultsetting, null);
+    }
+
+    /**
+     * Lazy-load the available choices for the select box
+     */
+    public function load_choices() {
+        if (during_initial_install()) {
+            return false;
+        }
+        if (is_array($this->choices)) {
+            return true;
+        }
+
+        $this->choices = ['' => new lang_string('sitepolicyhandlercore', 'core_admin')];
+        $manager = new \core_privacy\local\sitepolicy\manager();
+        $plugins = $manager->get_all_handlers();
+        foreach ($plugins as $pname => $unused) {
+            $this->choices[$pname] = new lang_string('sitepolicyhandlerplugin', 'core_admin',
+                ['name' => new lang_string('pluginname', $pname), 'component' => $pname]);
+        }
+
         return true;
     }
 }

@@ -17,7 +17,7 @@
 /**
  * Unit tests for /lib/gradelib.php.
  *
- * @package   core_grade
+ * @package   core_grades
  * @category  phpunit
  * @copyright 2012 Andrew Davis
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
@@ -55,5 +55,53 @@ class core_gradelib_testcase extends advanced_testcase {
         $modinstance->modname = 'assign';
 
         $this->assertTrue(grade_update_mod_grades($modinstance));
+    }
+
+    /**
+     * Tests the function remove_grade_letters().
+     */
+    public function test_remove_grade_letters() {
+        global $DB;
+
+        $this->resetAfterTest();
+
+        $course = $this->getDataGenerator()->create_course();
+
+        $context = context_course::instance($course->id);
+
+        // Add a grade letter to the course.
+        $letter = new stdClass();
+        $letter->letter = 'M';
+        $letter->lowerboundary = '100';
+        $letter->contextid = $context->id;
+        $DB->insert_record('grade_letters', $letter);
+
+        remove_grade_letters($context, false);
+
+        // Confirm grade letter was deleted.
+        $this->assertEquals(0, $DB->count_records('grade_letters'));
+    }
+
+    /**
+     * Tests the function grade_course_category_delete().
+     */
+    public function test_grade_course_category_delete() {
+        global $DB;
+
+        $this->resetAfterTest();
+
+        $category = core_course_category::create(array('name' => 'Cat1'));
+
+        // Add a grade letter to the category.
+        $letter = new stdClass();
+        $letter->letter = 'M';
+        $letter->lowerboundary = '100';
+        $letter->contextid = context_coursecat::instance($category->id)->id;
+        $DB->insert_record('grade_letters', $letter);
+
+        grade_course_category_delete($category->id, '', false);
+
+        // Confirm grade letter was deleted.
+        $this->assertEquals(0, $DB->count_records('grade_letters'));
     }
 }

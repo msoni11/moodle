@@ -208,10 +208,10 @@ class external_api {
             // Do not allow access to write or delete webservices as a public user.
             if ($externalfunctioninfo->loginrequired) {
                 if (defined('NO_MOODLE_COOKIES') && NO_MOODLE_COOKIES && !PHPUNIT_TEST) {
-                    throw new moodle_exception('servicenotavailable', 'webservice');
+                    throw new moodle_exception('servicerequireslogin', 'webservice');
                 }
                 if (!isloggedin()) {
-                    throw new moodle_exception('servicenotavailable', 'webservice');
+                    throw new moodle_exception('servicerequireslogin', 'webservice');
                 } else {
                     require_sesskey();
                 }
@@ -221,11 +221,28 @@ class external_api {
             $params = call_user_func($callable,
                                      $externalfunctioninfo->parameters_desc,
                                      $args);
+            $params = array_values($params);
 
-            // Execute - gulp!
-            $callable = array($externalfunctioninfo->classname, $externalfunctioninfo->methodname);
-            $result = call_user_func_array($callable,
-                                           array_values($params));
+            // Allow any Moodle plugin a chance to override this call. This is a convenient spot to
+            // make arbitrary behaviour customisations. The overriding plugin could call the 'real'
+            // function first and then modify the results, or it could do a completely separate
+            // thing.
+            $callbacks = get_plugins_with_function('override_webservice_execution');
+            $result = false;
+            foreach ($callbacks as $plugintype => $plugins) {
+                foreach ($plugins as $plugin => $callback) {
+                    $result = $callback($externalfunctioninfo, $params);
+                    if ($result !== false) {
+                        break;
+                    }
+                }
+            }
+
+            // If the function was not overridden, call the real one.
+            if ($result === false) {
+                $callable = array($externalfunctioninfo->classname, $externalfunctioninfo->methodname);
+                $result = call_user_func_array($callable, $params);
+            }
 
             // Validate the return parameters.
             if ($externalfunctioninfo->returns_desc !== null) {
@@ -380,8 +397,9 @@ class external_api {
                     return (bool)$response;
                 }
             }
+            $responsetype = gettype($response);
             $debuginfo = 'Invalid external api response: the value is "' . $response .
-                    '", the server was expecting "' . $description->type . '" type';
+                    '" of PHP type "' . $responsetype . '", the server was expecting "' . $description->type . '" type';
             try {
                 return validate_param($response, $description->type, $description->allownull, $debuginfo);
             } catch (invalid_parameter_exception $e) {
@@ -508,6 +526,37 @@ class external_api {
             throw new invalid_parameter_exception('Missing parameters, please provide either context level with instance id or contextid');
         }
     }
+
+    /**
+     * Returns a prepared structure to use a context parameters.
+     * @return external_single_structure
+     */
+    protected static function get_context_parameters() {
+        $id = new external_value(
+            PARAM_INT,
+            'Context ID. Either use this value, or level and instanceid.',
+            VALUE_DEFAULT,
+            0
+        );
+        $level = new external_value(
+            PARAM_ALPHA,
+            'Context level. To be used with instanceid.',
+            VALUE_DEFAULT,
+            ''
+        );
+        $instanceid = new external_value(
+            PARAM_INT,
+            'Context instance ID. To be used with level',
+            VALUE_DEFAULT,
+            0
+        );
+        return new external_single_structure(array(
+            'contextid' => $id,
+            'contextlevel' => $level,
+            'instanceid' => $instanceid,
+        ));
+    }
+
 }
 
 /**
@@ -865,21 +914,25 @@ function external_validate_format($format) {
  * @param string $str The string to be filtered. Should be plain text, expect
  * possibly for multilang tags.
  * @param boolean $striplinks To strip any link in the result text. Moodle 1.8 default changed from false to true! MDL-8713
- * @param int $contextid The id of the context for the string (affects filters).
+ * @param context|int $contextorid The id of the context for the string or the context (affects filters).
  * @param array $options options array/object or courseid
  * @return string text
  * @since Moodle 3.0
  */
-function external_format_string($str, $contextid, $striplinks = true, $options = array()) {
+function external_format_string($str, $contextorid, $striplinks = true, $options = array()) {
 
     // Get settings (singleton).
     $settings = external_settings::get_instance();
-    if (empty($contextid)) {
+    if (empty($contextorid)) {
         throw new coding_exception('contextid is required');
     }
 
     if (!$settings->get_raw()) {
-        $context = context::instance_by_id($contextid);
+        if (is_object($contextorid) && is_a($contextorid, 'context')) {
+            $context = $contextorid;
+        } else {
+            $context = context::instance_by_id($contextorid);
+        }
         $options['context'] = $context;
         $options['filter'] = isset($options['filter']) && !$options['filter'] ? false : $settings->get_filter();
         $str = format_string($str, $striplinks, $options);
@@ -913,7 +966,7 @@ function external_format_string($str, $contextid, $striplinks = true, $options =
  *
  * @param string $text The content that may contain ULRs in need of rewriting.
  * @param int $textformat The text format.
- * @param int $contextid This parameter and the next two identify the file area to use.
+ * @param context|int $contextorid This parameter and the next two identify the file area to use.
  * @param string $component
  * @param string $filearea helps identify the file area.
  * @param int $itemid helps identify the file area.
@@ -922,17 +975,28 @@ function external_format_string($str, $contextid, $striplinks = true, $options =
  * @since Moodle 2.3
  * @since Moodle 3.2 component, filearea and itemid are optional parameters
  */
-function external_format_text($text, $textformat, $contextid, $component = null, $filearea = null, $itemid = null,
+function external_format_text($text, $textformat, $contextorid, $component = null, $filearea = null, $itemid = null,
                                 $options = null) {
     global $CFG;
 
     // Get settings (singleton).
     $settings = external_settings::get_instance();
 
+    if (is_object($contextorid) && is_a($contextorid, 'context')) {
+        $context = $contextorid;
+        $contextid = $context->id;
+    } else {
+        $context = null;
+        $contextid = $contextorid;
+    }
+
     if ($component and $filearea and $settings->get_fileurl()) {
         require_once($CFG->libdir . "/filelib.php");
         $text = file_rewrite_pluginfile_urls($text, $settings->get_file(), $contextid, $component, $filearea, $itemid);
     }
+
+    // Note that $CFG->forceclean does not apply here if the client requests for the raw database content.
+    // This is consistent with web clients that are still able to load non-cleaned text into editors, too.
 
     if (!$settings->get_raw()) {
         $options = (array)$options;
@@ -948,7 +1012,7 @@ function external_format_text($text, $textformat, $contextid, $component = null,
 
         $options['filter'] = isset($options['filter']) && !$options['filter'] ? false : $settings->get_filter();
         $options['para'] = isset($options['para']) ? $options['para'] : false;
-        $options['context'] = context::instance_by_id($contextid);
+        $options['context'] = !is_null($context) ? $context : context::instance_by_id($contextid);
         $options['allowid'] = isset($options['allowid']) ? $options['allowid'] : true;
 
         $text = format_text($text, $textformat, $options);
@@ -968,7 +1032,7 @@ function external_format_text($text, $textformat, $contextid, $component = null,
  * @throws moodle_exception
  */
 function external_generate_token_for_current_user($service) {
-    global $DB, $USER;
+    global $DB, $USER, $CFG;
 
     core_user::require_active_user($USER, true, true);
 
@@ -1052,8 +1116,8 @@ function external_generate_token_for_current_user($service) {
             $token->creatorid = $USER->id;
             $token->timecreated = time();
             $token->externalserviceid = $service->id;
-            // MDL-43119 Token valid for 3 months (12 weeks).
-            $token->validuntil = $token->timecreated + 12 * WEEKSECS;
+            // By default tokens are valid for 12 weeks.
+            $token->validuntil = $token->timecreated + $CFG->tokenduration;
             $token->iprestriction = null;
             $token->sid = null;
             $token->lastaccess = null;
@@ -1131,6 +1195,9 @@ class external_settings {
 
     /** @var string In which file should the urls be rewritten */
     private $file = 'webservice/pluginfile.php';
+
+    /** @var string The session lang */
+    private $lang = '';
 
     /**
      * Constructor - protected - can not be instanciated
@@ -1233,6 +1300,24 @@ class external_settings {
      */
     public function get_file() {
         return $this->file;
+    }
+
+    /**
+     * Set lang
+     *
+     * @param string $lang
+     */
+    public function set_lang($lang) {
+        $this->lang = $lang;
+    }
+
+    /**
+     * Get lang
+     *
+     * @return string
+     */
+    public function get_lang() {
+        return $this->lang;
     }
 }
 

@@ -10,7 +10,7 @@
 }
 
 .mform .containsadvancedelements .advanced.show {
-    display: block;
+    display: flex;
 }
 
 #adminsettings span.error {
@@ -27,12 +27,30 @@
     .custom-select {
         max-width: 100%;
     }
+    .form-group {
+        margin: 0.1rem 0.25rem 0.1rem 0;
+    }
+    br + label {
+        justify-content: flex-start;
+        width: 100%;
+    }
+}
+
+.unresponsive.mform .form-inline,
+.unresponsive.mform .form-inline label {
+    display: inline-flex;
+}
+
+#jump-to-activity.custom-select {
+    width: 100%;
 }
 
 .mform fieldset {
-    margin-left: $spacer * 1.5;
     margin-bottom: $spacer / 2;
     border-bottom: $border-width solid $table-border-color;
+}
+.mform > .form-group {
+    margin-left: $spacer * 1.5;
 }
 
 .editor_atto_content.form-control {
@@ -41,20 +59,6 @@
 
 #adminsettings .form-control[size] {
     width: auto;
-}
-
-.mform fieldset.collapsible legend a.fheader {
-    padding: 0 5px 0 ($spacer * 1.5);
-    margin-left: -($spacer * 1.5);
-    background: url([[pix:t/expanded]]) 0 center no-repeat;
-}
-
-.mform fieldset.collapsed legend a.fheader {
-    /*rtl:raw:
-    background-image: url([[pix:t/collapsed_rtl]]);
-    */
-    /*rtl:remove*/
-    background-image: url([[pix:t/collapsed]]);
 }
 
 .jsenabled .mform .collapsed .fcontainer {
@@ -96,6 +100,10 @@ input#id_externalurl {
 
 .form-item .form-inline {
     display: inline;
+}
+
+.form-inline label:not(.sr-only):not(.accesshide) + select {
+    margin-left: 0.5rem;
 }
 
 .formsettingheading .form-horizontal {
@@ -153,12 +161,12 @@ div.backup-section + form,
 // I think this could be avoided (or at least tidied up) ifr
 // we used HTML5 input types like url, phone, email, number etc.
 /* rtl:ignore */
-.mform .fitem .felement input[name=email],
-.mform .fitem .felement input[name=email2],
-.mform .fitem .felement input[name=url],
-.mform .fitem .felement input[name=idnumber],
-.mform .fitem .felement input[name=phone1],
-.mform .fitem .felement input[name=phone2] {
+.mform .fitem .felement input[name="email"],
+.mform .fitem .felement input[name="email2"],
+.mform .fitem .felement input[name="url"],
+.mform .fitem .felement input[name="idnumber"],
+.mform .fitem .felement input[name="phone1"],
+.mform .fitem .felement input[name="phone2"] {
     text-align: left;
     direction: ltr;
 }
@@ -224,6 +232,15 @@ fieldset.coursesearchbox label {
     display: none;
 }
 
+.availability-field {
+    label {
+        display: inline-flex;
+    }
+    .availability-group label {
+        vertical-align: top;
+    }
+}
+
 .availability-eye {
     clear: left;
     float: left;
@@ -233,17 +250,36 @@ fieldset.coursesearchbox label {
     float: left;
     @include border-radius($card-border-radius);
     border: $card-border-width solid $card-border-color;
-    padding: $card-spacer-x / 2;
-    margin-left: $card-spacer-x / 2;
+    padding: 1rem;
+    margin-top: 0.5rem;
+}
+.availability-plugincontrols,
+.availability-childlist .availability-inner {
+    margin-left: .625rem;
 }
 .availability-field .availability-plugincontrols .availability-group select {
     max-width: 12rem;
 }
 
 /* Custom styles for autocomplete form element */
+/* These styles reserve a standard amount of space in the DOM to avoid flicker when the original select element is replaced */
+[data-fieldtype=autocomplete] select,
+[data-fieldtype=tags] select,
+.form-autocomplete-original-select {
+    visibility: hidden;
+    overflow: hidden;
+    width: 15rem;
+    height: 44px;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    margin-top: $font-size-base * $line-height-base + $input-padding-y-sm;
+    vertical-align: bottom;
+}
 .form-autocomplete-selection {
-    margin: 0.2em;
-    min-height: 21px;
+    margin: $input-padding-y-sm;
+    // Padding top and bottom, plus mb-1 and the 100% lineheight.
+    min-height: 2 * $input-padding-y-sm + 2 * $font-size-base;
 }
 
 .form-autocomplete-multiple [role=listitem] {
@@ -294,9 +330,10 @@ fieldset.coursesearchbox label {
     outline: none;
 }
 /** Undo some bootstrap things */
-.form-autocomplete-selection + .form-control {
+.form-autocomplete-selection + input.form-control {
     width: auto;
     display: inline-block;
+    vertical-align: middle;
 }
 
 .form-autocomplete-selection [data-active-selection=true] {
@@ -310,12 +347,31 @@ select[size],
 select[multiple] {
     overflow: auto;
 }
-select[size=1] {
+
+select[size="1"] {
     overflow: visible;
 }
 
 textarea[data-auto-rows] {
     overflow-x: hidden;
+}
+
+/** Display elements under labels in vertical forms regardless of the screen size. */
+.mform.full-width-labels {
+    .fitem.row {
+        margin-left: 0;
+        margin-right: 0;
+        & > .col-md-3,
+        & > .col-md-9 {
+            float: none;
+            width: inherit;
+            padding-right: 0;
+            padding-left: 0;
+        }
+        &.femptylabel > .col-md-3 {
+            display: none;
+        }
+    }
 }
 
 /** Allow wrapping an mform in a div with the form-inline class to have an inline, responsive form. */
@@ -354,8 +410,8 @@ textarea[data-auto-rows] {
     background-image: $form-icon-danger;
     padding-right: ($input-padding-x * 3);
     background-repeat: no-repeat;
-    background-position: center right ($input-height / 4);
-    background-size: ($input-height / 2) ($input-height / 2);
+    background-position: center right 1rem;
+    background-size: 1.5rem;
 }
 
 // Styles for the JS file types browser provided by the "filetypes" element.
@@ -364,5 +420,35 @@ textarea[data-auto-rows] {
     [aria-expanded="false"] [data-filetypesbrowserfeature="hideifcollapsed"],
     [aria-expanded="true"] [data-filetypesbrowserfeature="hideifexpanded"] {
         display: none;
+    }
+}
+
+// The autocomplete popup needs a display:block container to correctly position to popup.
+.form-inline[data-fieldtype="autocomplete"],
+.form-inline[data-fieldtype="tags"] {
+    display: block;
+}
+
+// Show editor at 100% width by default.
+[data-fieldtype="editor"] > div {
+    flex-grow: 1;
+}
+
+@include media-breakpoint-up(sm) {
+    .mform fieldset {
+        margin-left: $spacer * 1.5;
+    }
+    .mform fieldset.collapsible legend a.fheader {
+        padding: 0 5px 0 ($spacer * 1.5);
+        margin-left: -($spacer * 1.5);
+        background: url([[pix:t/expanded]]) 0 center no-repeat;
+    }
+
+    .mform fieldset.collapsed legend a.fheader {
+        /*rtl:raw:
+        background-image: url([[pix:t/collapsed_rtl]]);
+        */
+        /*rtl:remove*/
+        background-image: url([[pix:t/collapsed]]);
     }
 }

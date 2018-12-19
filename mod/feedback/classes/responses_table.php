@@ -113,8 +113,12 @@ class mod_feedback_responses_table extends table_sql {
      */
     protected function init($group = 0) {
 
-        $tablecolumns = array('userpic', 'fullname');
-        $tableheaders = array(get_string('userpic'), get_string('fullnameuser'));
+        $tablecolumns = array('userpic', 'fullname', 'groups');
+        $tableheaders = array(
+            get_string('userpic'),
+            get_string('fullnameuser'),
+            get_string('groups')
+        );
 
         $extrafields = get_extra_user_fields($this->get_context());
         $ufields = user_picture::fields('u', $extrafields, $this->useridfield);
@@ -259,6 +263,21 @@ class mod_feedback_responses_table extends table_sql {
     }
 
     /**
+     * Prepares column groups for display
+     * @param array $row
+     * @return string
+     */
+    public function col_groups($row) {
+        $groups = '';
+        if ($usergrps = groups_get_all_groups($this->feedbackstructure->get_cm()->course, $row->userid, 0, 'name')) {
+            foreach ($usergrps as $group) {
+                $groups .= format_string($group->name). ' ';
+            }
+        }
+        return trim($groups);
+    }
+
+    /**
      * Adds common values to the table that do not change the number or order of entries and
      * are only needed when outputting or downloading data.
      */
@@ -267,7 +286,7 @@ class mod_feedback_responses_table extends table_sql {
         $tableheaders = $this->headers;
 
         $items = $this->feedbackstructure->get_items(true);
-        if (!$this->is_downloading()) {
+        if (!$this->is_downloading() && !$this->buildforexternal) {
             // In preview mode do not show all columns or the page becomes unreadable.
             // The information message will be displayed to the teacher that the rest of the data can be viewed when downloading.
             $items = array_slice($items, 0, self::PREVIEWCOLUMNSLIMIT, true);
@@ -504,8 +523,6 @@ class mod_feedback_responses_table extends table_sql {
             }
         }
         $this->build_table_chunk($chunk, $columnsgroups);
-
-        $this->rawdata->close();
     }
 
     /**
@@ -617,8 +634,8 @@ class mod_feedback_responses_table extends table_sql {
      */
     public function export_external_structure($page = 0, $perpage = 0) {
 
-        $this->add_all_values_to_output();
         $this->buildforexternal = true;
+        $this->add_all_values_to_output();
         // Set-up.
         $this->setup();
         // Override values, if needed.
@@ -631,6 +648,7 @@ class mod_feedback_responses_table extends table_sql {
         }
         $this->query_db($this->pagesize, false);
         $this->build_table();
+        $this->close_recordset();
         return $this->dataforexternal;
     }
 }

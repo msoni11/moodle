@@ -138,7 +138,9 @@ class stored_file {
     protected function update($dataobject) {
         global $DB;
         $updatereferencesneeded = false;
+        $updatemimetype = false;
         $keys = array_keys((array)$this->file_record);
+        $filepreupdate = clone($this->file_record);
         foreach ($dataobject as $field => $value) {
             if (in_array($field, $keys)) {
                 if ($field == 'contextid' and (!is_number($value) or $value < 1)) {
@@ -201,6 +203,10 @@ class stored_file {
                     $updatereferencesneeded = true;
                 }
 
+                if ($updatereferencesneeded || ($field === 'filename' && $this->file_record->filename != $value)) {
+                    $updatemimetype = true;
+                }
+
                 // adding the field
                 $this->file_record->$field = $value;
             } else {
@@ -208,13 +214,26 @@ class stored_file {
             }
         }
         // Validate mimetype field
-        $mimetype = $this->filesystem->mimetype_from_storedfile($this);
-        $this->file_record->mimetype = $mimetype;
+        if ($updatemimetype) {
+            $mimetype = $this->filesystem->mimetype_from_storedfile($this);
+            $this->file_record->mimetype = $mimetype;
+        }
 
         $DB->update_record('files', $this->file_record);
         if ($updatereferencesneeded) {
             // Either filesize or contenthash of this file have changed. Update all files that reference to it.
             $this->fs->update_references_to_storedfile($this);
+        }
+
+        // Callback for file update.
+        if (!$this->is_directory()) {
+            if ($pluginsfunction = get_plugins_with_function('after_file_updated')) {
+                foreach ($pluginsfunction as $plugintype => $plugins) {
+                    foreach ($plugins as $pluginfunction) {
+                        $pluginfunction($this->file_record, $filepreupdate);
+                    }
+                }
+            }
         }
     }
 
@@ -285,7 +304,9 @@ class stored_file {
         $filerecord->filesize = $newfile->get_filesize();
         $filerecord->referencefileid = $newfile->get_referencefileid();
         $filerecord->userid = $newfile->get_userid();
+        $oldcontenthash = $this->get_contenthash();
         $this->update($filerecord);
+        $this->filesystem->remove_file($oldcontenthash);
     }
 
     /**
@@ -375,6 +396,17 @@ class stored_file {
             $DB->delete_records('files', array('id'=>$this->file_record->id));
 
             $transaction->allow_commit();
+
+            if (!$this->is_directory()) {
+                // Callback for file deletion.
+                if ($pluginsfunction = get_plugins_with_function('after_file_deleted')) {
+                    foreach ($pluginsfunction as $plugintype => $plugins) {
+                        foreach ($plugins as $pluginfunction) {
+                            $pluginfunction($this->file_record);
+                        }
+                    }
+                }
+            }
         }
 
         // Move pool file to trash if content not needed any more.
@@ -505,6 +537,18 @@ class stored_file {
      * @return bool success
      */
     public function archive_file(file_archive $filearch, $archivepath) {
+        if ($this->repository) {
+            $this->sync_external_file();
+            if ($this->compare_to_string('')) {
+                // This file is not stored locally - attempt to retrieve it from the repository.
+                // This may happen if the repository deliberately does not fetch files, or if there is a failure with the sync.
+                $fileinfo = $this->repository->get_file($this->get_reference());
+                if (isset($fileinfo['path'])) {
+                    return $filearch->add_file_from_pathname($archivepath, $fileinfo['path']);
+                }
+            }
+        }
+
         return $this->filesystem->add_storedfile_to_archive($this, $filearch, $archivepath);
     }
 
@@ -563,6 +607,24 @@ class stored_file {
         $filepath = ($filepath === '') ? '/' : "/$filepath/";
 
         return $this->fs->create_directory($this->file_record->contextid, $this->file_record->component, $this->file_record->filearea, $this->file_record->itemid, $filepath);
+    }
+
+    /**
+     * Set synchronised content from file.
+     *
+     * @param string $path Path to the file.
+     */
+    public function set_synchronised_content_from_file($path) {
+        $this->fs->synchronise_stored_file_from_file($this, $path, $this->file_record);
+    }
+
+    /**
+     * Set synchronised content from content.
+     *
+     * @param string $content File content.
+     */
+    public function set_synchronised_content_from_string($content) {
+        $this->fs->synchronise_stored_file_from_string($this, $content, $this->file_record);
     }
 
     /**
@@ -815,9 +877,20 @@ class stored_file {
      * @return int
      */
     public function set_sortorder($sortorder) {
+        $oldorder = $this->file_record->sortorder;
         $filerecord = new stdClass;
         $filerecord->sortorder = $sortorder;
         $this->update($filerecord);
+        if (!$this->is_directory()) {
+            // Callback for file sort order change.
+            if ($pluginsfunction = get_plugins_with_function('after_file_sorted')) {
+                foreach ($pluginsfunction as $plugintype => $plugins) {
+                    foreach ($plugins as $pluginfunction) {
+                        $pluginfunction($this->file_record, $oldorder, $sortorder);
+                    }
+                }
+            }
+        }
     }
 
     /**
@@ -990,6 +1063,9 @@ class stored_file {
      * @return  string|bool false if a problem occurs, the thumbnail image data otherwise
      */
     public function generate_image_thumbnail($width, $height) {
+        global $CFG;
+        require_once($CFG->libdir . '/gdlib.php');
+
         if (empty($width) or empty($height)) {
             return false;
         }

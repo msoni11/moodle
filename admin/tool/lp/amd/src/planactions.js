@@ -130,6 +130,11 @@ define(['jquery',
      * @return {Promise}
      */
     PlanActions.prototype._callAndRefresh = function(calls, planData) {
+        // Because this function causes a refresh, we must track the JS completion from start to finish to prevent
+        // stale reference issues in Behat.
+        var callKey = 'tool_lp/planactions:_callAndRefresh-' + Math.floor(Math.random() * Math.floor(1000));
+        M.util.js_pending(callKey);
+
         var self = this;
         calls.push({
             methodname: self._contextMethod,
@@ -141,7 +146,10 @@ define(['jquery',
             .then(function() {
                 return self._renderView(arguments[arguments.length - 1]);
             })
-            .fail(notification.exception);
+            .fail(notification.exception)
+            .always(function() {
+                return M.util.js_complete(callKey);
+            });
     };
 
     /**
@@ -229,7 +237,7 @@ define(['jquery',
                 notification.confirm(
                     strings[0], // Confirm.
                     strings[1], // Reopen plan X?
-                    strings[2], // reopen.
+                    strings[2], // Reopen.
                     strings[3], // Cancel.
                     function() {
                         self._doReopenPlan(planData);

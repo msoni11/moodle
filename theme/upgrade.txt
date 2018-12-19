@@ -1,16 +1,44 @@
 This files describes API changes in /theme/* themes,
 information provided here is intended especially for theme designer.
 
+=== 3.6 ===
+
+* The body tag has various browser-specific classes for those cases where some
+  browser-sniffing is unavoidable. This used not to recognised Microsoft Edge,
+  but now it does (class 'edge'). Also, both Safari and Chrome used to be
+  class 'safari', but now there are separate classes 'safari' and 'chrome'.
+  The body's class should change to match the browser:
+  - Google Chrome (Mac & Window): The body class should change from safari to chrome.
+  - Google Chrome (Android) : The body class should change from safari, android to chrome, android.
+  - Microsoft Edge: The body class should change from safari to edge.
+  - Mobile safari: The class ios should exist, safari class should be removed.
+* Remove class .safari styling from activity chooser dialog for theme boost and bootstrapbase.
+* The following functions and classes have been finally deprecated and can not be used anymore:
+  * css_is_colour()
+  * css_is_width()
+  * css_sort_by_count()
+  * core_course_renderer::add_modchoosertoggle()
+  * class css_optimiser
+
+=== 3.4 ===
+
+* There was a mustache template login.mustache in /lib/templates/ rendering the login form
+  and a template with the same name in /theme/boost/templates/ rendering the pagelayout "login".
+  To prevent misunderstanding when overriding one of these templates in a Boost child theme,
+  the first one was renamed to loginform.mustache - see MDL-58970.
+* The Boost flat navigation nodes now have several data-attributes which let plugin developers
+  access properties from the underlying navigation nodes in the browser - see MDL-59425.
+* Navigation between activities via a previous and next link was added to Boost, Clean and Bootstrapbase. This
+  is made possible by a new function core_renderer->activity_navigation().
+* Theme designers may now place the Reset tour on this page link where required by adding an empty
+  container (e.g. <div class="tool_usertours-resettourcontainer"></div>) to their layouts.
+
 === 3.3 ===
 
 * As boost-based themes no longer use the moodle-core-popuphelp help popups, the javascript
   setup for this module have been moved from core standard_head_html to the bootstrapbase
   renderer. If your theme needs this javascript you will need to ensure the bootstrap renderer
   is called, or require the JS yourself
-* There was a mustache template login.mustache in /lib/templates/ rendering the login form
-  and a template with the same name in /theme/boost/templates/ rendering the pagelayout "login".
-  To prevent misunderstanding when overriding one of these templates in a Boost child theme,
-  the first one was renamed to loginform.mustache - see MDL-58970.
 
 === 3.2 ===
 

@@ -131,26 +131,6 @@ function upgrade_group_members_only($groupingid, $availability) {
 }
 
 /**
- * Updates the mime-types for files that exist in the database, based on their
- * file extension.
- *
- * @param array $filetypes Array with file extension as the key, and mimetype as the value
- */
-function upgrade_mimetypes($filetypes) {
-    global $DB;
-    $select = $DB->sql_like('filename', '?', false);
-    foreach ($filetypes as $extension=>$mimetype) {
-        $DB->set_field_select(
-            'files',
-            'mimetype',
-            $mimetype,
-            $select,
-            array($extension)
-        );
-    }
-}
-
-/**
  * Marks all courses with changes in extra credit weight calculation
  *
  * Used during upgrade and in course restore process
@@ -286,26 +266,6 @@ function upgrade_calculated_grade_items($courseid = null) {
             }
         }
     }
-}
-
-/**
- * This upgrade script merges all tag instances pointing to the same course tag
- *
- * User id is no longer used for those tag instances
- */
-function upgrade_course_tags() {
-    global $DB;
-    $sql = "SELECT min(ti.id)
-        FROM {tag_instance} ti
-        LEFT JOIN {tag_instance} tii on tii.itemtype = ? and tii.itemid = ti.itemid and tii.tiuserid = 0 and tii.tagid = ti.tagid
-        where ti.itemtype = ? and ti.tiuserid <> 0 AND tii.id is null
-        group by ti.tagid, ti.itemid";
-    $ids = $DB->get_fieldset_sql($sql, array('course', 'course'));
-    if ($ids) {
-        list($idsql, $idparams) = $DB->get_in_or_equal($ids);
-        $DB->execute('UPDATE {tag_instance} SET tiuserid = 0 WHERE id ' . $idsql, $idparams);
-    }
-    $DB->execute("DELETE FROM {tag_instance} WHERE itemtype = ? AND tiuserid <> 0", array('course'));
 }
 
 /**
@@ -541,4 +501,68 @@ function upgrade_block_positions() {
     $sql = "DELETE FROM {block_positions}
     WHERE pagetype IN ('my-index', 'user-profile') AND subpage NOT IN (SELECT $id FROM {my_pages})";
     $DB->execute($sql, ['']);
+}
+
+/**
+ * Fix configdata in block instances that are using the old object class that has been removed (deprecated).
+ */
+function upgrade_fix_block_instance_configuration() {
+    global $DB;
+
+    $sql = "SELECT *
+              FROM {block_instances}
+             WHERE " . $DB->sql_isnotempty('block_instances', 'configdata', true, true);
+    $blockinstances = $DB->get_recordset_sql($sql);
+    foreach ($blockinstances as $blockinstance) {
+        $configdata = base64_decode($blockinstance->configdata);
+        list($updated, $configdata) = upgrade_fix_serialized_objects($configdata);
+        if ($updated) {
+            $blockinstance->configdata = base64_encode($configdata);
+            $DB->update_record('block_instances', $blockinstance);
+        }
+    }
+    $blockinstances->close();
+}
+
+/**
+ * Provides a way to check and update a serialized string that uses the deprecated object class.
+ *
+ * @param  string $serializeddata Serialized string which may contain the now deprecated object.
+ * @return array Returns an array where the first variable is a bool with a status of whether the initial data was changed
+ * or not. The second variable is the said data.
+ */
+function upgrade_fix_serialized_objects($serializeddata) {
+    $updated = false;
+    if (strpos($serializeddata, ":6:\"object") !== false) {
+        $serializeddata = str_replace(":6:\"object", ":8:\"stdClass", $serializeddata);
+        $updated = true;
+    }
+    return [$updated, $serializeddata];
+}
+
+/**
+ * Deletes file records which have their repository deleted.
+ *
+ */
+function upgrade_delete_orphaned_file_records() {
+    global $DB;
+
+    $sql = "SELECT f.id, f.contextid, f.component, f.filearea, f.itemid, fr.id AS referencefileid
+              FROM {files} f
+              JOIN {files_reference} fr ON f.referencefileid = fr.id
+         LEFT JOIN {repository_instances} ri ON fr.repositoryid = ri.id
+             WHERE ri.id IS NULL";
+
+    $deletedfiles = $DB->get_recordset_sql($sql);
+
+    $deletedfileids = array();
+
+    $fs = get_file_storage();
+    foreach ($deletedfiles as $deletedfile) {
+        $fs->delete_area_files($deletedfile->contextid, $deletedfile->component, $deletedfile->filearea, $deletedfile->itemid);
+        $deletedfileids[] = $deletedfile->referencefileid;
+    }
+    $deletedfiles->close();
+
+    $DB->delete_records_list('files_reference', 'id', $deletedfileids);
 }

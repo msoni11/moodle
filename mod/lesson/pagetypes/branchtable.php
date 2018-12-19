@@ -234,12 +234,12 @@ class lesson_page_type_branchtable extends lesson_page {
                 continue;
             }
             $cells = array();
-            $cells[] = "<span class=\"label\">".get_string("branch", "lesson")." $i<span>: ";
+            $cells[] = '<label>' . get_string('branch', 'lesson') . ' ' . $i . '</label>: ';
             $cells[] = format_text($answer->answer, $answer->answerformat, $options);
             $table->data[] = new html_table_row($cells);
 
             $cells = array();
-            $cells[] = "<span class=\"label\">".get_string("jump", "lesson")." $i<span>: ";
+            $cells[] = '<label>' . get_string('jump', 'lesson') . ' ' . $i . '</label>: ';
             $cells[] = $this->get_jump_name($answer->jumpto);
             $table->data[] = new html_table_row($cells);
 
@@ -324,7 +324,11 @@ class lesson_add_page_form_branchtable extends lesson_add_page_form_base {
 
         $jumptooptions = lesson_page_type_branchtable::get_jumptooptions($firstpage, $lesson);
 
-        $mform->setDefault('qtypeheading', get_string('addabranchtable', 'lesson'));
+        if ($this->_customdata['edit']) {
+            $mform->setDefault('qtypeheading', get_string('editbranchtable', 'lesson'));
+        } else {
+            $mform->setDefault('qtypeheading', get_string('addabranchtable', 'lesson'));
+        }
 
         $mform->addElement('hidden', 'firstpage');
         $mform->setType('firstpage', PARAM_BOOL);

@@ -22,7 +22,7 @@
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
-require(__DIR__.'../../config.php');
+require(__DIR__.'/../config.php');
 require_once("$CFG->libdir/adminlib.php");
 
 $enrol = optional_param('enrol', '', PARAM_RAW);
@@ -31,9 +31,6 @@ if (!core_component::is_valid_plugin_name('enrol', $enrol)) {
 } else if (!file_exists("$CFG->dirroot/enrol/$enrol/lib.php")) {
     $enrol = '';
 }
-
-require_login();
-require_capability('moodle/site:config', context_system::instance());
 
 navigation_node::override_active_url(new moodle_url('/admin/settings.php', array('section'=>'manageenrols')));
 admin_externalpage_setup('enroltestsettings');

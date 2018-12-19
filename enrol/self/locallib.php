@@ -25,6 +25,7 @@
 defined('MOODLE_INTERNAL') || die();
 
 require_once("$CFG->libdir/formslib.php");
+require_once($CFG->dirroot . '/enrol/locallib.php');
 
 /**
  * Check if the given password match a group enrolment key in the specified course.
@@ -78,7 +79,7 @@ class enrol_self_enrol_form extends moodleform {
 
         if ($instance->password) {
             // Change the id of self enrolment key input as there can be multiple self enrolment methods.
-            $mform->addElement('passwordunmask', 'enrolpassword', get_string('password', 'enrol_self'),
+            $mform->addElement('password', 'enrolpassword', get_string('password', 'enrol_self'),
                     array('id' => 'enrolpassword_'.$instance->id));
             $context = context_course::instance($this->instance->courseid);
             $keyholders = get_users_by_capability($context, 'enrol/self:holdkey', user_picture::fields('u'));

@@ -23,6 +23,11 @@
  */
 
 $string['activityisscheduledfordeletion'] = 'Activity deletion in progress...';
+$string['agedigitalconsentmapinvalidage'] = '"{$a}" is not a valid value for age.';
+$string['agedigitalconsentmapinvalidcomma'] = '"{$a}" has more or less than one comma separator.';
+$string['agedigitalconsentmapinvalidcountry'] = '"{$a}" is not a valid value for country.';
+$string['agedigitalconsentmapinvaliddefault'] = 'Default (*) value is missing.';
+$string['agelocationverificationdisabled'] = 'Age and location verification disabled';
 $string['authnotexisting'] = 'The autorization plugin doesn\'t exist';
 $string['backupcontainexternal'] = 'This backup file contains external Moodle Network Hosts that are not configured locally';
 $string['backuptablefail'] = 'Backup tables could NOT be set up successfully!';
@@ -177,6 +182,7 @@ $string['confirmationnotenabled'] = 'User confirmation is not enabled on this si
 $string['confirmsesskeybad'] = 'Sorry, but your session key could not be confirmed to carry out this action.  This security feature prevents against accidental or malicious execution of important functions in your name.  Please make sure you really wanted to execute this function.';
 $string['couldnotassignrole'] = 'A serious but unspecified error occurred while trying to assign a role to you';
 $string['couldnotupdatenoexistinguser'] = 'Cannot update the user - user doesn\'t exist';
+$string['couldnotverifyagedigitalconsent'] = 'An error occurred while trying to verify the age of digital consent.<br />Please contact administrator.';
 $string['countriesphpempty'] = 'Error: The file countries.php in language pack {$a} is empty or missing.';
 $string['coursedoesnotbelongtocategory'] = 'The course doesn\'t belong to this category';
 $string['courseformatnotfound'] = 'The course format \'{$a}\' doesn\'t exist or is not recognized';
@@ -358,6 +364,7 @@ $string['invaliduserid'] = 'Invalid user id';
 $string['invaliduserfield'] = 'Invalid user field: {$a}';
 $string['invaliduserdata'] = 'Invalid user data: {$a}';
 $string['invalidusername'] = 'The given username contains invalid characters';
+$string['invalidusernameblank'] = 'The username cannot be blank';
 $string['invalidxmlfile'] = '"{$a}" is not a valid XML file';
 $string['iplookupfailed'] = 'Cannot find geo information about this IP address {$a}';
 $string['iplookupprivate'] = 'Cannot display lookup of private IP address';
@@ -376,7 +383,7 @@ $string['loginasonecourse'] = 'You cannot enter this course.<br /> You have to t
 $string['maxbytesfile'] = 'The file {$a->file} is too large. The maximum size you can upload is {$a->size}.';
 $string['maxareabytes'] = 'The file is larger than the space remaining in this area.';
 $string['messagingdisable'] = 'Messaging is disabled on this site';
-$string['mimetexisnotexist'] = 'Your system is not configured to run mimeTeX. You need to download the appropriate executable for you PHP_OS platform from <a href="http://moodle.org/download/mimetex/">http://moodle.org/download/mimetex/</a>, or obtain the C source from <a href="http://www.forkosh.com/mimetex.zip"> http://www.forkosh.com/mimetex.zip</a>, compile it and put the executable into your moodle/filter/tex/ directory.';
+$string['mimetexisnotexist'] = 'Your system is not configured to run mimeTeX. You need to obtain the C source from <a href="http://www.forkosh.com/mimetex.zip">http://www.forkosh.com/mimetex.zip</a>, compile it and put the executable into your moodle/filter/tex/ directory.';
 $string['mimetexnotexecutable'] = 'Custom mimetex is not executable!';
 $string['missingfield'] = 'Field "{$a}" is missing';
 $string['missingkeyinsql'] = 'ERROR: missing param "{$a}" in query';
@@ -448,6 +455,8 @@ $string['notlocalisederrormessage'] = '{$a}';
 $string['notmemberofgroup'] = 'You are not a member of this course group';
 $string['notownerofkey'] = 'You are not owner of this key';
 $string['nousers'] = 'No such user!';
+$string['oauth1accesstoken'] = 'OAuth 1.0 error: We did not obtain the access token.';
+$string['oauth1requesttoken'] = 'OAuth 1.0 error: We did not obtain the request token - the service provider may be temporarily down.';
 $string['onlyadmins'] = 'Only administrators can do that';
 $string['onlyeditingteachers'] = 'Only editing teachers can do that';
 $string['onlyeditown'] = 'You can only edit your own information';
@@ -506,6 +515,7 @@ $string['statsnodata'] = 'There is no available data for that combination of cou
 $string['storedfilecannotcreatefile'] = 'Can not create local file pool file, please verify permissions in dataroot and available disk space.';
 $string['storedfilecannotcreatefiledirs'] = 'Can not create local file pool directories, please verify permissions in dataroot.';
 $string['storedfilecannotread'] = 'Cannot read file. Either the file does not exist or there is a permission problem.';
+$string['storedfilecannotreadfile'] = 'Cannot read file \'{$a}\'. Either the file does not exist or there is a permission problem.';
 $string['storedfilenotcreated'] = 'Can not create file "{$a->contextid}/{$a->component}/{$a->filearea}/{$a->itemid}{$a->filepath}{$a->filename}"';
 $string['storedfileproblem'] = 'Unknown exception related to local files ({$a})';
 $string['tagdisabled'] = 'Tags are disabled!';
@@ -556,6 +566,7 @@ $string['userautherror'] = 'Unknown auth plugin';
 $string['userauthunsupported'] = 'Auth plugin not supported here';
 $string['useremailduplicate'] = 'Duplicate address';
 $string['usermustbemnet'] = 'Users in the MNET access control list must be remote MNET users';
+$string['usernamelowercase'] = 'The username must be in lower case';
 $string['usernotaddederror'] = 'User not added - error';
 $string['usernotaddedregistered'] = 'User not added - already registered';
 $string['usernotavailable'] = 'The details of this user are not available to you';
@@ -575,6 +586,7 @@ $string['usernotupdatederror'] = 'User not updated - error';
 $string['usernotupdatednotexists'] = 'User not updated - does not exist';
 $string['userquotalimit'] = 'You have reached your file quota limit.';
 $string['userselectortoomany'] = 'user_selector got more than one selected user, even though multiselect is false.';
+$string['verifyagedigitalconsentnotpossible'] = 'Sorry, digital age consent verification is not possible at this time.';
 $string['wrongcall'] = 'This script is called wrongly';
 $string['wrongcontextid'] = 'Context ID was incorrect (cannot find it)';
 $string['wrongdestpath'] = 'Wrong destination path';
@@ -590,5 +602,3 @@ $string['alreadyloggedin'] = 'You are already logged in as {$a}, you need to log
 $string['youcannotdeletecategory'] = 'You cannot delete category \'{$a}\' because you can neither delete the contents, nor move them elsewhere.';
 $string['protected_cc_not_supported'] = 'Protected cartridges not supported.';
 
-// Deprecated since Moodle 3.1.
-$string['maxbytes'] = 'The file is larger than the maximum size allowed.';

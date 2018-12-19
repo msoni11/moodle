@@ -58,14 +58,20 @@ class convert_submissions extends scheduled_task {
 
         $assignmentcache = array();
 
+        $conversionattemptlimit = !empty($CFG->conversionattemptlimit) ? $CFG->conversionattemptlimit : 3;
         foreach ($records as $record) {
             $submissionid = $record->submissionid;
             $submission = $DB->get_record('assign_submission', array('id' => $submissionid), '*', IGNORE_MISSING);
-            if (!$submission) {
-                // Submission no longer exists.
+            if (!$submission || $record->attemptedconversions >= $conversionattemptlimit) {
+                // Submission no longer exists; or we've exceeded the conversion attempt limit.
                 $DB->delete_records('assignfeedback_editpdf_queue', array('id' => $record->id));
                 continue;
             }
+
+            // Record that we're attempting the conversion ahead of time.
+            // We can't do this afterwards as its possible for the conversion process to crash the script entirely.
+            $DB->set_field('assignfeedback_editpdf_queue', 'attemptedconversions',
+                    $record->attemptedconversions + 1, ['id' => $record->id]);
 
             $assignmentid = $submission->assignment;
             $attemptnumber = $record->submissionattempt;
@@ -92,20 +98,18 @@ class convert_submissions extends scheduled_task {
             }
 
             mtrace('Convert ' . count($users) . ' submission attempt(s) for assignment ' . $assignmentid);
-            $keepinqueue = false;
+
             foreach ($users as $userid) {
-                $combineddocument = document_services::get_combined_pdf_for_attempt($assignment, $userid, $attemptnumber);
-                $status = $combineddocument->get_status();
-
-                switch ($combineddocument->get_status()) {
-                    case combined_document::STATUS_READY:
-                    case combined_document::STATUS_PENDING_INPUT:
-                        // The document has not been converted yet or is somehow still ready.
-                        $keepinqueue = true;
-                        continue;
-                }
-
                 try {
+                    $combineddocument = document_services::get_combined_pdf_for_attempt($assignment, $userid, $attemptnumber);
+                    $status = $combineddocument->get_status();
+
+                    switch ($combineddocument->get_status()) {
+                        case combined_document::STATUS_READY:
+                        case combined_document::STATUS_PENDING_INPUT:
+                            // The document has not been converted yet or is somehow still ready.
+                            continue 2;
+                    }
                     document_services::get_page_images_for_attempt(
                             $assignment,
                             $userid,
@@ -120,14 +124,12 @@ class convert_submissions extends scheduled_task {
                         );
                 } catch (\moodle_exception $e) {
                     mtrace('Conversion failed with error:' . $e->errorcode);
-                    $keepinqueue = true;
                 }
             }
 
-            if (!$keepinqueue) {
-                // Remove from queue unless requested not to.
-                $DB->delete_records('assignfeedback_editpdf_queue', array('id' => $record->id));
-            }
+            // Remove from queue.
+            $DB->delete_records('assignfeedback_editpdf_queue', array('id' => $record->id));
+
         }
     }
 

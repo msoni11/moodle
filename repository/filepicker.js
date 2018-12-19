@@ -265,9 +265,8 @@ YUI.add('moodle-core_filepicker', function(Y) {
                         if (root.path == mytreeel.path) {
                             root.origpath = options.filepath;
                             root.origlist = fileslist;
-                        } else if (!root.isLeaf && root.expanded) {
-                            Y.bind(options.treeview_dynload, options.callbackcontext)(root, null);
                         }
+                        // Removed bind as of MDL-62415 as it overwrites the search tree results
                     }
                 }
             } else {
@@ -425,6 +424,27 @@ YUI.add('moodle-core_filepicker', function(Y) {
                     element.on('contextmenu', options.rightclickcallback, options.callbackcontext, node);
                 }
             }
+        }
+
+        // Notify the user if any of the files has a problem status.
+        var problemFiles = [];
+        fileslist.forEach(function(file) {
+            if (!file_is_folder(file) && file.hasOwnProperty('status') && file.status != 0) {
+                problemFiles.push(file);
+            }
+        });
+        if (problemFiles.length > 0) {
+            require(["core/notification", "core/str"], function(Notification, Str) {
+                problemFiles.forEach(function(problemFile) {
+                    Str.get_string('storedfilecannotreadfile', 'error', problemFile.fullname).then(function(string) {
+                        Notification.addNotification({
+                            message: string,
+                            type: "error"
+                        });
+                        return;
+                    }).catch(Notification.exception);
+                });
+            });
         }
 
         // If table view, need some additional properties
@@ -657,14 +677,17 @@ M.core_filepicker.init = function(Y, options) {
                     'repository_id': this.active_repo.id,
                     'callback': function(id, o, args) {
                         scope.hide();
+                        // Add an arbitrary parameter to the URL to force browsers to re-load the new image even
+                        // if the file name has not changed.
+                        var urlimage = data.existingfile.url + "?time=" + (new Date()).getTime();
                         if (scope.options.editor_target && scope.options.env == 'editor') {
                             // editor needs to update url
-                            scope.options.editor_target.value = data.existingfile.url;
+                            scope.options.editor_target.value = urlimage;
                             scope.options.editor_target.onchange();
                         }
                         var fileinfo = {'client_id':scope.options.client_id,
-                                'url':data.existingfile.url,
-                                'file':data.existingfile.filename};
+                            'url': urlimage,
+                            'file': data.existingfile.filename};
                         var formcallback_scope = scope.options.magicscope ? scope.options.magicscope : scope;
                         scope.options.formcallback.apply(formcallback_scope, [fileinfo]);
                     }
@@ -1116,6 +1139,7 @@ M.core_filepicker.init = function(Y, options) {
             selectnode.one('.fp-setauthor input').set('value', args.author ? args.author : this.options.author);
             this.set_selected_license(selectnode.one('.fp-setlicense'), args.license);
             selectnode.one('form #filesource-'+client_id).set('value', args.source);
+            selectnode.one('form #filesourcekey-'+client_id).set('value', args.sourcekey);
 
             // display static information about a file (when known)
             var attrs = ['datemodified','datecreated','size','license','author','dimensions'];
@@ -1160,7 +1184,8 @@ M.core_filepicker.init = function(Y, options) {
                 var repository_id = this.active_repo.id;
                 var title = selectnode.one('.fp-saveas input').get('value');
                 var filesource = selectnode.one('form #filesource-'+client_id).get('value');
-                var params = {'title':title, 'source':filesource, 'savepath': this.options.savepath};
+                var filesourcekey = selectnode.one('form #filesourcekey-'+client_id).get('value');
+                var params = {'title':title, 'source':filesource, 'savepath': this.options.savepath, sourcekey: filesourcekey};
                 var license = selectnode.one('.fp-setlicense select');
                 if (license) {
                     params['license'] = license.get('value');
@@ -1222,6 +1247,8 @@ M.core_filepicker.init = function(Y, options) {
             var elform = selectnode.one('form');
             elform.appendChild(Y.Node.create('<input/>').
                 setAttrs({type:'hidden',id:'filesource-'+client_id}));
+            elform.appendChild(Y.Node.create('<input/>').
+                setAttrs({type:'hidden',id:'filesourcekey-'+client_id}));
             elform.on('keydown', function(e) {
                 if (e.keyCode == 13) {
                     getfile.simulate('click');
@@ -1367,7 +1394,8 @@ M.core_filepicker.init = function(Y, options) {
             // processing repository listing
             // Resort the repositories by sortorder
             var sorted_repositories = [];
-            for (var i in this.options.repositories) {
+            var i;
+            for (i in this.options.repositories) {
                 sorted_repositories[i] = this.options.repositories[i];
             }
             sorted_repositories.sort(function(a,b){return a.sortorder-b.sortorder});
@@ -1379,6 +1407,10 @@ M.core_filepicker.init = function(Y, options) {
                 list.removeChild(reponode);
                 for (i in sorted_repositories) {
                     var repository = sorted_repositories[i];
+                    var h = (parseInt(i) == 0) ? parseInt(i) : parseInt(i) - 1,
+                        j = (parseInt(i) == Object.keys(sorted_repositories).length - 1) ? parseInt(i) : parseInt(i) + 1;
+                    var previousrepository = sorted_repositories[h];
+                    var nextrepository = sorted_repositories[j];
                     var node = reponode.cloneNode(true);
                     list.appendChild(node);
                     node.
@@ -1389,6 +1421,15 @@ M.core_filepicker.init = function(Y, options) {
                             this.hide_header();
                             this.list({'repo_id':repository_id});
                         }, this /*handler running scope*/, repository.id/*second argument of handler*/);
+                    node.on('key', function(e, previousrepositoryid, nextrepositoryid, clientid, repositoryid) {
+                        this.changeHighlightedRepository(e, clientid, repositoryid, previousrepositoryid, nextrepositoryid);
+                    }, 'down:38,40', this, previousrepository.id, nextrepository.id, client_id, repository.id);
+                    node.on('key', function(e, repositoryid) {
+                        e.preventDefault();
+                        this.set_preference('recentrepository', repositoryid);
+                        this.hide_header();
+                        this.list({'repo_id': repositoryid});
+                    }, 'enter', this, repository.id);
                     node.one('.fp-repo-name').setContent(Y.Escape.html(repository.name));
                     node.one('.fp-repo-icon').set('src', repository.icon);
                     if (i==0) {
@@ -1411,6 +1452,23 @@ M.core_filepicker.init = function(Y, options) {
             // display repository that was used last time
             this.mainui.show();
             this.show_recent_repository();
+        },
+        /**
+         * Change the highlighted repository to a new one.
+         *
+         * @param  {object} event The key event
+         * @param  {integer} clientid The client id to identify the repo class.
+         * @param  {integer} oldrepositoryid The repository id that we are removing the highlight for
+         * @param  {integer} previousrepositoryid The previous repository id.
+         * @param  {integer} nextrepositoryid The next repository id.
+         */
+        changeHighlightedRepository: function(event, clientid, oldrepositoryid, previousrepositoryid, nextrepositoryid) {
+            event.preventDefault();
+            var newrepositoryid = (event.keyCode == '40') ? nextrepositoryid : previousrepositoryid;
+            this.fpnode.one('#fp-repo-' + clientid + '-' + oldrepositoryid).setAttribute('tabindex', '-1');
+            this.fpnode.one('#fp-repo-' + clientid + '-' + newrepositoryid)
+                    .setAttribute('tabindex', '0')
+                    .focus();
         },
         parse_repository_options: function(data, appendtolist) {
             if (appendtolist) {
@@ -1583,8 +1641,19 @@ M.core_filepicker.init = function(Y, options) {
         display_response: function(id, obj, args) {
             var scope = args.scope;
             // highlight the current repository in repositories list
-            scope.fpnode.all('.fp-repo.active').removeClass('active');
-            scope.fpnode.all('#fp-repo-'+scope.options.client_id+'-'+obj.repo_id).addClass('active')
+            scope.fpnode.all('.fp-repo.active')
+                    .removeClass('active')
+                    .setAttribute('aria-selected', 'false')
+                    .setAttribute('tabindex', '-1');
+            scope.fpnode.all('.nav-link')
+                    .removeClass('active')
+                    .setAttribute('aria-selected', 'false')
+                    .setAttribute('tabindex', '-1');
+            var activenode = scope.fpnode.one('#fp-repo-' + scope.options.client_id + '-' + obj.repo_id);
+            activenode.addClass('active')
+                    .setAttribute('aria-selected', 'true')
+                    .setAttribute('tabindex', '0');
+            activenode.all('.nav-link').addClass('active');
             // add class repository_REPTYPE to the filepicker (for repository-specific styles)
             for (var i in scope.options.repositories) {
                 scope.fpnode.removeClass('repository_'+scope.options.repositories[i].type)

@@ -69,6 +69,11 @@ class restore_course_task extends restore_task {
         // Executed conditionally if restoring to new course or if overwrite_conf setting is enabled
         if ($this->get_target() == backup::TARGET_NEW_COURSE || $this->get_setting_value('overwrite_conf') == true) {
             $this->add_step(new restore_course_structure_step('course_info', 'course.xml'));
+
+            // Search reindexing (if enabled).
+            if (\core_search\manager::is_indexing_enabled()) {
+                $this->add_step(new restore_course_search_index('course_search_index'));
+            }
         }
 
         $this->add_step(new restore_course_legacy_files_step('legacy_files'));
@@ -195,7 +200,7 @@ class restore_course_task extends restore_task {
         $startdatedefaultvalue = $this->get_info()->original_course_startdate;
         $startdate = new restore_course_defaultcustom_setting('course_startdate', base_setting::IS_INTEGER, $startdatedefaultvalue);
         $startdate->set_ui(new backup_setting_ui_defaultcustom($startdate, get_string('setting_course_startdate', 'backup'),
-            ['customvalue' => $startdatedefaultvalue, 'defaultvalue' => $course->startdate, 'type' => 'date_selector']));
+            ['customvalue' => $startdatedefaultvalue, 'defaultvalue' => $course->startdate, 'type' => 'date_time_selector']));
         $this->add_setting($startdate);
 
         $keep_enrols = new restore_course_generic_setting('keep_roles_and_enrolments', base_setting::IS_BOOLEAN, false);

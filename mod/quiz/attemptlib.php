@@ -135,7 +135,9 @@ class quiz {
      */
     public function preload_questions() {
         $this->questions = question_preload_questions(null,
-                'slot.maxmark, slot.id AS slotid, slot.slot, slot.page',
+                'slot.maxmark, slot.id AS slotid, slot.slot, slot.page,
+                 slot.questioncategoryid AS randomfromcategory,
+                 slot.includingsubcategories AS randomincludingsubcategories',
                 '{quiz_slots} slot ON slot.quizid = :quizid AND q.id = slot.questionid',
                 array('quizid' => $this->quiz->id), 'slot.slot');
     }
@@ -338,6 +340,7 @@ class quiz {
         if ($page) {
             $url .= '&page=' . $page;
         }
+        $url .= '&cmid=' . $this->get_cmid();
         return $url;
     }
 
@@ -357,7 +360,7 @@ class quiz {
      * @return string the URL of the review of that attempt.
      */
     public function review_url($attemptid) {
-        return new moodle_url('/mod/quiz/review.php', array('attempt' => $attemptid));
+        return new moodle_url('/mod/quiz/review.php', array('attempt' => $attemptid, 'cmid' => $this->get_cmid()));
     }
 
     /**
@@ -365,7 +368,7 @@ class quiz {
      * @return string the URL of the review of that attempt.
      */
     public function summary_url($attemptid) {
-        return new moodle_url('/mod/quiz/summary.php', array('attempt' => $attemptid));
+        return new moodle_url('/mod/quiz/summary.php', array('attempt' => $attemptid, 'cmid' => $this->get_cmid()));
     }
 
     // Bits of content =========================================================
@@ -566,7 +569,7 @@ class quiz_attempt {
         $this->quba = question_engine::load_questions_usage_by_activity($this->attempt->uniqueid);
         $this->slots = $DB->get_records('quiz_slots',
                 array('quizid' => $this->get_quizid()), 'slot',
-                'slot, requireprevious, questionid');
+                'slot, requireprevious, questionid, includingsubcategories');
         $this->sections = array_values($DB->get_records('quiz_sections',
                 array('quizid' => $this->get_quizid()), 'firstslot'));
 
@@ -1094,6 +1097,18 @@ class quiz_attempt {
     }
 
     /**
+     * Helper method for unit tests. Get the underlying question usage object.
+     * @return question_usage_by_activity the usage.
+     */
+    public function get_question_usage() {
+        if (!(PHPUNIT_TEST || defined('BEHAT_TEST'))) {
+            throw new coding_exception('get_question_usage is only for use in unit tests. ' .
+                    'For other operations, use the quiz_attempt api, or extend it properly.');
+        }
+        return $this->quba;
+    }
+
+    /**
      * Get the question_attempt object for a particular question in this attempt.
      * @param int $slot the number used to identify this question within this attempt.
      * @return question_attempt
@@ -1386,7 +1401,7 @@ class quiz_attempt {
      * @return string the URL of this quiz's summary page.
      */
     public function summary_url() {
-        return new moodle_url('/mod/quiz/summary.php', array('attempt' => $this->attempt->id));
+        return new moodle_url('/mod/quiz/summary.php', array('attempt' => $this->attempt->id, 'cmid' => $this->get_cmid()));
     }
 
     /**
@@ -1799,10 +1814,12 @@ class quiz_attempt {
      * @param int  $timestamp  the timestamp that should be stored as the modifed
      *                         time in the database for these actions. If null, will use the current time.
      * @param bool $becomingoverdue
-     * @param array|null $simulatedresponses If not null, then we are testing, and this is an array of simulated data, keys are slot
-     *                                          nos and values are arrays representing student responses which will be passed to
-     *                                          question_definition::prepare_simulated_post_data method and then have the
-     *                                          appropriate prefix added.
+     * @param array|null $simulatedresponses If not null, then we are testing, and this is an array of simulated data.
+     *      There are two formats supported here, for historical reasons. The newer approach is to pass an array created by
+     *      {@link core_question_generator::get_simulated_post_data_for_questions_in_usage()}.
+     *      the second is to pass an array slot no => contains arrays representing student
+     *      responses which will be passed to {@link question_definition::prepare_simulated_post_data()}.
+     *      This second method will probably get deprecated one day.
      */
     public function process_submitted_actions($timestamp, $becomingoverdue = false, $simulatedresponses = null) {
         global $DB;
@@ -1810,7 +1827,12 @@ class quiz_attempt {
         $transaction = $DB->start_delegated_transaction();
 
         if ($simulatedresponses !== null) {
-            $simulatedpostdata = $this->quba->prepare_simulated_post_data($simulatedresponses);
+            if (is_int(key($simulatedresponses))) {
+                // Legacy approach. Should be removed one day.
+                $simulatedpostdata = $this->quba->prepare_simulated_post_data($simulatedresponses);
+            } else {
+                $simulatedpostdata = $simulatedresponses;
+            }
         } else {
             $simulatedpostdata = null;
         }
@@ -1859,12 +1881,14 @@ class quiz_attempt {
         if ($questiondata->qtype != 'random') {
             $newqusetionid = $questiondata->id;
         } else {
+            $tagids = quiz_retrieve_slot_tag_ids($this->slots[$slot]->id);
+
             $randomloader = new \core_question\bank\random_question_loader($qubaids, array());
             $newqusetionid = $randomloader->get_next_question_id($questiondata->category,
-                    (bool) $questiondata->questiontext);
+                    (bool) $questiondata->questiontext, $tagids);
             if ($newqusetionid === null) {
                 throw new moodle_exception('notenoughrandomquestions', 'quiz',
-                        $quizobj->view_url(), $questiondata);
+                        $this->quizobj->view_url(), $questiondata);
             }
         }
 
@@ -2088,7 +2112,7 @@ class quiz_attempt {
 
         } else {
             $url = new moodle_url('/mod/quiz/' . $script . '.php' . $fragment,
-                    array('attempt' => $this->attempt->id));
+                    array('attempt' => $this->attempt->id, 'cmid' => $this->get_cmid()));
             if ($page == 0 && $showall != $defaultshowall) {
                 $url->param('showall', (int) $showall);
             } else if ($page > 0) {
@@ -2325,7 +2349,7 @@ class quiz_attempt {
      * This function should be used only when web services are being used.
      *
      * @param int $time time stamp
-     * @return boolean false if the field is not updated becase web services aren't being used.
+     * @return boolean false if the field is not updated because web services aren't being used.
      * @since Moodle 3.2
      */
     public function set_offline_modified_time($time) {
@@ -2333,7 +2357,8 @@ class quiz_attempt {
 
         // Update the timemodifiedoffline field only if web services are being used.
         if (WS_SERVER) {
-            $attemptobj->attempt->timemodifiedoffline = $time;
+            $this->attempt->timemodifiedoffline = $time;
+            return true;
         }
         return false;
     }

@@ -72,11 +72,6 @@ class container {
     protected static $eventretrievalstrategy;
 
     /**
-     * @var array A list of callbacks to use.
-     */
-    protected static $callbacks = array();
-
-    /**
      * @var \stdClass[] An array of cached courses to use with the event factory.
      */
     protected static $coursecache = array();
@@ -87,20 +82,15 @@ class container {
     protected static $modulecache = array();
 
     /**
+     * @var int The requesting user. All capability checks are done against this user.
+     */
+    protected static $requestinguserid;
+
+    /**
      * Initialises the dependency graph if it hasn't yet been.
      */
     private static function init() {
         if (empty(self::$eventfactory)) {
-            // When testing the container's components, we need to make sure
-            // the callback implementations in modules are not executed, since
-            // we cannot control their output from PHPUnit. To do this we have
-            // a set of 'testing' callbacks that the factory can use. This way
-            // we know exactly how the factory behaves when being tested.
-            $getcallback = function($which) {
-                return self::$callbacks[PHPUNIT_TEST ? 'testing' : 'production'][$which];
-            };
-
-            self::initcallbacks();
             self::$actionfactory = new action_factory();
             self::$eventmapper = new event_mapper(
                 // The event mapper we return from here needs to know how to
@@ -129,15 +119,26 @@ class container {
             );
 
             self::$eventfactory = new event_factory(
-                $getcallback('action'),
-                $getcallback('visibility'),
+                [self::class, 'apply_component_provide_event_action'],
+                [self::class, 'apply_component_is_event_visible'],
                 function ($dbrow) {
+                    $requestinguserid = self::get_requesting_user();
+
+                    if (!empty($dbrow->categoryid)) {
+                        // This is a category event. Check that the category is visible to this user.
+                        $category = \core_course_category::get($dbrow->categoryid, IGNORE_MISSING, true, $requestinguserid);
+
+                        if (empty($category) || !$category->is_uservisible($requestinguserid)) {
+                            return true;
+                        }
+                    }
+
                     // At present we only have a bail-out check for events in course modules.
                     if (empty($dbrow->modulename)) {
                         return false;
                     }
 
-                    $instances = get_fast_modinfo($dbrow->courseid)->instances;
+                    $instances = get_fast_modinfo($dbrow->courseid, $requestinguserid)->instances;
 
                     // If modinfo doesn't know about the module, we should ignore it.
                     if (!isset($instances[$dbrow->modulename]) || !isset($instances[$dbrow->modulename][$dbrow->instance])) {
@@ -152,11 +153,23 @@ class container {
                     // have that capability set on the "Authenticated User" role rather than
                     // on "Student" role, which means uservisible returns true even when the user
                     // is no longer enrolled in the course.
-                    $modulecontext = \context_module::instance($cm->id);
-                    // A user with the 'moodle/course:view' capability is able to see courses
-                    // that they are not a participant in.
-                    $canseecourse = (has_capability('moodle/course:view', $modulecontext) || is_enrolled($modulecontext));
-                    if (!$cm->uservisible || !$canseecourse) {
+                    // So, with the following we are checking -
+                    // 1) Only process modules if $cm->uservisible is true.
+                    // 2) Only process modules for courses a user has the capability to view OR they are enrolled in.
+                    // 3) Only process modules for courses that are visible OR if the course is not visible, the user
+                    //    has the capability to view hidden courses.
+                    if (!$cm->uservisible) {
+                        return true;
+                    }
+
+                    $coursecontext = \context_course::instance($dbrow->courseid);
+                    if (!$cm->get_course()->visible &&
+                            !has_capability('moodle/course:viewhiddencourses', $coursecontext, $requestinguserid)) {
+                        return true;
+                    }
+
+                    if (!has_capability('moodle/course:view', $coursecontext, $requestinguserid) &&
+                            !is_enrolled($coursecontext, $requestinguserid)) {
                         return true;
                     }
 
@@ -181,6 +194,20 @@ class container {
             self::$eventretrievalstrategy = new raw_event_retrieval_strategy();
             self::$eventvault = new event_vault(self::$eventfactory, self::$eventretrievalstrategy);
         }
+    }
+
+    /**
+     * Reset all static caches, called between tests.
+     */
+    public static function reset_caches() {
+        self::$requestinguserid = null;
+        self::$eventfactory = null;
+        self::$eventmapper = null;
+        self::$eventvault = null;
+        self::$actionfactory = null;
+        self::$eventretrievalstrategy = null;
+        self::$coursecache = [];
+        self::$modulecache = [];
     }
 
     /**
@@ -214,88 +241,117 @@ class container {
     }
 
     /**
-     * Initialises the callbacks.
+     * Sets the requesting user so that all capability checks are done against this user.
+     * Setting the requesting user (hence calling this function) is optional and if you do not so,
+     * $USER will be used as the requesting user. However, if you wish to set the requesting user yourself,
+     * you should call this function before any other function of the container class is called.
      *
-     * There are two sets here, one is used during PHPUnit runs.
-     * See the comment at the start of the init method for more
-     * detail.
+     * @param int $userid The user id.
+     * @throws \coding_exception
      */
-    private static function initcallbacks() {
-        self::$callbacks = array(
-            'testing' => array(
-                // Always return an action event.
-                'action' => function (event_interface $event) {
-                    return new action_event(
-                        $event,
-                        new \core_calendar\local\event\value_objects\action(
-                            'test',
-                            new \moodle_url('http://example.com'),
-                            420,
-                            true
-                        ));
-                },
-                // Always be visible.
-                'visibility' => function (event_interface $event) {
-                    return true;
-                }
-            ),
-            'production' => array(
-                // This function has type event_interface -> event_interface.
-                // This is enforced by the event_factory.
-                'action' => function (event_interface $event) {
-                    // Callbacks will get supplied a "legacy" version
-                    // of the event class.
-                    $mapper = self::$eventmapper;
-                    $action = null;
-                    if ($event->get_course_module()) {
-                        // TODO MDL-58866 Only activity modules currently support this callback.
-                        // Any other event will not be displayed on the dashboard.
-                        $action = component_callback(
-                            'mod_' . $event->get_course_module()->get('modname'),
-                            'core_calendar_provide_event_action',
-                            [
-                                $mapper->from_event_to_legacy_event($event),
-                                self::$actionfactory
-                            ]
-                        );
-                    }
+    public static function set_requesting_user($userid) {
+        self::$requestinguserid = $userid;
+    }
 
-                    // If we get an action back, return an action event, otherwise
-                    // continue piping through the original event.
-                    //
-                    // If a module does not implement the callback, component_callback
-                    // returns null.
-                    return $action ? new action_event($event, $action) : $event;
-                },
-                // This function has type event_interface -> bool.
-                // This is enforced by the event_factory.
-                'visibility' => function (event_interface $event) {
-                    $mapper = self::$eventmapper;
-                    $eventvisible = null;
-                    if ($event->get_course_module()) {
-                        // TODO MDL-58866 Only activity modules currently support this callback.
-                        $eventvisible = component_callback(
-                            'mod_' . $event->get_course_module()->get('modname'),
-                            'core_calendar_is_event_visible',
-                            [
-                                $mapper->from_event_to_legacy_event($event)
-                            ]
-                        );
-                    }
+    /**
+     * Returns the requesting user id.
+     * It usually is the current user unless it has been set explicitly using set_requesting_user.
+     *
+     * @return int
+     */
+    public static function get_requesting_user() {
+        global $USER;
 
-                    // Do not display the event if there is nothing to action.
-                    if ($event instanceof action_event_interface && $event->get_action()->get_item_count() === 0) {
-                        return false;
-                    }
+        return empty(self::$requestinguserid) ? $USER->id : self::$requestinguserid;
+    }
 
-                    // Module does not implement the callback, event should be visible.
-                    if (is_null($eventvisible)) {
-                        return true;
-                    }
+    /**
+     * Calls callback 'core_calendar_provide_event_action' from the component responsible for the event
+     *
+     * If no callback is present or callback returns null, there is no action on the event
+     * and it will not be displayed on the dashboard.
+     *
+     * @param event_interface $event
+     * @return action_event|event_interface
+     */
+    public static function apply_component_provide_event_action(event_interface $event) {
+        // Callbacks will get supplied a "legacy" version
+        // of the event class.
+        $mapper = self::$eventmapper;
+        $action = null;
+        if ($event->get_course_module()) {
+            $requestinguserid = self::get_requesting_user();
+            $legacyevent = $mapper->from_event_to_legacy_event($event);
+            // We know for a fact that the the requesting user might be different from the logged in user,
+            // but the event mapper is not aware of that.
+            if (empty($event->user) && !empty($legacyevent->userid)) {
+                $legacyevent->userid = $requestinguserid;
+            }
 
-                    return $eventvisible ? true : false;
-                }
-            ),
-        );
+            // TODO MDL-58866 Only activity modules currently support this callback.
+            // Any other event will not be displayed on the dashboard.
+            $action = component_callback(
+                'mod_' . $event->get_course_module()->get('modname'),
+                'core_calendar_provide_event_action',
+                [
+                    $legacyevent,
+                    self::$actionfactory,
+                    $requestinguserid
+                ]
+            );
+        }
+
+        // If we get an action back, return an action event, otherwise
+        // continue piping through the original event.
+        //
+        // If a module does not implement the callback, component_callback
+        // returns null.
+        return $action ? new action_event($event, $action) : $event;
+    }
+
+    /**
+     * Calls callback 'core_calendar_is_event_visible' from the component responsible for the event
+     *
+     * The visibility callback is optional, if not present it is assumed as visible.
+     * If it is an actionable event but the get_item_count() returns 0 the visibility
+     * is set to false.
+     *
+     * @param event_interface $event
+     * @return bool
+     */
+    public static function apply_component_is_event_visible(event_interface $event) {
+        $mapper = self::$eventmapper;
+        $eventvisible = null;
+        if ($event->get_course_module()) {
+            $requestinguserid = self::get_requesting_user();
+            $legacyevent = $mapper->from_event_to_legacy_event($event);
+            // We know for a fact that the the requesting user might be different from the logged in user,
+            // but the event mapper is not aware of that.
+            if (empty($event->user) && !empty($legacyevent->userid)) {
+                $legacyevent->userid = $requestinguserid;
+            }
+
+            // TODO MDL-58866 Only activity modules currently support this callback.
+            $eventvisible = component_callback(
+                'mod_' . $event->get_course_module()->get('modname'),
+                'core_calendar_is_event_visible',
+                [
+                    $legacyevent,
+                    $requestinguserid
+                ]
+            );
+        }
+
+        // Do not display the event if there is nothing to action.
+        if ($event instanceof action_event_interface && $event->get_action()->get_item_count() === 0) {
+            return false;
+        }
+
+        // Module does not implement the callback, event should be visible.
+        if (is_null($eventvisible)) {
+            return true;
+        }
+
+        return $eventvisible ? true : false;
     }
 }

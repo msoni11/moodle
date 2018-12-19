@@ -22,13 +22,15 @@
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
+$string['advanced'] = 'Advanced';
 $string['alterstatus'] = 'Alter status';
 $string['altertimeend'] = 'Alter end time';
 $string['altertimestart'] = 'Alter start time';
 $string['assignrole'] = 'Assign role';
+$string['assignroles'] = 'Assign roles';
 $string['browseusers'] = 'Browse users';
 $string['browsecohorts'] = 'Browse cohorts';
-$string['confirmbulkdeleteenrolment'] = 'Are you sure you want to delete these users enrolments?';
+$string['confirmbulkdeleteenrolment'] = 'Are you sure you want to delete these user enrolments?';
 $string['defaultstart'] = 'Default enrolment start';
 $string['defaultperiod'] = 'Default enrolment duration';
 $string['defaultperiod_desc'] = 'Default length of time that the enrolment is valid. If set to zero, the enrolment duration will be unlimited by default.';
@@ -37,6 +39,7 @@ $string['deleteselectedusers'] = 'Delete selected user enrolments';
 $string['editselectedusers'] = 'Edit selected user enrolments';
 $string['enrolledincourserole'] = 'Enrolled in "{$a->course}" as "{$a->role}"';
 $string['enrolusers'] = 'Enrol users';
+$string['enroluserscohorts'] = 'Enrol selected users and cohorts';
 $string['expiredaction'] = 'Enrolment expiry action';
 $string['expiredaction_help'] = 'Select action to carry out when user enrolment expires. Please note that some user data and settings are purged from course during course unenrolment.';
 $string['expirymessageenrollersubject'] = 'Enrolment expiry notification';
@@ -60,11 +63,16 @@ $string['messageprovider:expiry_notification'] = 'Manual enrolment expiry notifi
 $string['now'] = 'Now';
 $string['pluginname'] = 'Manual enrolments';
 $string['pluginname_desc'] = 'The manual enrolments plugin allows users to be enrolled manually via a link in the course administration settings, by a user with appropriate permissions such as a teacher. The plugin should normally be enabled, since certain other enrolment plugins, such as self enrolment, require it.';
+$string['selection'] = 'Selection';
+$string['selectusers'] = 'Select users';
+$string['selectcohorts'] = 'Select cohorts';
+$string['sendexpirynotificationstask'] = "Manual enrolment send expiry notifications task";
 $string['status'] = 'Enable manual enrolments';
 $string['status_desc'] = 'Allow course access of internally enrolled users. This should be kept enabled in most cases.';
 $string['status_help'] = 'This setting determines whether users can be enrolled manually, via a link in the course administration settings, by a user with appropriate permissions such as a teacher.';
 $string['statusenabled'] = 'Enabled';
 $string['statusdisabled'] = 'Disabled';
+$string['syncenrolmentstask'] = 'Manual enrolment synchronise enrolments task';
 $string['unenrol'] = 'Unenrol user';
 $string['unenrolselectedusers'] = 'Unenrol selected users';
 $string['unenrolselfconfirm'] = 'Do you really want to unenrol yourself from course "{$a}"?';
@@ -74,3 +82,4 @@ $string['wscannotenrol'] = 'Plugin instance cannot manually enrol a user in the 
 $string['wsnoinstance'] = 'Manual enrolment plugin instance doesn\'t exist or is disabled for the course (id = {$a->courseid})';
 $string['wsusercannotassign'] = 'You don\'t have the permission to assign this role ({$a->roleid}) to this user ({$a->userid}) in this course({$a->courseid}).';
 $string['manualpluginnotinstalled'] = 'The "Manual" plugin has not yet been installed';
+$string['privacy:metadata'] = 'The Manual enrolments plugin does not store any personal data.';
